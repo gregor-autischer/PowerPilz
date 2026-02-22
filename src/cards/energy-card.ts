@@ -1,7 +1,14 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { styleMap } from "lit/directives/style-map.js";
-import type { HomeAssistant, LovelaceCard, LovelaceCardConfig, LovelaceCardEditor } from "../types";
+import type {
+  HomeAssistant,
+  LovelaceCard,
+  LovelaceCardConfig,
+  LovelaceCardEditor,
+  LovelaceGridOptions,
+  LovelaceLayoutOptions
+} from "../types";
 import { readNumber, readUnit } from "../utils/entity";
 import "./editors/energy-card-editor";
 
@@ -209,6 +216,24 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
 
   public getCardSize(): number {
     return 4;
+  }
+
+  public getGridOptions(): LovelaceGridOptions {
+    return {
+      columns: 6,
+      rows: 4,
+      min_columns: 6,
+      max_columns: 12,
+      min_rows: 4,
+      max_rows: 8
+    };
+  }
+
+  public getLayoutOptions(): LovelaceLayoutOptions {
+    return {
+      grid_columns: 2,
+      grid_rows: 4
+    };
   }
 
   protected render(): TemplateResult {
@@ -1622,6 +1647,52 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       .home-core-icon {
         width: var(--icon-size);
         height: var(--icon-size);
+      }
+    }
+
+    @container (max-width: 380px) {
+      .energy-grid {
+        min-height: 202px;
+        gap: 4px;
+        padding: 3px;
+      }
+
+      .energy-value {
+        width: calc(100% - 1px);
+        max-width: 96px;
+        padding: 4px 6px;
+      }
+
+      .energy-icon {
+        --mdc-icon-size: calc(var(--icon-size) * 0.52);
+        margin-bottom: 2px;
+      }
+
+      .battery-top-row {
+        gap: 4px;
+        margin-bottom: 1px;
+      }
+
+      .battery-percentage {
+        font-size: calc(var(--card-secondary-font-size) - 1px);
+        line-height: calc(var(--card-secondary-line-height) - 1px);
+      }
+
+      .energy-number {
+        font-size: calc(var(--card-primary-font-size) - 2px);
+        line-height: calc(var(--card-primary-line-height) - 3px);
+      }
+
+      .energy-label {
+        margin-top: 1px;
+        font-size: calc(var(--card-secondary-font-size) - 1px);
+        line-height: calc(var(--card-secondary-line-height) - 2px);
+      }
+
+      .home-core-icon {
+        width: calc(var(--icon-size) - 8px);
+        height: calc(var(--icon-size) - 8px);
+        font-size: calc(var(--icon-size) - 8px);
       }
     }
   `;

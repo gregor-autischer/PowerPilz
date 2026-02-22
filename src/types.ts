@@ -26,10 +26,26 @@ export interface LovelaceCardConfig {
   [key: string]: unknown;
 }
 
+export interface LovelaceGridOptions {
+  columns?: number;
+  rows?: number;
+  min_columns?: number;
+  max_columns?: number;
+  min_rows?: number;
+  max_rows?: number;
+}
+
+export interface LovelaceLayoutOptions {
+  grid_columns?: number;
+  grid_rows?: number;
+}
+
 export interface LovelaceCard {
   hass: HomeAssistant;
   setConfig(config: LovelaceCardConfig): void;
   getCardSize?(): number;
+  getGridOptions?(): LovelaceGridOptions;
+  getLayoutOptions?(): LovelaceLayoutOptions;
 }
 
 export interface LovelaceCardEditor {
