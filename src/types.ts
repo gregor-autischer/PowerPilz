@@ -9,6 +9,11 @@ export interface HomeAssistant {
   locale?: {
     language: string;
   };
+  callApi?(
+    method: string,
+    path: string,
+    parameters?: Record<string, unknown>
+  ): Promise<unknown>;
   callService(
     domain: string,
     service: string,

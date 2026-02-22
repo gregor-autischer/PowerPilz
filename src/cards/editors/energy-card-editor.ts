@@ -24,6 +24,16 @@ interface EnergyCardConfig extends LovelaceCardConfig {
   home_icon_color?: string | number[];
   battery_icon_color?: string | number[];
   core_icon_color?: string | number[];
+  solar_trend?: boolean;
+  grid_trend?: boolean;
+  home_trend?: boolean;
+  battery_trend?: boolean;
+  solar_trend_color?: string | number[];
+  grid_trend_color?: string | number[];
+  home_trend_color?: string | number[];
+  battery_trend_color?: string | number[];
+  battery_low_alert?: boolean;
+  battery_low_threshold?: number;
   flow_color?: string | number[];
   unit?: string;
   decimals?: number;
@@ -66,6 +76,11 @@ const SCHEMA: HaFormSchema[] = [
           {
             name: "solar_icon_color",
             selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+          },
+          { name: "solar_trend", selector: { boolean: {} } },
+          {
+            name: "solar_trend_color",
+            selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
           }
         ]
       },
@@ -78,6 +93,11 @@ const SCHEMA: HaFormSchema[] = [
           {
             name: "grid_icon_color",
             selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+          },
+          { name: "grid_trend", selector: { boolean: {} } },
+          {
+            name: "grid_trend_color",
+            selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
           }
         ]
       },
@@ -90,6 +110,11 @@ const SCHEMA: HaFormSchema[] = [
           {
             name: "home_icon_color",
             selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+          },
+          { name: "home_trend", selector: { boolean: {} } },
+          {
+            name: "home_trend_color",
+            selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
           }
         ]
       },
@@ -102,6 +127,16 @@ const SCHEMA: HaFormSchema[] = [
           {
             name: "battery_icon_color",
             selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+          },
+          { name: "battery_trend", selector: { boolean: {} } },
+          {
+            name: "battery_trend_color",
+            selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
+          },
+          { name: "battery_low_alert", selector: { boolean: {} } },
+          {
+            name: "battery_low_threshold",
+            selector: { number: { mode: "box", min: 0, max: 100, step: 1, unit_of_measurement: "%" } }
           }
         ]
       },
@@ -112,11 +147,11 @@ const SCHEMA: HaFormSchema[] = [
           { name: "core_icon", selector: { icon: {} }, context: { icon_entity: "home_entity" } },
           {
             name: "core_icon_color",
-            selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+            selector: { ui_color: { include_state: true, include_none: true, default_color: "none" } }
           },
           {
             name: "flow_color",
-            selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
+            selector: { ui_color: { include_state: true, include_none: true, default_color: "none" } }
           }
         ]
       }
@@ -145,12 +180,22 @@ const LABELS: Record<string, string> = {
   battery_label: "Battery label",
   solar_icon: "Solar icon",
   solar_icon_color: "Solar color",
+  solar_trend: "Solar trend",
+  solar_trend_color: "Solar trend color",
   grid_icon: "Grid icon",
   grid_icon_color: "Grid color",
+  grid_trend: "Grid trend",
+  grid_trend_color: "Grid trend color",
   home_icon: "Home icon",
   home_icon_color: "Home color",
+  home_trend: "Home trend",
+  home_trend_color: "Home trend color",
   battery_icon: "Battery icon",
   battery_icon_color: "Battery color",
+  battery_trend: "Battery trend",
+  battery_trend_color: "Battery trend color",
+  battery_low_alert: "Low battery alert",
+  battery_low_threshold: "Low battery threshold",
   core_icon: "Core icon",
   core_icon_color: "Core color",
   flow_color: "Flow color",

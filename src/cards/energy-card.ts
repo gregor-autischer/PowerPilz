@@ -7,9 +7,13 @@ import "./editors/energy-card-editor";
 
 type FlowDirection = "none" | "forward" | "backward";
 type TapActionType = "none" | "navigate" | "more-info";
+type NodeKey = "solar" | "grid" | "home" | "battery";
 
 const EPSILON = 0.01;
 const DEFAULT_DECIMALS = 1;
+const TREND_WINDOW_MS = 24 * 60 * 60 * 1000;
+const TREND_REFRESH_MS = 5 * 60 * 1000;
+const DEFAULT_NEUTRAL_RGB = "var(--rgb-primary-text-color, 33, 33, 33)";
 const COLOR_RGB_FALLBACK: Record<string, string> = {
   red: "244, 67, 54",
   pink: "233, 30, 99",
@@ -43,6 +47,22 @@ interface TapActionConfig {
   entity?: string;
 }
 
+interface TrendPoint {
+  ts: number;
+  value: number;
+}
+
+interface TrendCoordinate {
+  x: number;
+  y: number;
+  value: number;
+}
+
+interface TrendLineSegment {
+  d: string;
+  color: string;
+}
+
 interface PowerSchwammerlEnergyCardConfig extends LovelaceCardConfig {
   type: "custom:power-schwammerl-energy-card";
   name?: string;
@@ -67,6 +87,16 @@ interface PowerSchwammerlEnergyCardConfig extends LovelaceCardConfig {
   home_icon_color?: string | number[];
   battery_icon_color?: string | number[];
   core_icon_color?: string | number[];
+  solar_trend?: boolean;
+  grid_trend?: boolean;
+  home_trend?: boolean;
+  battery_trend?: boolean;
+  solar_trend_color?: string | number[];
+  grid_trend_color?: string | number[];
+  home_trend_color?: string | number[];
+  battery_trend_color?: string | number[];
+  battery_low_alert?: boolean;
+  battery_low_threshold?: number;
   flow_color?: string | number[];
   unit?: string;
   decimals?: number;
@@ -109,8 +139,6 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       grid_entity: gridEntity,
       battery_entity: batteryEntity,
       battery_percentage_entity: batterySocEntity,
-      core_icon_color: "purple",
-      flow_color: "purple",
       decimals: DEFAULT_DECIMALS
     };
   }
@@ -120,6 +148,14 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
 
   @state()
   private _config?: PowerSchwammerlEnergyCardConfig;
+
+  @state()
+  private _trendSeries: Partial<Record<NodeKey, TrendPoint[]>> = {};
+
+  private readonly _trendId = Math.random().toString(36).slice(2, 10);
+  private _trendRefreshTimer?: number;
+  private _trendRefreshInFlight = false;
+  private _lastTrendRefresh = 0;
 
   public setConfig(config: PowerSchwammerlEnergyCardConfig): void {
     const homeEntity = config.home_entity ?? config.consumption_entity ?? "sensor.dev_home_power";
@@ -142,8 +178,14 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       grid_icon: config.grid_icon ?? "mdi:transmission-tower",
       home_icon: config.home_icon ?? "mdi:home-lightning-bolt",
       core_icon: config.core_icon ?? "mdi:home",
-      core_icon_color: config.core_icon_color ?? "purple",
-      flow_color: config.flow_color ?? "purple",
+      core_icon_color: config.core_icon_color,
+      solar_trend: config.solar_trend ?? false,
+      grid_trend: config.grid_trend ?? false,
+      home_trend: config.home_trend ?? false,
+      battery_trend: config.battery_trend ?? false,
+      battery_low_alert: config.battery_low_alert ?? false,
+      battery_low_threshold: this.normalizeBatteryThreshold(config.battery_low_threshold),
+      flow_color: config.flow_color,
       decimals
     };
   }
@@ -182,14 +224,32 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     const batteryFlow = this.toBidirectionalFlow(battery);
     const tapAction = this.resolveTapAction(config);
     const interactive = tapAction.action !== "none";
+
     const solarIconStyle = this.iconColorStyle(config.solar_icon_color);
     const gridIconStyle = this.iconColorStyle(config.grid_icon_color);
     const homeIconStyle = this.iconColorStyle(config.home_icon_color);
-    const batteryIconStyle = this.iconColorStyle(config.battery_icon_color);
-    const coreIconStyle = this.iconColorStyle(config.core_icon_color);
-    const batteryIcon = config.battery_icon ?? this.batteryIcon(batteryPercentage, battery);
-    const flowRgb = this.toRgbCss(config.flow_color) ?? COLOR_RGB_FALLBACK.purple;
+    const coreIconStyle = this.iconShapeStyle(config.core_icon_color);
+
+    const batteryLowThreshold = this.normalizeBatteryThreshold(config.battery_low_threshold);
+    const batteryLowAlertEnabled = Boolean(config.battery_low_alert);
+    const batteryIsLow = batteryLowAlertEnabled && batteryPercentage !== null && batteryPercentage <= batteryLowThreshold;
+    const batteryIconStyle = this.iconColorStyle(batteryIsLow ? "red" : config.battery_icon_color);
+    const batteryIcon = this.batteryIcon(batteryPercentage, battery, config.battery_icon);
+
+    const flowRgb = this.toRgbCss(config.flow_color) ?? DEFAULT_NEUTRAL_RGB;
     const flowStyle = { "--flow-color-rgb": flowRgb };
+
+    const defaultTrendColor = this.resolveColor("purple");
+    const solarTrendColor = this.resolveColor(config.solar_trend_color, defaultTrendColor);
+    const gridTrendColor = this.resolveColor(config.grid_trend_color, defaultTrendColor);
+    const homeTrendColor = this.resolveColor(config.home_trend_color, defaultTrendColor);
+    const batteryTrendColor = this.resolveColor(config.battery_trend_color, defaultTrendColor);
+    const batteryTrendAlertColor = this.resolveColor("red");
+    const batteryTrendThreshold = batteryLowAlertEnabled
+      && (Boolean(config.battery_percentage_entity) || batteryPercentage !== null)
+      ? batteryLowThreshold
+      : null;
+    const batteryTrendValue = batteryPercentage ?? battery;
 
     return html`
       <ha-card
@@ -207,48 +267,73 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
             ${this.renderFlowLine("vertical bottom", batteryFlow)}
 
             <div class="energy-value solar ${solar === null ? "missing" : ""}">
-              <ha-icon
-                class="energy-icon"
-                .icon=${config.solar_icon ?? "mdi:weather-sunny"}
-                style=${styleMap(solarIconStyle)}
-              ></ha-icon>
-              <div class="energy-number">${this.formatValue(solar, solarUnit, decimals)}</div>
-              <div class="energy-label">${config.solar_label}</div>
+              ${this.renderTrend("solar", solar, Boolean(config.solar_trend), solarTrendColor, null, "")}
+              <div class="energy-content">
+                <ha-icon
+                  class="energy-icon"
+                  .icon=${config.solar_icon ?? "mdi:weather-sunny"}
+                  style=${styleMap(solarIconStyle)}
+                ></ha-icon>
+                <div class="energy-number">${this.formatValue(solar, solarUnit, decimals)}</div>
+                <div class="energy-label">${config.solar_label}</div>
+              </div>
             </div>
 
             <div class="energy-value grid ${grid === null ? "missing" : ""}">
-              <ha-icon
-                class="energy-icon"
-                .icon=${config.grid_icon ?? "mdi:transmission-tower"}
-                style=${styleMap(gridIconStyle)}
-              ></ha-icon>
-              <div class="energy-number">${this.formatValue(grid, gridUnit, decimals)}</div>
-              <div class="energy-label">${config.grid_label}</div>
+              ${this.renderTrend("grid", grid, Boolean(config.grid_trend), gridTrendColor, null, "")}
+              <div class="energy-content">
+                <ha-icon
+                  class="energy-icon"
+                  .icon=${config.grid_icon ?? "mdi:transmission-tower"}
+                  style=${styleMap(gridIconStyle)}
+                ></ha-icon>
+                <div class="energy-number">${this.formatValue(grid, gridUnit, decimals)}</div>
+                <div class="energy-label">${config.grid_label}</div>
+              </div>
             </div>
 
             <div class="energy-value home ${home === null ? "missing" : ""}">
-              <ha-icon
-                class="energy-icon"
-                .icon=${config.home_icon ?? "mdi:home-lightning-bolt"}
-                style=${styleMap(homeIconStyle)}
-              ></ha-icon>
-              <div class="energy-number">${this.formatValue(home, homeUnit, decimals)}</div>
-              <div class="energy-label">${config.home_label}</div>
+              ${this.renderTrend("home", home, Boolean(config.home_trend), homeTrendColor, null, "")}
+              <div class="energy-content">
+                <ha-icon
+                  class="energy-icon"
+                  .icon=${config.home_icon ?? "mdi:home-lightning-bolt"}
+                  style=${styleMap(homeIconStyle)}
+                ></ha-icon>
+                <div class="energy-number">${this.formatValue(home, homeUnit, decimals)}</div>
+                <div class="energy-label">${config.home_label}</div>
+              </div>
             </div>
 
             <div class="energy-value battery ${battery === null ? "missing" : ""}">
-              <div class="battery-top-row">
-                <ha-icon class="energy-icon" .icon=${batteryIcon} style=${styleMap(batteryIconStyle)}></ha-icon>
-                ${batteryPercentage !== null
-                  ? html`<div class="battery-percentage">${this.formatBatteryPercentage(batteryPercentage)}</div>`
-                  : nothing}
+              ${this.renderTrend(
+                "battery",
+                batteryTrendValue,
+                Boolean(config.battery_trend),
+                batteryTrendColor,
+                batteryTrendThreshold,
+                batteryTrendAlertColor
+              )}
+              <div class="energy-content">
+                <div class="battery-top-row">
+                  <ha-icon class="energy-icon" .icon=${batteryIcon} style=${styleMap(batteryIconStyle)}></ha-icon>
+                  ${batteryPercentage !== null
+                    ? html`
+                        <div class="battery-percentage ${batteryIsLow ? "alert" : ""}">
+                          ${this.formatBatteryPercentage(batteryPercentage)}
+                        </div>
+                      `
+                    : nothing}
+                </div>
+                <div class="energy-number">${this.formatValue(battery, batteryUnit, decimals)}</div>
+                <div class="energy-label">${config.battery_label}</div>
               </div>
-              <div class="energy-number">${this.formatValue(battery, batteryUnit, decimals)}</div>
-              <div class="energy-label">${config.battery_label}</div>
             </div>
 
             <div class="home-core">
-              <ha-icon .icon=${config.core_icon ?? "mdi:home"} style=${styleMap(coreIconStyle)}></ha-icon>
+              <div class="home-core-icon" style=${styleMap(coreIconStyle)}>
+                <ha-icon .icon=${config.core_icon ?? "mdi:home"}></ha-icon>
+              </div>
             </div>
           </div>
         </div>
@@ -260,6 +345,379 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     const className =
       direction === "none" ? `flow-line ${baseClass}` : `flow-line ${baseClass} active ${direction}`;
     return html`<div class=${className} aria-hidden="true"></div>`;
+  }
+
+  private renderTrend(
+    node: NodeKey,
+    currentValue: number | null,
+    enabled: boolean,
+    color: string,
+    threshold: number | null,
+    thresholdColor: string
+  ): TemplateResult | typeof nothing {
+    if (!enabled) {
+      return nothing;
+    }
+
+    const points = this.trendPoints(node, currentValue);
+    if (points.length < 2) {
+      return nothing;
+    }
+
+    const coordinates = this.toTrendCoordinates(points);
+    if (coordinates.length < 2) {
+      return nothing;
+    }
+
+    const linePath = coordinates
+      .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
+      .join(" ");
+    const first = coordinates[0];
+    const last = coordinates[coordinates.length - 1];
+    const areaPath = `${linePath} L ${last.x.toFixed(2)} 100 L ${first.x.toFixed(2)} 100 Z`;
+    const gradientId = `trend-${this._trendId}-${node}`;
+
+    const isThresholdTrend = node === "battery" && threshold !== null;
+    const thresholdValue = threshold ?? 0;
+    const areaColor =
+      isThresholdTrend && currentValue !== null && currentValue <= thresholdValue
+        ? thresholdColor
+        : color;
+    const thresholdSegments = isThresholdTrend
+      ? this.buildThresholdTrendSegments(coordinates, thresholdValue, color, thresholdColor)
+      : [];
+
+    const linePaths = isThresholdTrend
+      ? thresholdSegments.map(
+          (segment) => html`
+            <path
+              d=${segment.d}
+              fill="none"
+              stroke="rgba(255, 255, 255, 0.9)"
+              stroke-width="3.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              vector-effect="non-scaling-stroke"
+            ></path>
+            <path
+              d=${segment.d}
+              fill="none"
+              stroke=${segment.color}
+              style=${styleMap({ stroke: segment.color })}
+              stroke-width="2.4"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              vector-effect="non-scaling-stroke"
+            ></path>
+          `
+        )
+      : html`
+          <path
+            d=${linePath}
+            fill="none"
+            stroke="rgba(255, 255, 255, 0.9)"
+            stroke-width="3.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            vector-effect="non-scaling-stroke"
+          ></path>
+          <path
+            d=${linePath}
+            fill="none"
+            stroke=${color}
+            style=${styleMap({ stroke: color })}
+            stroke-width="2.4"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            vector-effect="non-scaling-stroke"
+          ></path>
+        `;
+
+    return html`
+      <div class="node-trend" aria-hidden="true">
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id=${gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color=${areaColor} stop-opacity="0.12"></stop>
+              <stop offset="100%" stop-color=${areaColor} stop-opacity="0"></stop>
+            </linearGradient>
+          </defs>
+          <path class="trend-area" d=${areaPath} fill=${`url(#${gradientId})`}></path>
+        </svg>
+      </div>
+      <div class="node-trend-line" aria-hidden="true">
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+          ${linePaths}
+        </svg>
+      </div>
+    `;
+  }
+
+  private trendPoints(node: NodeKey, currentValue: number | null): TrendPoint[] {
+    const now = Date.now();
+    const cutoff = now - TREND_WINDOW_MS;
+    const stored = (this._trendSeries[node] ?? [])
+      .filter((point) => point.ts >= cutoff)
+      .sort((a, b) => a.ts - b.ts);
+    const points = [...stored];
+
+    if (currentValue !== null && Number.isFinite(currentValue)) {
+      points.push({ ts: now, value: currentValue });
+    }
+
+    return points;
+  }
+
+  private buildThresholdTrendSegments(
+    points: TrendCoordinate[],
+    threshold: number,
+    normalColor: string,
+    lowColor: string
+  ): TrendLineSegment[] {
+    const segments: TrendLineSegment[] = [];
+
+    for (let index = 1; index < points.length; index += 1) {
+      const start = points[index - 1];
+      const end = points[index];
+      const startIsLow = start.value <= threshold;
+      const endIsLow = end.value <= threshold;
+      const startCmd = `${start.x.toFixed(2)} ${start.y.toFixed(2)}`;
+      const endCmd = `${end.x.toFixed(2)} ${end.y.toFixed(2)}`;
+
+      if (startIsLow === endIsLow || Math.abs(end.value - start.value) <= EPSILON) {
+        segments.push({
+          d: `M ${startCmd} L ${endCmd}`,
+          color: startIsLow ? lowColor : normalColor
+        });
+        continue;
+      }
+
+      const ratio = (threshold - start.value) / (end.value - start.value);
+      const t = Math.max(0, Math.min(1, ratio));
+      const crossX = start.x + (end.x - start.x) * t;
+      const crossY = start.y + (end.y - start.y) * t;
+      const crossCmd = `${crossX.toFixed(2)} ${crossY.toFixed(2)}`;
+
+      segments.push({
+        d: `M ${startCmd} L ${crossCmd}`,
+        color: startIsLow ? lowColor : normalColor
+      });
+      segments.push({
+        d: `M ${crossCmd} L ${endCmd}`,
+        color: endIsLow ? lowColor : normalColor
+      });
+    }
+
+    return segments;
+  }
+
+  private toTrendCoordinates(points: TrendPoint[]): TrendCoordinate[] {
+    const now = Date.now();
+    const start = now - TREND_WINDOW_MS;
+    const xMin = 3;
+    const xMax = 97;
+
+    const values = points.map((point) => point.value);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+
+    if (!Number.isFinite(min) || !Number.isFinite(max)) {
+      return [];
+    }
+
+    const top = 20;
+    const bottom = 80;
+    const span = Math.max(max - min, EPSILON);
+
+    const coordinates = points.map((point) => {
+      const normalizedX = Math.max(0, Math.min(100, ((point.ts - start) / TREND_WINDOW_MS) * 100));
+      const x = xMin + (normalizedX / 100) * (xMax - xMin);
+      const normalized = span <= EPSILON ? 0.5 : (point.value - min) / span;
+      const y = bottom - normalized * (bottom - top);
+      return { x, y, value: point.value };
+    });
+
+    const firstX = coordinates[0]?.x ?? xMin;
+    const lastX = coordinates[coordinates.length - 1]?.x ?? xMax;
+    const currentSpan = Math.max(0, lastX - firstX);
+    const minVisualSpan = 18;
+
+    if (coordinates.length >= 2 && currentSpan < minVisualSpan) {
+      const maxFirstX = xMax - minVisualSpan;
+      const targetFirstX = Math.max(xMin, Math.min(maxFirstX, lastX - minVisualSpan));
+      if (currentSpan <= EPSILON) {
+        const step = minVisualSpan / (coordinates.length - 1);
+        return coordinates.map((point, index) => ({
+          ...point,
+          x: Math.max(xMin, Math.min(xMax, targetFirstX + step * index))
+        }));
+      }
+
+      const scale = minVisualSpan / currentSpan;
+      return coordinates.map((point) => ({
+        ...point,
+        x: Math.max(xMin, Math.min(xMax, targetFirstX + (point.x - firstX) * scale))
+      }));
+    }
+
+    return coordinates;
+  }
+
+  public connectedCallback(): void {
+    super.connectedCallback();
+    this.maybeRefreshTrendHistory(true);
+    this._trendRefreshTimer = window.setInterval(() => {
+      this.maybeRefreshTrendHistory();
+    }, TREND_REFRESH_MS);
+  }
+
+  public disconnectedCallback(): void {
+    if (this._trendRefreshTimer !== undefined) {
+      window.clearInterval(this._trendRefreshTimer);
+      this._trendRefreshTimer = undefined;
+    }
+    super.disconnectedCallback();
+  }
+
+  protected updated(changedProps: Map<string, unknown>): void {
+    if (changedProps.has("_config")) {
+      this.maybeRefreshTrendHistory(true);
+      return;
+    }
+
+    if (changedProps.has("hass")) {
+      this.maybeRefreshTrendHistory();
+    }
+  }
+
+  private maybeRefreshTrendHistory(force = false): void {
+    if (force) {
+      this._lastTrendRefresh = 0;
+    }
+
+    const now = Date.now();
+    if (!force && now - this._lastTrendRefresh < TREND_REFRESH_MS) {
+      return;
+    }
+
+    this._lastTrendRefresh = now;
+    void this.refreshTrendHistory();
+  }
+
+  private async refreshTrendHistory(): Promise<void> {
+    if (this._trendRefreshInFlight || !this._config || !this.hass || typeof this.hass.callApi !== "function") {
+      return;
+    }
+
+    const config = this._config;
+    const enabledNodes = this.enabledTrendNodes(config);
+    if (enabledNodes.length === 0) {
+      if (Object.keys(this._trendSeries).length > 0) {
+        this._trendSeries = {};
+      }
+      return;
+    }
+
+    this._trendRefreshInFlight = true;
+    try {
+      const next: Partial<Record<NodeKey, TrendPoint[]>> = {};
+      for (const node of enabledNodes) {
+        const entityId = this.trendEntityId(node, config);
+        if (!entityId) {
+          continue;
+        }
+        next[node] = await this.fetchTrendHistory(entityId);
+      }
+      this._trendSeries = next;
+    } finally {
+      this._trendRefreshInFlight = false;
+    }
+  }
+
+  private enabledTrendNodes(config: PowerSchwammerlEnergyCardConfig): NodeKey[] {
+    const nodes: NodeKey[] = [];
+    if (config.solar_trend) {
+      nodes.push("solar");
+    }
+    if (config.grid_trend) {
+      nodes.push("grid");
+    }
+    if (config.home_trend) {
+      nodes.push("home");
+    }
+    if (config.battery_trend) {
+      nodes.push("battery");
+    }
+    return nodes;
+  }
+
+  private trendEntityId(node: NodeKey, config: PowerSchwammerlEnergyCardConfig): string | undefined {
+    switch (node) {
+      case "solar":
+        return config.solar_entity;
+      case "grid":
+        return config.grid_entity;
+      case "home":
+        return config.home_entity;
+      case "battery":
+        return config.battery_percentage_entity ?? config.battery_entity;
+      default:
+        return undefined;
+    }
+  }
+
+  private async fetchTrendHistory(entityId: string): Promise<TrendPoint[]> {
+    if (!this.hass.callApi) {
+      return [];
+    }
+
+    const startIso = new Date(Date.now() - TREND_WINDOW_MS).toISOString();
+    const path =
+      `history/period/${startIso}?filter_entity_id=${encodeURIComponent(entityId)}`
+      + "&minimal_response&no_attributes";
+
+    try {
+      const raw = await this.hass.callApi("GET", path);
+      return this.parseTrendHistory(raw);
+    } catch {
+      return [];
+    }
+  }
+
+  private parseTrendHistory(raw: unknown): TrendPoint[] {
+    if (!Array.isArray(raw) || raw.length === 0) {
+      return [];
+    }
+
+    const series = Array.isArray(raw[0]) ? raw[0] : raw;
+    if (!Array.isArray(series)) {
+      return [];
+    }
+
+    const points: TrendPoint[] = [];
+    for (const item of series) {
+      if (!item || typeof item !== "object") {
+        continue;
+      }
+      const stateObj = item as Record<string, unknown>;
+      const value = Number(stateObj.state);
+      const changedRaw =
+        typeof stateObj.last_changed === "string"
+          ? stateObj.last_changed
+          : typeof stateObj.last_updated === "string"
+            ? stateObj.last_updated
+            : "";
+      const ts = Date.parse(changedRaw);
+      if (!Number.isFinite(value) || !Number.isFinite(ts)) {
+        continue;
+      }
+      points.push({ ts, value });
+    }
+
+    const cutoff = Date.now() - TREND_WINDOW_MS;
+    return points
+      .filter((point) => point.ts >= cutoff)
+      .sort((a, b) => a.ts - b.ts);
   }
 
   private handleCardClick = (): void => {
@@ -293,12 +751,12 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
 
     if (tapAction.action === "more-info") {
       const entityId =
-        tapAction.entity ??
-        this._config.details_entity ??
-        this._config.home_entity ??
-        this._config.grid_entity ??
-        this._config.solar_entity ??
-        this._config.battery_entity;
+        tapAction.entity
+        ?? this._config.details_entity
+        ?? this._config.home_entity
+        ?? this._config.grid_entity
+        ?? this._config.solar_entity
+        ?? this._config.battery_entity;
       if (entityId) {
         this.fireEvent("hass-more-info", { entityId });
       }
@@ -370,45 +828,87 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
   }
 
   private formatBatteryPercentage(value: number): string {
-    const rounded = Math.round(Math.max(0, Math.min(100, value)));
+    const rounded = Math.round(this.normalizeBatteryThreshold(value));
     return `${rounded}%`;
   }
 
-  private batteryIcon(percentage: number | null, batteryPower: number | null): string {
+  private batteryIcon(percentage: number | null, batteryPower: number | null, fallbackIcon?: string): string {
     if (batteryPower !== null && batteryPower > EPSILON) {
       return "mdi:battery-charging";
     }
 
     if (percentage === null) {
+      return fallbackIcon ?? "mdi:battery-outline";
+    }
+
+    const clamped = this.normalizeBatteryThreshold(percentage);
+    if (clamped < 5) {
       return "mdi:battery-outline";
     }
 
-    if (percentage >= 80) {
-      return "mdi:battery-high";
+    if (clamped >= 95) {
+      return "mdi:battery";
     }
 
-    if (percentage >= 45) {
-      return "mdi:battery-medium";
-    }
+    const step = Math.max(10, Math.min(90, Math.round(clamped / 10) * 10));
+    return `mdi:battery-${step}`;
+  }
 
-    if (percentage >= 20) {
-      return "mdi:battery-low";
+  private normalizeBatteryThreshold(value?: number | null): number {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      return 20;
     }
-
-    return "mdi:battery-outline";
+    return Math.max(0, Math.min(100, value));
   }
 
   private iconColorStyle(value?: string | number[]): Record<string, string> {
+    const color = this.resolveColor(value, "");
+    return color ? { color } : {};
+  }
+
+  private iconShapeStyle(value?: string | number[]): Record<string, string> {
     const rgbCss = this.toRgbCss(value);
     if (rgbCss) {
-      return { color: `rgb(${rgbCss})` };
+      return {
+        "--icon-color": `rgb(${rgbCss})`,
+        "--shape-color":
+          `color-mix(in srgb, rgb(${rgbCss}) 14%, `
+          + "var(--ha-card-background, var(--card-background-color, white)))"
+      };
     }
 
-    if (typeof value === "string" && value.trim().length > 0 && value !== "none") {
-      return { color: value.trim() };
+    if (typeof value === "string" && value.trim().length > 0) {
+      const cssColor = value.trim();
+      const normalized = cssColor.toLowerCase();
+      if (normalized === "none" || normalized === "default") {
+        return {};
+      }
+      return {
+        "--icon-color": cssColor,
+        "--shape-color":
+          `color-mix(in srgb, ${cssColor} 14%, `
+          + "var(--ha-card-background, var(--card-background-color, white)))"
+      };
     }
 
     return {};
+  }
+
+  private resolveColor(value?: string | number[], fallback = ""): string {
+    const rgbCss = this.toRgbCss(value);
+    if (rgbCss) {
+      return `rgb(${rgbCss})`;
+    }
+
+    if (typeof value === "string" && value.trim().length > 0) {
+      const raw = value.trim();
+      const normalized = raw.toLowerCase();
+      if (normalized !== "none" && normalized !== "default") {
+        return raw;
+      }
+    }
+
+    return fallback;
   }
 
   private toRgbCss(value?: string | number[]): string | null {
@@ -491,9 +991,14 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       --icon-border-radius: var(--mush-icon-border-radius, 50%);
       --icon-symbol-size: var(--mush-icon-symbol-size, 0.667em);
       --icon-color: var(--primary-text-color);
-      --shape-color: rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.05);
+      --flow-line-size: 3px;
+      --shape-color: color-mix(
+        in srgb,
+        var(--icon-color) 14%,
+        var(--ha-card-background, var(--card-background-color, white))
+      );
       --shape-color-soft: rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.04);
-      --flow-color-rgb: var(--rgb-purple, 156, 39, 176);
+      --flow-color-rgb: var(--rgb-primary-text-color, 33, 33, 33);
       --flow-track-color: rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.12);
     }
 
@@ -526,7 +1031,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       grid-template-rows: repeat(3, minmax(0, 1fr));
       gap: var(--spacing);
       aspect-ratio: 1 / 1;
-      min-height: 250px;
+      min-height: 266px;
       border-radius: var(--control-border-radius);
       padding: var(--spacing);
       background: transparent;
@@ -534,6 +1039,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     }
 
     .energy-value {
+      position: relative;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -541,18 +1047,57 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       text-align: center;
       justify-self: center;
       align-self: center;
-      width: calc(100% - 12px);
-      max-width: 120px;
+      width: calc(100% - 8px);
+      max-width: 132px;
       min-width: 0;
+      aspect-ratio: 1 / 1;
       border-radius: calc(var(--control-border-radius) - 1px);
-      padding: 6px 8px;
-      min-height: 62px;
+      padding: 8px 10px;
       background: var(--ha-card-background, var(--card-background-color, white));
       border: 1px solid rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.1);
       box-shadow: none;
       z-index: 2;
       box-sizing: border-box;
       overflow: hidden;
+    }
+
+    .node-trend {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      opacity: 1;
+    }
+
+    .node-trend svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .node-trend-line {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+      opacity: 0.96;
+    }
+
+    .node-trend-line svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .energy-content {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-width: 0;
     }
 
     .energy-value.solar {
@@ -580,7 +1125,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     }
 
     .energy-icon {
-      --mdc-icon-size: 18px;
+      --mdc-icon-size: calc(var(--icon-size) * 0.667);
       margin-bottom: 4px;
       color: var(--icon-color);
       flex: 0 0 auto;
@@ -606,6 +1151,10 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       letter-spacing: var(--card-secondary-letter-spacing);
     }
 
+    .battery-percentage.alert {
+      color: var(--error-color, rgb(var(--rgb-red, 244, 67, 54)));
+    }
+
     .energy-number {
       font-size: var(--card-primary-font-size);
       line-height: var(--card-primary-line-height);
@@ -627,22 +1176,36 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     .home-core {
       grid-column: 2;
       grid-row: 2;
-      width: 64px;
-      height: 64px;
-      border-radius: var(--control-border-radius);
-      display: grid;
-      place-items: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       justify-self: center;
       align-self: center;
-      background: var(--ha-card-background, var(--card-background-color, white));
-      border: 1px solid rgba(var(--flow-color-rgb), 0.32);
-      box-shadow: none;
       z-index: 3;
     }
 
-    .home-core ha-icon {
-      --mdc-icon-size: 28px;
+    .home-core-icon {
+      position: relative;
+      width: var(--icon-size);
+      height: var(--icon-size);
+      font-size: var(--icon-size);
+      border-radius: var(--icon-border-radius);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: var(--shape-color);
+      transition-property: background-color, box-shadow;
+      transition-duration: 280ms;
+      transition-timing-function: ease-out;
+      box-shadow: 0 0 0 1px transparent;
+    }
+
+    .home-core-icon ha-icon {
+      --mdc-icon-size: var(--icon-symbol-size);
       color: var(--icon-color);
+      display: flex;
+      line-height: 0;
+      transition: color 280ms ease-in-out;
     }
 
     .flow-line {
@@ -661,39 +1224,33 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     }
 
     .flow-line.horizontal {
-      height: 3px;
+      height: var(--flow-line-size);
+      top: calc(50% - (var(--flow-line-size) / 2));
     }
 
     .flow-line.vertical {
-      width: 3px;
+      width: var(--flow-line-size);
+      left: calc(50% - (var(--flow-line-size) / 2));
     }
 
     .flow-line.left {
-      top: 50%;
       left: 17%;
       right: 50%;
-      transform: translateY(-50%);
     }
 
     .flow-line.right {
-      top: 50%;
       left: 50%;
       right: 17%;
-      transform: translateY(-50%);
     }
 
     .flow-line.top {
       top: 17%;
       bottom: 50%;
-      left: 50%;
-      transform: translateX(-50%);
     }
 
     .flow-line.bottom {
       top: 50%;
       bottom: 17%;
-      left: 50%;
-      transform: translateX(-50%);
     }
 
     .flow-line.active::after {
@@ -765,33 +1322,20 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
 
     @container (max-width: 520px) {
       .energy-grid {
-        min-height: 220px;
+        min-height: 234px;
         gap: 8px;
         padding: 8px;
       }
 
       .energy-value {
-        width: calc(100% - 8px);
-        max-width: 108px;
-        min-height: 58px;
-        padding: 5px 7px;
+        width: calc(100% - 6px);
+        max-width: 116px;
+        padding: 6px 8px;
       }
 
-      .energy-number {
-        font-size: 0.85rem;
-      }
-
-      .energy-label {
-        font-size: 0.68rem;
-      }
-
-      .home-core {
-        width: 60px;
-        height: 60px;
-      }
-
-      .home-core ha-icon {
-        --mdc-icon-size: 24px;
+      .home-core-icon {
+        width: var(--icon-size);
+        height: var(--icon-size);
       }
     }
   `;
