@@ -1,0 +1,6 @@
+{
+  "name": "PowerSchwammerl",
+  "render_readme": true,
+  "homeassistant": "2023.8.0",
+  "filename": "power-schwammerl.js"
+}
