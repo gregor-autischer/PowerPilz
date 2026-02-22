@@ -10,6 +10,16 @@ interface EnergyCardConfig extends LovelaceCardConfig {
   grid_entity?: string;
   battery_entity?: string;
   battery_percentage_entity?: string;
+  solar_sub_enabled?: boolean;
+  solar_sub_entity?: string;
+  solar_sub_label?: string;
+  solar_sub_icon?: string;
+  solar_sub_icon_color?: string | number[];
+  home_sub_enabled?: boolean;
+  home_sub_entity?: string;
+  home_sub_label?: string;
+  home_sub_icon?: string;
+  home_sub_icon_color?: string | number[];
   grid_label?: string;
   solar_label?: string;
   home_label?: string;
@@ -40,6 +50,53 @@ interface EnergyCardConfig extends LovelaceCardConfig {
 }
 
 type HaFormSchema = Record<string, unknown>;
+const SOLAR_SUB_BLOCK_COUNT = 4;
+const HOME_SUB_BLOCK_COUNT = 8;
+
+const subBlockFields = (prefix: "solar" | "home", index: number): HaFormSchema[] => {
+  const slot = `${prefix}_sub_${index}`;
+  return [
+    { name: `${slot}_enabled`, selector: { boolean: {} } },
+    {
+      type: "grid",
+      name: "",
+      schema: [
+        { name: `${slot}_entity`, selector: { entity: { filter: { domain: "sensor" } } } },
+        { name: `${slot}_label`, selector: { text: {} } },
+        {
+          name: `${slot}_icon`,
+          selector: { icon: {} },
+          context: { icon_entity: `${slot}_entity` }
+        },
+        {
+          name: `${slot}_icon_color`,
+          selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+        }
+      ]
+    }
+  ];
+};
+
+const subBlockSchemas = (
+  prefix: "solar" | "home",
+  title: string,
+  icon: string,
+  count: number
+): HaFormSchema => ({
+  type: "expandable",
+  name: "",
+  title,
+  icon,
+  expanded: false,
+  schema: Array.from({ length: count }, (_, index) => ({
+    type: "expandable",
+    name: "",
+    title: `Block ${index + 1}`,
+    icon: "mdi:view-grid-outline",
+    expanded: false,
+    schema: subBlockFields(prefix, index + 1)
+  }))
+});
 
 const SCHEMA: HaFormSchema[] = [
   { name: "name", selector: { text: {} } },
@@ -157,6 +214,8 @@ const SCHEMA: HaFormSchema[] = [
       }
     ]
   },
+  subBlockSchemas("solar", "Solar sub blocks", "mdi:solar-power-variant", SOLAR_SUB_BLOCK_COUNT),
+  subBlockSchemas("home", "Home sub blocks", "mdi:flash", HOME_SUB_BLOCK_COUNT),
   {
     type: "grid",
     name: "",
@@ -174,6 +233,16 @@ const LABELS: Record<string, string> = {
   grid_entity: "Grid entity",
   battery_entity: "Battery entity",
   battery_percentage_entity: "Battery percentage entity",
+  solar_sub_enabled: "Enable solar sub block",
+  solar_sub_entity: "Solar sub entity",
+  solar_sub_label: "Solar sub label",
+  solar_sub_icon: "Solar sub icon",
+  solar_sub_icon_color: "Solar sub color",
+  home_sub_enabled: "Enable home sub block",
+  home_sub_entity: "Home sub entity",
+  home_sub_label: "Home sub label",
+  home_sub_icon: "Home sub icon",
+  home_sub_icon_color: "Home sub color",
   solar_label: "Solar label",
   home_label: "Home label",
   grid_label: "Grid label",
@@ -236,6 +305,19 @@ export class PowerSchwammerlEnergyCardEditor extends LitElement implements Lovel
 
   private computeLabel = (schema: { name?: string }): string => {
     const name = schema.name ?? "";
+    const subMatch = name.match(/^(solar|home)_sub_(\d+)_(enabled|entity|label|icon|icon_color)$/);
+    if (subMatch) {
+      const [, node, index, field] = subMatch;
+      const nodeLabel = node === "solar" ? "Solar" : "Home";
+      const fieldLabels: Record<string, string> = {
+        enabled: "Enabled",
+        entity: "Entity",
+        label: "Label",
+        icon: "Icon",
+        icon_color: "Color"
+      };
+      return `${nodeLabel} block ${index} ${fieldLabels[field] ?? field}`;
+    }
     return LABELS[name] ?? name;
   };
 

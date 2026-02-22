@@ -20,6 +20,12 @@ const EPSILON = 0.01;
 const DEFAULT_DECIMALS = 1;
 const TREND_WINDOW_MS = 24 * 60 * 60 * 1000;
 const TREND_REFRESH_MS = 5 * 60 * 1000;
+const SOLAR_SUB_BLOCK_SLOT_COUNT = 4;
+const HOME_SUB_BLOCK_SLOT_COUNT = 8;
+const SUB_BLOCKS_MIN_WIDTH = 400;
+const SUB_BLOCKS_MIN_HEIGHT = 300;
+const SUB_GROUP_GAP_PX = 4;
+const HOME_SUB_LEFT_COLUMN_SHIFT_PX = -10;
 const DEFAULT_NEUTRAL_RGB = "var(--rgb-primary-text-color, 33, 33, 33)";
 const COLOR_RGB_FALLBACK: Record<string, string> = {
   red: "244, 67, 54",
@@ -82,6 +88,15 @@ interface TrendAreaRun {
   points: TrendCanvasPoint[];
 }
 
+interface EnergySubBlockEntry {
+  key: string;
+  index: number;
+  icon: string;
+  iconStyle: Record<string, string>;
+  label: string;
+  value: number | null;
+}
+
 interface PowerSchwammerlEnergyCardConfig extends LovelaceCardConfig {
   type: "custom:power-schwammerl-energy-card";
   name?: string;
@@ -92,6 +107,16 @@ interface PowerSchwammerlEnergyCardConfig extends LovelaceCardConfig {
   grid_entity?: string;
   battery_entity?: string;
   battery_percentage_entity?: string;
+  solar_sub_enabled?: boolean;
+  solar_sub_entity?: string;
+  solar_sub_label?: string;
+  solar_sub_icon?: string;
+  solar_sub_icon_color?: string | number[];
+  home_sub_enabled?: boolean;
+  home_sub_entity?: string;
+  home_sub_label?: string;
+  home_sub_icon?: string;
+  home_sub_icon_color?: string | number[];
   grid_label?: string;
   solar_label?: string;
   home_label?: string;
@@ -171,6 +196,12 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
   @state()
   private _trendSeries: Partial<Record<NodeKey, TrendPoint[]>> = {};
 
+  @state()
+  private _showSubBlocks = false;
+
+  @state()
+  private _subNodeSizePx = 48;
+
   private _trendRefreshTimer?: number;
   private _trendRefreshInFlight = false;
   private _lastTrendRefresh = 0;
@@ -194,6 +225,12 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       name: config.name ?? "Energy Flow",
       home_entity: homeEntity,
       solar_entity: config.solar_entity ?? config.production_entity,
+      solar_sub_enabled: config.solar_sub_enabled ?? false,
+      solar_sub_label: config.solar_sub_label ?? "Solar Sub",
+      solar_sub_icon: config.solar_sub_icon ?? "mdi:solar-power-variant",
+      home_sub_enabled: config.home_sub_enabled ?? false,
+      home_sub_label: config.home_sub_label ?? "Home Load",
+      home_sub_icon: config.home_sub_icon ?? "mdi:flash",
       grid_label: config.grid_label ?? "Grid",
       solar_label: config.solar_label ?? "Solar",
       home_label: config.home_label ?? "Home",
@@ -271,6 +308,9 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     const gridIconStyle = this.iconColorStyle(config.grid_icon_color);
     const homeIconStyle = this.iconColorStyle(config.home_icon_color);
     const coreIconStyle = this.iconShapeStyle(config.core_icon_color);
+    const solarSubBlocks = this.collectSubBlocks("solar", config);
+    const homeSubBlocks = this.collectSubBlocks("home", config);
+    const homeHasExtendedSubLayout = homeSubBlocks.some((entry) => entry.index >= 7);
 
     const batteryLowThreshold = this.normalizeBatteryThreshold(config.battery_low_threshold);
     const batteryLowAlertEnabled = Boolean(config.battery_low_alert);
@@ -347,6 +387,9 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
               </div>
             </div>
 
+            ${this.renderSolarSubBlocks(solarSubBlocks, homeHasExtendedSubLayout, decimals)}
+            ${this.renderHomeSubBlocks(homeSubBlocks, decimals)}
+
             <div class="energy-value battery ${battery === null ? "missing" : ""}">
               ${this.renderTrend(
                 "battery",
@@ -387,6 +430,216 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     const className =
       direction === "none" ? `flow-line ${baseClass}` : `flow-line ${baseClass} active ${direction}`;
     return html`<div class=${className} aria-hidden="true"></div>`;
+  }
+
+  private collectSubBlocks(
+    node: "solar" | "home",
+    config: PowerSchwammerlEnergyCardConfig
+  ): EnergySubBlockEntry[] {
+    if (!this.hass) {
+      return [];
+    }
+
+    const entries: EnergySubBlockEntry[] = [];
+    const defaultIcon = node === "solar" ? "mdi:solar-power-variant" : "mdi:flash";
+    const defaultLabelPrefix = node === "solar" ? "Solar" : "Home";
+    const slotCount = node === "solar" ? SOLAR_SUB_BLOCK_SLOT_COUNT : HOME_SUB_BLOCK_SLOT_COUNT;
+
+    for (let index = 1; index <= slotCount; index += 1) {
+      const enabled = config[`${node}_sub_${index}_enabled`] === true;
+      const entityId = this.readConfigString(config[`${node}_sub_${index}_entity`]);
+      if (!enabled || !entityId) {
+        continue;
+      }
+
+      entries.push({
+        key: `${node}_${index}`,
+        index,
+        icon: this.readConfigString(config[`${node}_sub_${index}_icon`]) ?? defaultIcon,
+        iconStyle: this.iconColorStyle(config[`${node}_sub_${index}_icon_color`] as string | number[] | undefined),
+        label: this.readConfigString(config[`${node}_sub_${index}_label`]) ?? `${defaultLabelPrefix} ${index}`,
+        value: readNumber(this.hass, entityId)
+      });
+    }
+
+    if (entries.length > 0) {
+      return entries;
+    }
+
+    const legacyEnabled = node === "solar" ? Boolean(config.solar_sub_enabled) : Boolean(config.home_sub_enabled);
+    const legacyEntity = node === "solar" ? config.solar_sub_entity : config.home_sub_entity;
+    if (!legacyEnabled || !legacyEntity) {
+      return [];
+    }
+
+    const legacyIcon = node === "solar"
+      ? config.solar_sub_icon ?? defaultIcon
+      : config.home_sub_icon ?? defaultIcon;
+    const legacyColor = node === "solar"
+      ? config.solar_sub_icon_color
+      : config.home_sub_icon_color;
+    const legacyLabel = node === "solar"
+      ? config.solar_sub_label ?? "Solar Sub"
+      : config.home_sub_label ?? "Home Load";
+
+    return [
+      {
+        key: `${node}_legacy`,
+        index: 1,
+        icon: legacyIcon,
+        iconStyle: this.iconColorStyle(legacyColor),
+        label: legacyLabel,
+        value: readNumber(this.hass, legacyEntity)
+      }
+    ];
+  }
+
+  private renderSolarSubBlocks(
+    entries: EnergySubBlockEntry[],
+    homeHasExtendedSubLayout: boolean,
+    decimals: number
+  ): TemplateResult | typeof nothing {
+    if (!this._showSubBlocks || entries.length === 0) {
+      return nothing;
+    }
+
+    const byIndex = new Map(entries.map((entry) => [entry.index, entry]));
+    const pick = (indexes: number[]): EnergySubBlockEntry[] =>
+      indexes.map((index) => byIndex.get(index)).filter((entry): entry is EnergySubBlockEntry => Boolean(entry));
+
+    if (homeHasExtendedSubLayout) {
+      return this.renderSubNodeGroup(
+        "solar-left-packed",
+        pick([1, 2, 3, 4]),
+        {
+          1: { row: 1, col: 2 },
+          2: { row: 1, col: 1 },
+          3: { row: 2, col: 2 },
+          4: { row: 2, col: 1 }
+        },
+        decimals
+      );
+    }
+
+    return html`
+      ${this.renderSubNodeGroup(
+        "solar-right",
+        pick([1, 2]),
+        {
+          1: { row: 1, col: 1 },
+          2: { row: 1, col: 2 }
+        },
+        decimals
+      )}
+      ${this.renderSubNodeGroup(
+        "solar-left",
+        pick([3, 4]),
+        {
+          3: { row: 1, col: 2 },
+          4: { row: 1, col: 1 }
+        },
+        decimals
+      )}
+    `;
+  }
+
+  private renderHomeSubBlocks(
+    entries: EnergySubBlockEntry[],
+    decimals: number
+  ): TemplateResult | typeof nothing {
+    if (!this._showSubBlocks || entries.length === 0) {
+      return nothing;
+    }
+
+    const hasExtended = entries.some((entry) => entry.index >= 7);
+    if (hasExtended) {
+      return this.renderSubNodeGroup(
+        "home-extended",
+        entries.filter((entry) => entry.index <= 8),
+        {
+          1: { row: 3, col: 2 },
+          2: { row: 3, col: 1 },
+          3: { row: 4, col: 2 },
+          4: { row: 4, col: 1 },
+          5: { row: 2, col: 2 },
+          6: { row: 2, col: 1 },
+          7: { row: 1, col: 2 },
+          8: { row: 1, col: 1 }
+        },
+        decimals
+      );
+    }
+
+    return this.renderSubNodeGroup(
+      "home-compact",
+      entries.filter((entry) => entry.index <= 6),
+      {
+        1: { row: 2, col: 2 },
+        2: { row: 2, col: 1 },
+        3: { row: 3, col: 2 },
+        4: { row: 3, col: 1 },
+        5: { row: 1, col: 2 },
+        6: { row: 1, col: 1 }
+      },
+      decimals
+    );
+  }
+
+  private renderSubNodeGroup(
+    className: string,
+    entries: EnergySubBlockEntry[],
+    positions: Record<number, { row: number; col: number }>,
+    decimals: number
+  ): TemplateResult | typeof nothing {
+    if (entries.length === 0) {
+      return nothing;
+    }
+
+    const groupStyle: Record<string, string> = {
+      "--sub-node-size": `${this._subNodeSizePx}px`
+    };
+
+    return html`
+      <div class="sub-node-group ${className}" style=${styleMap(groupStyle)}>
+        ${entries.map((entry) => {
+          const position = positions[entry.index];
+          if (!position) {
+            return nothing;
+          }
+
+          const blockStyle = {
+            "grid-column": `${position.col}`,
+            "grid-row": `${position.row}`
+          };
+          if (className.startsWith("home-") && entry.index >= 5) {
+            blockStyle["margin-top"] = "-137px";
+          }
+
+          return html`
+            <div
+              class="energy-sub-value sub-col-${position.col} ${entry.value === null ? "missing" : ""}"
+              data-key=${entry.key}
+              style=${styleMap(blockStyle)}
+            >
+              <div class="energy-sub-content">
+                <ha-icon class="energy-sub-icon" .icon=${entry.icon} style=${styleMap(entry.iconStyle)}></ha-icon>
+                <div class="energy-sub-number">${this.formatValue(entry.value, "kWh", decimals)}</div>
+                <div class="energy-sub-label">${entry.label}</div>
+              </div>
+            </div>
+          `;
+        })}
+      </div>
+    `;
+  }
+
+  private readConfigString(value: unknown): string | undefined {
+    if (typeof value !== "string") {
+      return undefined;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
   }
 
   private renderTrend(
@@ -538,6 +791,42 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     }));
   }
 
+  private updateSubBlockVisibility(): void {
+    const grid = this.renderRoot.querySelector<HTMLElement>(".energy-grid");
+    if (!grid) {
+      if (this._showSubBlocks) {
+        this._showSubBlocks = false;
+      }
+      return;
+    }
+
+    const rect = grid.getBoundingClientRect();
+    const shouldShow = rect.width >= SUB_BLOCKS_MIN_WIDTH && rect.height >= SUB_BLOCKS_MIN_HEIGHT;
+    if (shouldShow !== this._showSubBlocks) {
+      this._showSubBlocks = shouldShow;
+    }
+  }
+
+  private updateSubNodeSize(): void {
+    const grid = this.renderRoot.querySelector<HTMLElement>(".energy-grid");
+    const mainNode = this.renderRoot.querySelector<HTMLElement>(".energy-value.solar")
+      ?? this.renderRoot.querySelector<HTMLElement>(".energy-value");
+    if (!grid || !mainNode) {
+      return;
+    }
+
+    const rect = mainNode.getBoundingClientRect();
+    const size = Math.min(rect.width, rect.height);
+    if (!Number.isFinite(size) || size <= 0) {
+      return;
+    }
+
+    const next = Math.max(28, Math.round(size * 0.58));
+    if (next !== this._subNodeSizePx) {
+      this._subNodeSizePx = next;
+    }
+  }
+
   private syncTrendResizeObserver(): void {
     if (typeof ResizeObserver === "undefined") {
       return;
@@ -545,11 +834,17 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
 
     if (!this._trendResizeObserver) {
       this._trendResizeObserver = new ResizeObserver(() => {
+        this.updateSubNodeSize();
+        this.updateSubBlockVisibility();
         this.scheduleTrendCanvasDraw();
       });
     }
 
     this._trendResizeObserver.disconnect();
+    const grid = this.renderRoot.querySelector<HTMLElement>(".energy-grid");
+    if (grid) {
+      this._trendResizeObserver.observe(grid);
+    }
     this.renderRoot.querySelectorAll<HTMLElement>(".energy-value").forEach((node) => {
       this._trendResizeObserver?.observe(node);
     });
@@ -876,6 +1171,8 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     }, TREND_REFRESH_MS);
     void this.updateComplete.then(() => {
       this.syncTrendResizeObserver();
+      this.updateSubNodeSize();
+      this.updateSubBlockVisibility();
       this.scheduleTrendCanvasDraw();
     });
   }
@@ -903,6 +1200,8 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       this.maybeRefreshTrendHistory();
     }
     this.syncTrendResizeObserver();
+    this.updateSubNodeSize();
+    this.updateSubBlockVisibility();
     this.scheduleTrendCanvasDraw();
   }
 
@@ -1432,6 +1731,113 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     }
 
     .energy-value.missing .energy-number {
+      color: var(--disabled-text-color);
+    }
+
+    .sub-node-group {
+      --sub-node-size: 48px;
+      position: absolute;
+      display: grid;
+      grid-template-columns: repeat(2, var(--sub-node-size));
+      grid-auto-rows: var(--sub-node-size);
+      gap: ${SUB_GROUP_GAP_PX}px;
+      width: calc((var(--sub-node-size) * 2) + ${SUB_GROUP_GAP_PX}px);
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    .sub-node-group.solar-right {
+      top: 8%;
+      right: 0.6%;
+    }
+
+    .sub-node-group.solar-left {
+      top: 8%;
+      left: 0.6%;
+    }
+
+    .sub-node-group.solar-left-packed {
+      top: 8%;
+      left: 0.6%;
+    }
+
+    .sub-node-group.home-compact {
+      top: 52.5%;
+      right: 0.6%;
+    }
+
+    .sub-node-group.home-extended {
+      top: 34.5%;
+      right: 0.6%;
+    }
+
+    .energy-sub-value {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: var(--sub-node-size);
+      height: var(--sub-node-size);
+      aspect-ratio: 1 / 1;
+      border-radius: calc(var(--control-border-radius) - 4px);
+      padding: 3px 4px;
+      background: var(--ha-card-background, var(--card-background-color, white));
+      border: 1px solid rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.1);
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+
+
+    .sub-node-group.home-compact .energy-sub-value.sub-col-1,
+    .sub-node-group.home-extended .energy-sub-value.sub-col-1 {
+      transform: translateX(${HOME_SUB_LEFT_COLUMN_SHIFT_PX}px);
+    }
+
+    .energy-sub-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1px;
+      min-width: 0;
+      text-align: center;
+      width: 100%;
+      height: 100%;
+    }
+
+    .energy-sub-icon {
+      --mdc-icon-size: calc(var(--icon-size) * 0.48);
+      margin-bottom: 0;
+      color: var(--icon-color);
+      flex: 0 0 auto;
+    }
+
+    .energy-sub-number {
+      font-size: calc(var(--card-secondary-font-size) - 1px);
+      line-height: calc(var(--card-secondary-line-height) - 5px);
+      font-weight: var(--card-primary-font-weight);
+      color: var(--primary-text-color);
+      letter-spacing: var(--card-primary-letter-spacing);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      width: 100%;
+    }
+
+    .energy-sub-label {
+      margin-top: 0;
+      font-size: calc(var(--card-secondary-font-size) - 2px);
+      line-height: calc(var(--card-secondary-line-height) - 6px);
+      color: var(--secondary-text-color);
+      font-weight: var(--card-secondary-font-weight);
+      letter-spacing: var(--card-secondary-letter-spacing);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      width: 100%;
+    }
+
+    .energy-sub-value.missing .energy-sub-number {
       color: var(--disabled-text-color);
     }
 
