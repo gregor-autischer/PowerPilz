@@ -70,6 +70,11 @@ interface TrendCanvasSegment {
   low: boolean;
 }
 
+interface TrendAreaRun {
+  low: boolean;
+  points: TrendCanvasPoint[];
+}
+
 interface PowerSchwammerlEnergyCardConfig extends LovelaceCardConfig {
   type: "custom:power-schwammerl-energy-card";
   name?: string;
@@ -451,8 +456,8 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
   private toTrendCoordinates(points: TrendPoint[]): TrendCoordinate[] {
     const now = Date.now();
     const start = now - TREND_WINDOW_MS;
-    const xMin = 3;
-    const xMax = 97;
+    const xMin = 0;
+    const xMax = 100;
 
     const values = points.map((point) => point.value);
     const min = Math.min(...values);
@@ -580,14 +585,14 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
 
       const areaPoints = this.toCanvasPoints(coordinates, area.width, area.height);
       const linePoints = this.toCanvasPoints(coordinates, line.width, line.height);
-      const areaColor =
-        drawConfig.threshold !== null
-        && drawConfig.currentValue !== null
-        && drawConfig.currentValue <= drawConfig.threshold
-          ? drawConfig.thresholdColor
-          : drawConfig.color;
-
-      this.drawTrendArea(area.ctx, areaPoints, areaColor, area.height);
+      this.drawTrendArea(
+        area.ctx,
+        areaPoints,
+        drawConfig.color,
+        area.height,
+        drawConfig.threshold,
+        drawConfig.thresholdColor
+      );
       this.drawTrendLine(line.ctx, linePoints, drawConfig.color, drawConfig.threshold, drawConfig.thresholdColor);
     });
   }
@@ -637,6 +642,63 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     ctx: CanvasRenderingContext2D,
     points: TrendCanvasPoint[],
     color: string,
+    height: number,
+    threshold: number | null,
+    thresholdColor: string
+  ): void {
+    if (points.length < 2) {
+      return;
+    }
+
+    const normalColor = this.resolveCanvasColor(color);
+    if (threshold === null) {
+      this.fillTrendAreaRun(ctx, points, normalColor, height);
+      return;
+    }
+
+    const lowColor = this.resolveCanvasColor(thresholdColor);
+    const segments = this.buildThresholdTrendSegments(points, threshold);
+    const runs = this.buildAreaRunsFromSegments(segments);
+    runs.forEach((run) => {
+      this.fillTrendAreaRun(ctx, run.points, run.low ? lowColor : normalColor, height);
+    });
+  }
+
+  private buildAreaRunsFromSegments(segments: TrendCanvasSegment[]): TrendAreaRun[] {
+    const runs: TrendAreaRun[] = [];
+
+    for (const segment of segments) {
+      if (runs.length === 0) {
+        runs.push({
+          low: segment.low,
+          points: [segment.start, segment.end]
+        });
+        continue;
+      }
+
+      const current = runs[runs.length - 1];
+      const currentLast = current.points[current.points.length - 1];
+      const startsAtCurrentEnd =
+        Math.abs(currentLast.x - segment.start.x) <= 0.01
+        && Math.abs(currentLast.y - segment.start.y) <= 0.01;
+
+      if (current.low === segment.low && startsAtCurrentEnd) {
+        current.points.push(segment.end);
+      } else {
+        runs.push({
+          low: segment.low,
+          points: [segment.start, segment.end]
+        });
+      }
+    }
+
+    return runs;
+  }
+
+  private fillTrendAreaRun(
+    ctx: CanvasRenderingContext2D,
+    points: TrendCanvasPoint[],
+    color: string,
     height: number
   ): void {
     if (points.length < 2) {
@@ -645,11 +707,10 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
 
     const first = points[0];
     const last = points[points.length - 1];
-    const resolvedColor = this.resolveCanvasColor(color);
     const minY = Math.min(...points.map((point) => point.y));
     const gradient = ctx.createLinearGradient(0, minY, 0, height);
-    gradient.addColorStop(0, this.withAlpha(resolvedColor, 0.24));
-    gradient.addColorStop(1, this.withAlpha(resolvedColor, 0));
+    gradient.addColorStop(0, this.withAlpha(color, 0.24));
+    gradient.addColorStop(1, this.withAlpha(color, 0));
 
     ctx.beginPath();
     ctx.moveTo(first.x, first.y);
@@ -676,17 +737,13 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     const lowColor = this.resolveCanvasColor(thresholdColor);
 
     if (threshold === null) {
-      this.strokeTrendPolyline(ctx, points, "rgba(255, 255, 255, 0.92)", 4.2);
-      this.strokeTrendPolyline(ctx, points, normalColor, 2.8);
+      this.strokeTrendPolyline(ctx, points, normalColor, 1.5);
       return;
     }
 
     const segments = this.buildThresholdTrendSegments(points, threshold);
     segments.forEach((segment) => {
-      this.strokeTrendSegment(ctx, segment.start, segment.end, "rgba(255, 255, 255, 0.92)", 4.2);
-    });
-    segments.forEach((segment) => {
-      this.strokeTrendSegment(ctx, segment.start, segment.end, segment.low ? lowColor : normalColor, 2.8);
+      this.strokeTrendSegment(ctx, segment.start, segment.end, segment.low ? lowColor : normalColor, 1.5);
     });
   }
 
@@ -1306,7 +1363,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     .node-trend-line {
       position: absolute;
       inset: 0;
-      z-index: 2;
+      z-index: 0;
       pointer-events: none;
       opacity: 0.96;
     }
