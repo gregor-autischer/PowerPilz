@@ -58,9 +58,16 @@ interface TrendCoordinate {
   value: number;
 }
 
-interface TrendLineSegment {
-  d: string;
-  color: string;
+interface TrendCanvasPoint {
+  x: number;
+  y: number;
+  value: number;
+}
+
+interface TrendCanvasSegment {
+  start: TrendCanvasPoint;
+  end: TrendCanvasPoint;
+  low: boolean;
 }
 
 interface PowerSchwammerlEnergyCardConfig extends LovelaceCardConfig {
@@ -152,10 +159,15 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
   @state()
   private _trendSeries: Partial<Record<NodeKey, TrendPoint[]>> = {};
 
-  private readonly _trendId = Math.random().toString(36).slice(2, 10);
   private _trendRefreshTimer?: number;
   private _trendRefreshInFlight = false;
   private _lastTrendRefresh = 0;
+  private _trendCanvasRaf?: number;
+  private _trendResizeObserver?: ResizeObserver;
+  private _trendDrawConfig: Partial<
+    Record<NodeKey, { currentValue: number | null; color: string; threshold: number | null; thresholdColor: string }>
+  > = {};
+  private _canvasColorContext?: CanvasRenderingContext2D | null;
 
   public setConfig(config: PowerSchwammerlEnergyCardConfig): void {
     const homeEntity = config.home_entity ?? config.consumption_entity ?? "sensor.dev_home_power";
@@ -356,99 +368,23 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     thresholdColor: string
   ): TemplateResult | typeof nothing {
     if (!enabled) {
+      delete this._trendDrawConfig[node];
       return nothing;
     }
 
-    const points = this.trendPoints(node, currentValue);
-    if (points.length < 2) {
-      return nothing;
-    }
-
-    const coordinates = this.toTrendCoordinates(points);
-    if (coordinates.length < 2) {
-      return nothing;
-    }
-
-    const linePath = coordinates
-      .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
-      .join(" ");
-    const first = coordinates[0];
-    const last = coordinates[coordinates.length - 1];
-    const areaPath = `${linePath} L ${last.x.toFixed(2)} 100 L ${first.x.toFixed(2)} 100 Z`;
-    const gradientId = `trend-${this._trendId}-${node}`;
-
-    const isThresholdTrend = node === "battery" && threshold !== null;
-    const thresholdValue = threshold ?? 0;
-    const areaColor =
-      isThresholdTrend && currentValue !== null && currentValue <= thresholdValue
-        ? thresholdColor
-        : color;
-    const thresholdSegments = isThresholdTrend
-      ? this.buildThresholdTrendSegments(coordinates, thresholdValue, color, thresholdColor)
-      : [];
-
-    const linePaths = isThresholdTrend
-      ? thresholdSegments.map(
-          (segment) => html`
-            <path
-              d=${segment.d}
-              fill="none"
-              stroke="rgba(255, 255, 255, 0.9)"
-              stroke-width="3.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              vector-effect="non-scaling-stroke"
-            ></path>
-            <path
-              d=${segment.d}
-              fill="none"
-              stroke=${segment.color}
-              style=${styleMap({ stroke: segment.color })}
-              stroke-width="2.4"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              vector-effect="non-scaling-stroke"
-            ></path>
-          `
-        )
-      : html`
-          <path
-            d=${linePath}
-            fill="none"
-            stroke="rgba(255, 255, 255, 0.9)"
-            stroke-width="3.8"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            vector-effect="non-scaling-stroke"
-          ></path>
-          <path
-            d=${linePath}
-            fill="none"
-            stroke=${color}
-            style=${styleMap({ stroke: color })}
-            stroke-width="2.4"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            vector-effect="non-scaling-stroke"
-          ></path>
-        `;
+    this._trendDrawConfig[node] = {
+      currentValue,
+      color,
+      threshold,
+      thresholdColor
+    };
 
     return html`
       <div class="node-trend" aria-hidden="true">
-        <svg viewBox="0 0 100 100" preserveAspectRatio="none">
-          <defs>
-            <linearGradient id=${gradientId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color=${areaColor} stop-opacity="0.12"></stop>
-              <stop offset="100%" stop-color=${areaColor} stop-opacity="0"></stop>
-            </linearGradient>
-          </defs>
-          <path class="trend-area" d=${areaPath} fill=${`url(#${gradientId})`}></path>
-        </svg>
+        <canvas class="node-trend-canvas-area" data-node=${node}></canvas>
       </div>
       <div class="node-trend-line" aria-hidden="true">
-        <svg viewBox="0 0 100 100" preserveAspectRatio="none">
-          ${linePaths}
-        </svg>
+        <canvas class="node-trend-canvas-line" data-node=${node}></canvas>
       </div>
     `;
   }
@@ -469,42 +405,43 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
   }
 
   private buildThresholdTrendSegments(
-    points: TrendCoordinate[],
-    threshold: number,
-    normalColor: string,
-    lowColor: string
-  ): TrendLineSegment[] {
-    const segments: TrendLineSegment[] = [];
+    points: TrendCanvasPoint[],
+    threshold: number
+  ): TrendCanvasSegment[] {
+    const segments: TrendCanvasSegment[] = [];
 
     for (let index = 1; index < points.length; index += 1) {
       const start = points[index - 1];
       const end = points[index];
       const startIsLow = start.value <= threshold;
       const endIsLow = end.value <= threshold;
-      const startCmd = `${start.x.toFixed(2)} ${start.y.toFixed(2)}`;
-      const endCmd = `${end.x.toFixed(2)} ${end.y.toFixed(2)}`;
 
       if (startIsLow === endIsLow || Math.abs(end.value - start.value) <= EPSILON) {
         segments.push({
-          d: `M ${startCmd} L ${endCmd}`,
-          color: startIsLow ? lowColor : normalColor
+          start,
+          end,
+          low: startIsLow
         });
         continue;
       }
 
       const ratio = (threshold - start.value) / (end.value - start.value);
       const t = Math.max(0, Math.min(1, ratio));
-      const crossX = start.x + (end.x - start.x) * t;
-      const crossY = start.y + (end.y - start.y) * t;
-      const crossCmd = `${crossX.toFixed(2)} ${crossY.toFixed(2)}`;
+      const cross: TrendCanvasPoint = {
+        x: start.x + (end.x - start.x) * t,
+        y: start.y + (end.y - start.y) * t,
+        value: threshold
+      };
 
       segments.push({
-        d: `M ${startCmd} L ${crossCmd}`,
-        color: startIsLow ? lowColor : normalColor
+        start,
+        end: cross,
+        low: startIsLow
       });
       segments.push({
-        d: `M ${crossCmd} L ${endCmd}`,
-        color: endIsLow ? lowColor : normalColor
+        start: cross,
+        end,
+        low: endIsLow
       });
     }
 
@@ -563,12 +500,302 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     return coordinates;
   }
 
+  private toCanvasPoints(points: TrendCoordinate[], width: number, height: number): TrendCanvasPoint[] {
+    return points.map((point) => ({
+      x: (point.x / 100) * width,
+      y: (point.y / 100) * height,
+      value: point.value
+    }));
+  }
+
+  private syncTrendResizeObserver(): void {
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    if (!this._trendResizeObserver) {
+      this._trendResizeObserver = new ResizeObserver(() => {
+        this.scheduleTrendCanvasDraw();
+      });
+    }
+
+    this._trendResizeObserver.disconnect();
+    this.renderRoot.querySelectorAll<HTMLElement>(".energy-value").forEach((node) => {
+      this._trendResizeObserver?.observe(node);
+    });
+  }
+
+  private scheduleTrendCanvasDraw(): void {
+    if (this._trendCanvasRaf !== undefined) {
+      return;
+    }
+
+    this._trendCanvasRaf = window.requestAnimationFrame(() => {
+      this._trendCanvasRaf = undefined;
+      this.drawTrendCanvases();
+    });
+  }
+
+  private drawTrendCanvases(): void {
+    const areaCanvases = this.collectTrendCanvases(".node-trend-canvas-area");
+    const lineCanvases = this.collectTrendCanvases(".node-trend-canvas-line");
+    const areaContexts = new Map<NodeKey, { ctx: CanvasRenderingContext2D; width: number; height: number }>();
+    const lineContexts = new Map<NodeKey, { ctx: CanvasRenderingContext2D; width: number; height: number }>();
+
+    areaCanvases.forEach((canvas, node) => {
+      const prepared = this.prepareTrendCanvas(canvas);
+      if (prepared) {
+        areaContexts.set(node, prepared);
+      }
+    });
+
+    lineCanvases.forEach((canvas, node) => {
+      const prepared = this.prepareTrendCanvas(canvas);
+      if (prepared) {
+        lineContexts.set(node, prepared);
+      }
+    });
+
+    (Object.keys(this._trendDrawConfig) as NodeKey[]).forEach((node) => {
+      const drawConfig = this._trendDrawConfig[node];
+      if (!drawConfig) {
+        return;
+      }
+
+      const area = areaContexts.get(node);
+      const line = lineContexts.get(node);
+      if (!area || !line) {
+        return;
+      }
+
+      const points = this.trendPoints(node, drawConfig.currentValue);
+      if (points.length < 2) {
+        return;
+      }
+
+      const coordinates = this.toTrendCoordinates(points);
+      if (coordinates.length < 2) {
+        return;
+      }
+
+      const areaPoints = this.toCanvasPoints(coordinates, area.width, area.height);
+      const linePoints = this.toCanvasPoints(coordinates, line.width, line.height);
+      const areaColor =
+        drawConfig.threshold !== null
+        && drawConfig.currentValue !== null
+        && drawConfig.currentValue <= drawConfig.threshold
+          ? drawConfig.thresholdColor
+          : drawConfig.color;
+
+      this.drawTrendArea(area.ctx, areaPoints, areaColor, area.height);
+      this.drawTrendLine(line.ctx, linePoints, drawConfig.color, drawConfig.threshold, drawConfig.thresholdColor);
+    });
+  }
+
+  private collectTrendCanvases(selector: string): Map<NodeKey, HTMLCanvasElement> {
+    const canvases = new Map<NodeKey, HTMLCanvasElement>();
+
+    this.renderRoot.querySelectorAll<HTMLCanvasElement>(selector).forEach((canvas) => {
+      const node = canvas.dataset.node;
+      if (!node || (node !== "solar" && node !== "grid" && node !== "home" && node !== "battery")) {
+        return;
+      }
+      canvases.set(node, canvas);
+    });
+
+    return canvases;
+  }
+
+  private prepareTrendCanvas(
+    canvas: HTMLCanvasElement
+  ): { ctx: CanvasRenderingContext2D; width: number; height: number } | null {
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      return null;
+    }
+
+    const rect = canvas.getBoundingClientRect();
+    const width = Math.max(1, Math.round(rect.width));
+    const height = Math.max(1, Math.round(rect.height));
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const pixelWidth = Math.max(1, Math.round(width * dpr));
+    const pixelHeight = Math.max(1, Math.round(height * dpr));
+
+    if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+      canvas.width = pixelWidth;
+      canvas.height = pixelHeight;
+    }
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    return { ctx, width, height };
+  }
+
+  private drawTrendArea(
+    ctx: CanvasRenderingContext2D,
+    points: TrendCanvasPoint[],
+    color: string,
+    height: number
+  ): void {
+    if (points.length < 2) {
+      return;
+    }
+
+    const first = points[0];
+    const last = points[points.length - 1];
+    const resolvedColor = this.resolveCanvasColor(color);
+    const minY = Math.min(...points.map((point) => point.y));
+    const gradient = ctx.createLinearGradient(0, minY, 0, height);
+    gradient.addColorStop(0, this.withAlpha(resolvedColor, 0.24));
+    gradient.addColorStop(1, this.withAlpha(resolvedColor, 0));
+
+    ctx.beginPath();
+    ctx.moveTo(first.x, first.y);
+    points.slice(1).forEach((point) => ctx.lineTo(point.x, point.y));
+    ctx.lineTo(last.x, height);
+    ctx.lineTo(first.x, height);
+    ctx.closePath();
+    ctx.fillStyle = gradient;
+    ctx.fill();
+  }
+
+  private drawTrendLine(
+    ctx: CanvasRenderingContext2D,
+    points: TrendCanvasPoint[],
+    color: string,
+    threshold: number | null,
+    thresholdColor: string
+  ): void {
+    if (points.length < 2) {
+      return;
+    }
+
+    const normalColor = this.resolveCanvasColor(color);
+    const lowColor = this.resolveCanvasColor(thresholdColor);
+
+    if (threshold === null) {
+      this.strokeTrendPolyline(ctx, points, "rgba(255, 255, 255, 0.92)", 4.2);
+      this.strokeTrendPolyline(ctx, points, normalColor, 2.8);
+      return;
+    }
+
+    const segments = this.buildThresholdTrendSegments(points, threshold);
+    segments.forEach((segment) => {
+      this.strokeTrendSegment(ctx, segment.start, segment.end, "rgba(255, 255, 255, 0.92)", 4.2);
+    });
+    segments.forEach((segment) => {
+      this.strokeTrendSegment(ctx, segment.start, segment.end, segment.low ? lowColor : normalColor, 2.8);
+    });
+  }
+
+  private strokeTrendPolyline(
+    ctx: CanvasRenderingContext2D,
+    points: TrendCanvasPoint[],
+    color: string,
+    width: number
+  ): void {
+    if (points.length < 2) {
+      return;
+    }
+
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    points.slice(1).forEach((point) => ctx.lineTo(point.x, point.y));
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.stroke();
+  }
+
+  private strokeTrendSegment(
+    ctx: CanvasRenderingContext2D,
+    start: TrendCanvasPoint,
+    end: TrendCanvasPoint,
+    color: string,
+    width: number
+  ): void {
+    ctx.beginPath();
+    ctx.moveTo(start.x, start.y);
+    ctx.lineTo(end.x, end.y);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.stroke();
+  }
+
+  private resolveCanvasColor(color: string): string {
+    const probe = document.createElement("span");
+    probe.style.position = "absolute";
+    probe.style.opacity = "0";
+    probe.style.pointerEvents = "none";
+    probe.style.color = color;
+    this.renderRoot.appendChild(probe);
+    const resolved = getComputedStyle(probe).color;
+    probe.remove();
+    return resolved || "rgb(158, 158, 158)";
+  }
+
+  private withAlpha(color: string, alpha: number): string {
+    const channels = this.parseColorChannels(color);
+    if (!channels) {
+      return color;
+    }
+
+    const clamped = Math.max(0, Math.min(1, alpha));
+    return `rgba(${channels[0]}, ${channels[1]}, ${channels[2]}, ${clamped})`;
+  }
+
+  private parseColorChannels(color: string): [number, number, number] | null {
+    const candidate = color.trim();
+    const rgbMatch = candidate.match(/^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i);
+    if (rgbMatch) {
+      const channels = rgbMatch
+        .slice(1, 4)
+        .map((value) => Math.max(0, Math.min(255, Math.round(Number(value)))));
+      if (channels.every((value) => Number.isFinite(value))) {
+        return [channels[0], channels[1], channels[2]];
+      }
+    }
+
+    if (!this._canvasColorContext) {
+      this._canvasColorContext = document.createElement("canvas").getContext("2d");
+    }
+    const ctx = this._canvasColorContext;
+    if (!ctx) {
+      return null;
+    }
+    ctx.fillStyle = "#000000";
+    ctx.fillStyle = candidate;
+    const normalized = ctx.fillStyle;
+
+    const hex = typeof normalized === "string" ? normalized.trim() : "";
+    const hexMatch = hex.match(/^#([a-f\d]{6})$/i);
+    if (!hexMatch) {
+      return null;
+    }
+
+    const value = hexMatch[1];
+    return [
+      parseInt(value.slice(0, 2), 16),
+      parseInt(value.slice(2, 4), 16),
+      parseInt(value.slice(4, 6), 16)
+    ];
+  }
+
   public connectedCallback(): void {
     super.connectedCallback();
     this.maybeRefreshTrendHistory(true);
     this._trendRefreshTimer = window.setInterval(() => {
       this.maybeRefreshTrendHistory();
     }, TREND_REFRESH_MS);
+    void this.updateComplete.then(() => {
+      this.syncTrendResizeObserver();
+      this.scheduleTrendCanvasDraw();
+    });
   }
 
   public disconnectedCallback(): void {
@@ -576,18 +803,25 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       window.clearInterval(this._trendRefreshTimer);
       this._trendRefreshTimer = undefined;
     }
+    if (this._trendCanvasRaf !== undefined) {
+      window.cancelAnimationFrame(this._trendCanvasRaf);
+      this._trendCanvasRaf = undefined;
+    }
+    if (this._trendResizeObserver) {
+      this._trendResizeObserver.disconnect();
+      this._trendResizeObserver = undefined;
+    }
     super.disconnectedCallback();
   }
 
   protected updated(changedProps: Map<string, unknown>): void {
     if (changedProps.has("_config")) {
       this.maybeRefreshTrendHistory(true);
-      return;
-    }
-
-    if (changedProps.has("hass")) {
+    } else if (changedProps.has("hass")) {
       this.maybeRefreshTrendHistory();
     }
+    this.syncTrendResizeObserver();
+    this.scheduleTrendCanvasDraw();
   }
 
   private maybeRefreshTrendHistory(force = false): void {
@@ -1069,12 +1303,6 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       opacity: 1;
     }
 
-    .node-trend svg {
-      width: 100%;
-      height: 100%;
-      display: block;
-    }
-
     .node-trend-line {
       position: absolute;
       inset: 0;
@@ -1083,7 +1311,8 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       opacity: 0.96;
     }
 
-    .node-trend-line svg {
+    .node-trend-canvas-area,
+    .node-trend-canvas-line {
       width: 100%;
       height: 100%;
       display: block;
