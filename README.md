@@ -5,7 +5,6 @@ PowerSchwammerl is a Home Assistant Lovelace card bundle with a visual language 
 ## Included Cards
 
 - `custom:power-schwammerl-energy-card`
-- `custom:power-schwammerl-energy-breakdown-card`
 - `custom:power-schwammerl-wallbox-card`
 
 ## Installation (HACS)
@@ -71,27 +70,6 @@ unit: kW
 tap_action:
   action: navigate
   navigation_path: /energy-details
-```
-
-Energy breakdown card (target view):
-
-```yaml
-type: custom:power-schwammerl-energy-breakdown-card
-name: Home Energy Details
-home_entity: sensor.house_consumption_power
-solar_entity: sensor.solar_production_power
-grid_entity: sensor.grid_power
-battery_entity: sensor.home_battery_power
-battery_percentage_entity: sensor.home_battery_soc
-daily_consumption_entity: sensor.energy_daily_consumption
-daily_production_entity: sensor.energy_daily_solar
-daily_grid_import_entity: sensor.energy_daily_grid_import
-daily_grid_export_entity: sensor.energy_daily_grid_export
-voltage_entity: sensor.grid_voltage
-current_entity: sensor.grid_current
-frequency_entity: sensor.grid_frequency
-unit: kW
-energy_unit: kWh
 ```
 
 Energy sign convention:
