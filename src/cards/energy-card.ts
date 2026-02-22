@@ -24,8 +24,6 @@ const SOLAR_SUB_BLOCK_SLOT_COUNT = 4;
 const HOME_SUB_BLOCK_SLOT_COUNT = 8;
 const SUB_BLOCKS_MIN_WIDTH = 400;
 const SUB_BLOCKS_MIN_HEIGHT = 300;
-const SUB_GROUP_GAP_PX = 4;
-const HOME_SUB_LEFT_COLUMN_SHIFT_PX = -10;
 const DEFAULT_NEUTRAL_RGB = "var(--rgb-primary-text-color, 33, 33, 33)";
 const COLOR_RGB_FALLBACK: Record<string, string> = {
   red: "244, 67, 54",
@@ -198,9 +196,6 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
 
   @state()
   private _showSubBlocks = false;
-
-  @state()
-  private _subNodeSizePx = 48;
 
   private _trendRefreshTimer?: number;
   private _trendRefreshInFlight = false;
@@ -503,44 +498,21 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       return nothing;
     }
 
-    const byIndex = new Map(entries.map((entry) => [entry.index, entry]));
-    const pick = (indexes: number[]): EnergySubBlockEntry[] =>
-      indexes.map((index) => byIndex.get(index)).filter((entry): entry is EnergySubBlockEntry => Boolean(entry));
-
-    if (homeHasExtendedSubLayout) {
-      return this.renderSubNodeGroup(
-        "solar-left-packed",
-        pick([1, 2, 3, 4]),
-        {
+    const positions = homeHasExtendedSubLayout
+      ? {
           1: { row: 1, col: 2 },
           2: { row: 1, col: 1 },
           3: { row: 2, col: 2 },
           4: { row: 2, col: 1 }
-        },
-        decimals
-      );
-    }
-
-    return html`
-      ${this.renderSubNodeGroup(
-        "solar-right",
-        pick([1, 2]),
-        {
-          1: { row: 1, col: 1 },
-          2: { row: 1, col: 2 }
-        },
-        decimals
-      )}
-      ${this.renderSubNodeGroup(
-        "solar-left",
-        pick([3, 4]),
-        {
+        }
+      : {
+          1: { row: 1, col: 5 },
+          2: { row: 1, col: 6 },
           3: { row: 1, col: 2 },
           4: { row: 1, col: 1 }
-        },
-        decimals
-      )}
-    `;
+        };
+
+    return this.renderSubNodes("solar", entries, positions, decimals);
   }
 
   private renderHomeSubBlocks(
@@ -552,41 +524,32 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     }
 
     const hasExtended = entries.some((entry) => entry.index >= 7);
-    if (hasExtended) {
-      return this.renderSubNodeGroup(
-        "home-extended",
-        entries.filter((entry) => entry.index <= 8),
-        {
-          1: { row: 3, col: 2 },
-          2: { row: 3, col: 1 },
-          3: { row: 4, col: 2 },
-          4: { row: 4, col: 1 },
-          5: { row: 2, col: 2 },
-          6: { row: 2, col: 1 },
-          7: { row: 1, col: 2 },
-          8: { row: 1, col: 1 }
-        },
-        decimals
-      );
-    }
+    const filtered = entries.filter((entry) => entry.index <= (hasExtended ? 8 : 6));
+    const positions = hasExtended
+      ? {
+          1: { row: 5, col: 6 },
+          2: { row: 5, col: 5 },
+          3: { row: 6, col: 6 },
+          4: { row: 6, col: 5 },
+          5: { row: 2, col: 6 },
+          6: { row: 2, col: 5 },
+          7: { row: 1, col: 6 },
+          8: { row: 1, col: 5 }
+        }
+      : {
+          1: { row: 5, col: 6 },
+          2: { row: 5, col: 5 },
+          3: { row: 6, col: 6 },
+          4: { row: 6, col: 5 },
+          5: { row: 2, col: 6 },
+          6: { row: 2, col: 5 }
+        };
 
-    return this.renderSubNodeGroup(
-      "home-compact",
-      entries.filter((entry) => entry.index <= 6),
-      {
-        1: { row: 2, col: 2 },
-        2: { row: 2, col: 1 },
-        3: { row: 3, col: 2 },
-        4: { row: 3, col: 1 },
-        5: { row: 1, col: 2 },
-        6: { row: 1, col: 1 }
-      },
-      decimals
-    );
+    return this.renderSubNodes("home", filtered, positions, decimals);
   }
 
-  private renderSubNodeGroup(
-    className: string,
+  private renderSubNodes(
+    node: "solar" | "home",
     entries: EnergySubBlockEntry[],
     positions: Record<number, { row: number; col: number }>,
     decimals: number
@@ -595,13 +558,8 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       return nothing;
     }
 
-    const groupStyle: Record<string, string> = {
-      "--sub-node-size": `${this._subNodeSizePx}px`
-    };
-
     return html`
-      <div class="sub-node-group ${className}" style=${styleMap(groupStyle)}>
-        ${entries.map((entry) => {
+      ${entries.map((entry) => {
           const position = positions[entry.index];
           if (!position) {
             return nothing;
@@ -611,13 +569,10 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
             "grid-column": `${position.col}`,
             "grid-row": `${position.row}`
           };
-          if (className.startsWith("home-") && entry.index >= 5) {
-            blockStyle["margin-top"] = "-137px";
-          }
 
           return html`
             <div
-              class="energy-sub-value sub-col-${position.col} ${entry.value === null ? "missing" : ""}"
+              class="energy-sub-value ${node}-sub sub-col-${position.col} ${entry.value === null ? "missing" : ""}"
               data-key=${entry.key}
               style=${styleMap(blockStyle)}
             >
@@ -629,7 +584,6 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
             </div>
           `;
         })}
-      </div>
     `;
   }
 
@@ -807,26 +761,6 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     }
   }
 
-  private updateSubNodeSize(): void {
-    const grid = this.renderRoot.querySelector<HTMLElement>(".energy-grid");
-    const mainNode = this.renderRoot.querySelector<HTMLElement>(".energy-value.solar")
-      ?? this.renderRoot.querySelector<HTMLElement>(".energy-value");
-    if (!grid || !mainNode) {
-      return;
-    }
-
-    const rect = mainNode.getBoundingClientRect();
-    const size = Math.min(rect.width, rect.height);
-    if (!Number.isFinite(size) || size <= 0) {
-      return;
-    }
-
-    const next = Math.max(28, Math.round(size * 0.58));
-    if (next !== this._subNodeSizePx) {
-      this._subNodeSizePx = next;
-    }
-  }
-
   private syncTrendResizeObserver(): void {
     if (typeof ResizeObserver === "undefined") {
       return;
@@ -834,7 +768,6 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
 
     if (!this._trendResizeObserver) {
       this._trendResizeObserver = new ResizeObserver(() => {
-        this.updateSubNodeSize();
         this.updateSubBlockVisibility();
         this.scheduleTrendCanvasDraw();
       });
@@ -1171,7 +1104,6 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     }, TREND_REFRESH_MS);
     void this.updateComplete.then(() => {
       this.syncTrendResizeObserver();
-      this.updateSubNodeSize();
       this.updateSubBlockVisibility();
       this.scheduleTrendCanvasDraw();
     });
@@ -1200,7 +1132,6 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       this.maybeRefreshTrendHistory();
     }
     this.syncTrendResizeObserver();
-    this.updateSubNodeSize();
     this.updateSubBlockVisibility();
     this.scheduleTrendCanvasDraw();
   }
@@ -1642,9 +1573,9 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     .energy-grid {
       position: relative;
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      grid-template-rows: repeat(3, minmax(0, 1fr));
-      gap: var(--spacing);
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      grid-template-rows: repeat(6, minmax(0, 1fr));
+      gap: 4px;
       aspect-ratio: 1 / 1;
       min-height: 266px;
       border-radius: var(--control-border-radius);
@@ -1662,8 +1593,10 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       text-align: center;
       justify-self: center;
       align-self: center;
-      width: calc(100% - 8px);
+      width: calc(100% - 2px);
+      height: calc(100% - 2px);
       max-width: 132px;
+      max-height: 132px;
       min-width: 0;
       aspect-ratio: 1 / 1;
       border-radius: calc(var(--control-border-radius) - 1px);
@@ -1711,64 +1644,27 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     }
 
     .energy-value.solar {
-      grid-column: 2;
-      grid-row: 1;
+      grid-column: 3 / span 2;
+      grid-row: 1 / span 2;
     }
 
     .energy-value.grid {
-      grid-column: 1;
-      grid-row: 2;
+      grid-column: 1 / span 2;
+      grid-row: 3 / span 2;
     }
 
     .energy-value.home {
-      grid-column: 3;
-      grid-row: 2;
+      grid-column: 5 / span 2;
+      grid-row: 3 / span 2;
     }
 
     .energy-value.battery {
-      grid-column: 2;
-      grid-row: 3;
+      grid-column: 3 / span 2;
+      grid-row: 5 / span 2;
     }
 
     .energy-value.missing .energy-number {
       color: var(--disabled-text-color);
-    }
-
-    .sub-node-group {
-      --sub-node-size: 48px;
-      position: absolute;
-      display: grid;
-      grid-template-columns: repeat(2, var(--sub-node-size));
-      grid-auto-rows: var(--sub-node-size);
-      gap: ${SUB_GROUP_GAP_PX}px;
-      width: calc((var(--sub-node-size) * 2) + ${SUB_GROUP_GAP_PX}px);
-      z-index: 2;
-      pointer-events: none;
-    }
-
-    .sub-node-group.solar-right {
-      top: 8%;
-      right: 0.6%;
-    }
-
-    .sub-node-group.solar-left {
-      top: 8%;
-      left: 0.6%;
-    }
-
-    .sub-node-group.solar-left-packed {
-      top: 8%;
-      left: 0.6%;
-    }
-
-    .sub-node-group.home-compact {
-      top: 52.5%;
-      right: 0.6%;
-    }
-
-    .sub-node-group.home-extended {
-      top: 34.5%;
-      right: 0.6%;
     }
 
     .energy-sub-value {
@@ -1776,8 +1672,13 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       display: flex;
       align-items: center;
       justify-content: center;
-      width: var(--sub-node-size);
-      height: var(--sub-node-size);
+      justify-self: center;
+      align-self: center;
+      width: calc(100% - 2px);
+      height: calc(100% - 2px);
+      max-width: 74px;
+      max-height: 74px;
+      min-width: 0;
       aspect-ratio: 1 / 1;
       border-radius: calc(var(--control-border-radius) - 4px);
       padding: 3px 4px;
@@ -1785,12 +1686,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       border: 1px solid rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.1);
       box-sizing: border-box;
       overflow: hidden;
-    }
-
-
-    .sub-node-group.home-compact .energy-sub-value.sub-col-1,
-    .sub-node-group.home-extended .energy-sub-value.sub-col-1 {
-      transform: translateX(${HOME_SUB_LEFT_COLUMN_SHIFT_PX}px);
+      z-index: 2;
     }
 
     .energy-sub-content {
@@ -1891,8 +1787,8 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     }
 
     .home-core {
-      grid-column: 2;
-      grid-row: 2;
+      grid-column: 3 / span 2;
+      grid-row: 3 / span 2;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -2040,14 +1936,20 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     @container (max-width: 520px) {
       .energy-grid {
         min-height: 234px;
-        gap: 8px;
-        padding: 8px;
+        gap: 3px;
+        padding: 6px;
       }
 
       .energy-value {
         width: calc(100% - 6px);
         max-width: 116px;
+        max-height: 116px;
         padding: 6px 8px;
+      }
+
+      .energy-sub-value {
+        max-width: 64px;
+        max-height: 64px;
       }
 
       .home-core-icon {
@@ -2059,14 +1961,34 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     @container (max-width: 380px) {
       .energy-grid {
         min-height: 202px;
-        gap: 4px;
-        padding: 3px;
+        gap: 2px;
+        padding: 2px;
       }
 
       .energy-value {
         width: calc(100% - 1px);
         max-width: 96px;
+        max-height: 96px;
         padding: 4px 6px;
+      }
+
+      .energy-sub-value {
+        max-width: 52px;
+        max-height: 52px;
+      }
+
+      .energy-sub-icon {
+        --mdc-icon-size: calc(var(--icon-size) * 0.42);
+      }
+
+      .energy-sub-number {
+        font-size: calc(var(--card-secondary-font-size) - 2px);
+        line-height: calc(var(--card-secondary-line-height) - 6px);
+      }
+
+      .energy-sub-label {
+        font-size: calc(var(--card-secondary-font-size) - 3px);
+        line-height: calc(var(--card-secondary-line-height) - 7px);
       }
 
       .energy-icon {
