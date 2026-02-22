@@ -14,6 +14,17 @@ interface EnergyCardConfig extends LovelaceCardConfig {
   solar_label?: string;
   home_label?: string;
   battery_label?: string;
+  solar_icon?: string;
+  grid_icon?: string;
+  home_icon?: string;
+  battery_icon?: string;
+  core_icon?: string;
+  solar_icon_color?: string | number[];
+  grid_icon_color?: string | number[];
+  home_icon_color?: string | number[];
+  battery_icon_color?: string | number[];
+  core_icon_color?: string | number[];
+  flow_color?: string | number[];
   unit?: string;
   decimals?: number;
 }
@@ -40,13 +51,75 @@ const SCHEMA: HaFormSchema[] = [
   },
   { name: "battery_percentage_entity", selector: { entity: { filter: { domain: "sensor" } } } },
   {
-    type: "grid",
+    type: "expandable",
     name: "",
+    title: "Node styling",
+    icon: "mdi:shape-outline",
+    expanded: false,
     schema: [
-      { name: "solar_label", selector: { text: {} } },
-      { name: "home_label", selector: { text: {} } },
-      { name: "grid_label", selector: { text: {} } },
-      { name: "battery_label", selector: { text: {} } }
+      {
+        type: "grid",
+        name: "",
+        schema: [
+          { name: "solar_label", selector: { text: {} } },
+          { name: "solar_icon", selector: { icon: {} }, context: { icon_entity: "solar_entity" } },
+          {
+            name: "solar_icon_color",
+            selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+          }
+        ]
+      },
+      {
+        type: "grid",
+        name: "",
+        schema: [
+          { name: "grid_label", selector: { text: {} } },
+          { name: "grid_icon", selector: { icon: {} }, context: { icon_entity: "grid_entity" } },
+          {
+            name: "grid_icon_color",
+            selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+          }
+        ]
+      },
+      {
+        type: "grid",
+        name: "",
+        schema: [
+          { name: "home_label", selector: { text: {} } },
+          { name: "home_icon", selector: { icon: {} }, context: { icon_entity: "home_entity" } },
+          {
+            name: "home_icon_color",
+            selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+          }
+        ]
+      },
+      {
+        type: "grid",
+        name: "",
+        schema: [
+          { name: "battery_label", selector: { text: {} } },
+          { name: "battery_icon", selector: { icon: {} }, context: { icon_entity: "battery_entity" } },
+          {
+            name: "battery_icon_color",
+            selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+          }
+        ]
+      },
+      {
+        type: "grid",
+        name: "",
+        schema: [
+          { name: "core_icon", selector: { icon: {} }, context: { icon_entity: "home_entity" } },
+          {
+            name: "core_icon_color",
+            selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+          },
+          {
+            name: "flow_color",
+            selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
+          }
+        ]
+      }
     ]
   },
   {
@@ -70,6 +143,17 @@ const LABELS: Record<string, string> = {
   home_label: "Home label",
   grid_label: "Grid label",
   battery_label: "Battery label",
+  solar_icon: "Solar icon",
+  solar_icon_color: "Solar color",
+  grid_icon: "Grid icon",
+  grid_icon_color: "Grid color",
+  home_icon: "Home icon",
+  home_icon_color: "Home color",
+  battery_icon: "Battery icon",
+  battery_icon_color: "Battery color",
+  core_icon: "Core icon",
+  core_icon_color: "Core color",
+  flow_color: "Flow color",
   unit: "Unit",
   decimals: "Decimals"
 };

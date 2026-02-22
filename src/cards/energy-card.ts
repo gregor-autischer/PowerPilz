@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { styleMap } from "lit/directives/style-map.js";
 import type { HomeAssistant, LovelaceCard, LovelaceCardConfig, LovelaceCardEditor } from "../types";
 import { readNumber, readUnit } from "../utils/entity";
 import "./editors/energy-card-editor";
@@ -9,6 +10,32 @@ type TapActionType = "none" | "navigate" | "more-info";
 
 const EPSILON = 0.01;
 const DEFAULT_DECIMALS = 1;
+const COLOR_RGB_FALLBACK: Record<string, string> = {
+  red: "244, 67, 54",
+  pink: "233, 30, 99",
+  purple: "156, 39, 176",
+  "deep-purple": "103, 58, 183",
+  indigo: "63, 81, 181",
+  blue: "33, 150, 243",
+  "light-blue": "3, 169, 244",
+  cyan: "0, 188, 212",
+  teal: "0, 150, 136",
+  green: "76, 175, 80",
+  "light-green": "139, 195, 74",
+  lime: "205, 220, 57",
+  yellow: "255, 235, 59",
+  amber: "255, 193, 7",
+  orange: "255, 152, 0",
+  "deep-orange": "255, 87, 34",
+  brown: "121, 85, 72",
+  "light-grey": "189, 189, 189",
+  grey: "158, 158, 158",
+  "dark-grey": "97, 97, 97",
+  "blue-grey": "96, 125, 139",
+  black: "0, 0, 0",
+  white: "255, 255, 255",
+  disabled: "189, 189, 189"
+};
 
 interface TapActionConfig {
   action?: TapActionType;
@@ -30,6 +57,17 @@ interface PowerSchwammerlEnergyCardConfig extends LovelaceCardConfig {
   solar_label?: string;
   home_label?: string;
   battery_label?: string;
+  solar_icon?: string;
+  grid_icon?: string;
+  home_icon?: string;
+  battery_icon?: string;
+  core_icon?: string;
+  solar_icon_color?: string | number[];
+  grid_icon_color?: string | number[];
+  home_icon_color?: string | number[];
+  battery_icon_color?: string | number[];
+  core_icon_color?: string | number[];
+  flow_color?: string | number[];
   unit?: string;
   decimals?: number;
   details_navigation_path?: string;
@@ -71,6 +109,8 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       grid_entity: gridEntity,
       battery_entity: batteryEntity,
       battery_percentage_entity: batterySocEntity,
+      core_icon_color: "purple",
+      flow_color: "purple",
       decimals: DEFAULT_DECIMALS
     };
   }
@@ -98,6 +138,12 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       solar_label: config.solar_label ?? "Solar",
       home_label: config.home_label ?? "Home",
       battery_label: config.battery_label ?? "Battery",
+      solar_icon: config.solar_icon ?? "mdi:weather-sunny",
+      grid_icon: config.grid_icon ?? "mdi:transmission-tower",
+      home_icon: config.home_icon ?? "mdi:home-lightning-bolt",
+      core_icon: config.core_icon ?? "mdi:home",
+      core_icon_color: config.core_icon_color ?? "purple",
+      flow_color: config.flow_color ?? "purple",
       decimals
     };
   }
@@ -136,6 +182,14 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     const batteryFlow = this.toBidirectionalFlow(battery);
     const tapAction = this.resolveTapAction(config);
     const interactive = tapAction.action !== "none";
+    const solarIconStyle = this.iconColorStyle(config.solar_icon_color);
+    const gridIconStyle = this.iconColorStyle(config.grid_icon_color);
+    const homeIconStyle = this.iconColorStyle(config.home_icon_color);
+    const batteryIconStyle = this.iconColorStyle(config.battery_icon_color);
+    const coreIconStyle = this.iconColorStyle(config.core_icon_color);
+    const batteryIcon = config.battery_icon ?? this.batteryIcon(batteryPercentage, battery);
+    const flowRgb = this.toRgbCss(config.flow_color) ?? COLOR_RGB_FALLBACK.purple;
+    const flowStyle = { "--flow-color-rgb": flowRgb };
 
     return html`
       <ha-card
@@ -146,33 +200,45 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
         @keydown=${this.handleCardKeyDown}
       >
         <div class="energy-flow-container">
-          <div class="energy-grid">
+          <div class="energy-grid" style=${styleMap(flowStyle)}>
             ${this.renderFlowLine("vertical top", solarFlow)}
             ${this.renderFlowLine("horizontal left", gridFlow)}
             ${this.renderFlowLine("horizontal right", homeFlow)}
             ${this.renderFlowLine("vertical bottom", batteryFlow)}
 
             <div class="energy-value solar ${solar === null ? "missing" : ""}">
-              <ha-icon class="energy-icon" .icon=${"mdi:weather-sunny"}></ha-icon>
+              <ha-icon
+                class="energy-icon"
+                .icon=${config.solar_icon ?? "mdi:weather-sunny"}
+                style=${styleMap(solarIconStyle)}
+              ></ha-icon>
               <div class="energy-number">${this.formatValue(solar, solarUnit, decimals)}</div>
               <div class="energy-label">${config.solar_label}</div>
             </div>
 
             <div class="energy-value grid ${grid === null ? "missing" : ""}">
-              <ha-icon class="energy-icon" .icon=${"mdi:transmission-tower"}></ha-icon>
+              <ha-icon
+                class="energy-icon"
+                .icon=${config.grid_icon ?? "mdi:transmission-tower"}
+                style=${styleMap(gridIconStyle)}
+              ></ha-icon>
               <div class="energy-number">${this.formatValue(grid, gridUnit, decimals)}</div>
               <div class="energy-label">${config.grid_label}</div>
             </div>
 
             <div class="energy-value home ${home === null ? "missing" : ""}">
-              <ha-icon class="energy-icon" .icon=${"mdi:home-lightning-bolt"}></ha-icon>
+              <ha-icon
+                class="energy-icon"
+                .icon=${config.home_icon ?? "mdi:home-lightning-bolt"}
+                style=${styleMap(homeIconStyle)}
+              ></ha-icon>
               <div class="energy-number">${this.formatValue(home, homeUnit, decimals)}</div>
               <div class="energy-label">${config.home_label}</div>
             </div>
 
             <div class="energy-value battery ${battery === null ? "missing" : ""}">
               <div class="battery-top-row">
-                <ha-icon class="energy-icon" .icon=${this.batteryIcon(batteryPercentage, battery)}></ha-icon>
+                <ha-icon class="energy-icon" .icon=${batteryIcon} style=${styleMap(batteryIconStyle)}></ha-icon>
                 ${batteryPercentage !== null
                   ? html`<div class="battery-percentage">${this.formatBatteryPercentage(batteryPercentage)}</div>`
                   : nothing}
@@ -182,7 +248,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
             </div>
 
             <div class="home-core">
-              <ha-icon .icon=${"mdi:home"}></ha-icon>
+              <ha-icon .icon=${config.core_icon ?? "mdi:home"} style=${styleMap(coreIconStyle)}></ha-icon>
             </div>
           </div>
         </div>
@@ -332,9 +398,103 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     return "mdi:battery-outline";
   }
 
+  private iconColorStyle(value?: string | number[]): Record<string, string> {
+    const rgbCss = this.toRgbCss(value);
+    if (rgbCss) {
+      return { color: `rgb(${rgbCss})` };
+    }
+
+    if (typeof value === "string" && value.trim().length > 0 && value !== "none") {
+      return { color: value.trim() };
+    }
+
+    return {};
+  }
+
+  private toRgbCss(value?: string | number[]): string | null {
+    if (Array.isArray(value) && value.length >= 3) {
+      const nums = value.slice(0, 3).map((channel) => Number(channel));
+      if (nums.every((channel) => Number.isFinite(channel))) {
+        const [r, g, b] = nums.map((channel) => Math.max(0, Math.min(255, Math.round(channel))));
+        return `${r}, ${g}, ${b}`;
+      }
+      return null;
+    }
+
+    if (typeof value !== "string") {
+      return null;
+    }
+
+    const raw = value.trim().toLowerCase();
+    if (raw === "none") {
+      return null;
+    }
+    if (raw.startsWith("var(--rgb-")) {
+      return raw;
+    }
+    if (raw === "state") {
+      return "var(--rgb-state-entity, var(--rgb-primary-color, 3, 169, 244))";
+    }
+    if (raw === "primary") {
+      return "var(--rgb-primary-color, 3, 169, 244)";
+    }
+    if (raw === "accent") {
+      return "var(--rgb-accent-color, 255, 152, 0)";
+    }
+    if (raw in COLOR_RGB_FALLBACK) {
+      return `var(--rgb-${raw}, ${COLOR_RGB_FALLBACK[raw]})`;
+    }
+
+    const shortHex = /^#([a-fA-F0-9]{3})$/;
+    const longHex = /^#([a-fA-F0-9]{6})$/;
+
+    if (shortHex.test(raw)) {
+      const [, hex] = raw.match(shortHex) ?? [];
+      if (!hex) {
+        return null;
+      }
+      const r = parseInt(hex[0] + hex[0], 16);
+      const g = parseInt(hex[1] + hex[1], 16);
+      const b = parseInt(hex[2] + hex[2], 16);
+      return `${r}, ${g}, ${b}`;
+    }
+
+    if (longHex.test(raw)) {
+      const [, hex] = raw.match(longHex) ?? [];
+      if (!hex) {
+        return null;
+      }
+      const r = parseInt(hex.slice(0, 2), 16);
+      const g = parseInt(hex.slice(2, 4), 16);
+      const b = parseInt(hex.slice(4, 6), 16);
+      return `${r}, ${g}, ${b}`;
+    }
+
+    return null;
+  }
+
   static styles = css`
     :host {
       display: block;
+      container-type: inline-size;
+      --spacing: var(--mush-spacing, 10px);
+      --card-primary-font-size: var(--mush-card-primary-font-size, 14px);
+      --card-secondary-font-size: var(--mush-card-secondary-font-size, 12px);
+      --card-primary-font-weight: var(--mush-card-primary-font-weight, 500);
+      --card-secondary-font-weight: var(--mush-card-secondary-font-weight, 400);
+      --card-primary-line-height: var(--mush-card-primary-line-height, 20px);
+      --card-secondary-line-height: var(--mush-card-secondary-line-height, 16px);
+      --card-primary-letter-spacing: var(--mush-card-primary-letter-spacing, 0.1px);
+      --card-secondary-letter-spacing: var(--mush-card-secondary-letter-spacing, 0.4px);
+      --control-border-radius: var(--mush-control-border-radius, 12px);
+      --icon-size: var(--mush-icon-size, 36px);
+      --icon-border-radius: var(--mush-icon-border-radius, 50%);
+      --icon-symbol-size: var(--mush-icon-symbol-size, 0.667em);
+      --icon-color: var(--primary-text-color);
+      --shape-color: rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.05);
+      --shape-color-soft: rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.04);
+      --flow-color-rgb: var(--rgb-purple, 156, 39, 176);
+      --flow-track-color: rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.12);
     }
 
     ha-card {
@@ -343,7 +503,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       flex-direction: column;
       justify-content: var(--mush-layout-align, center);
       height: auto;
-      background: var(--ha-card-background, var(--card-background-color));
+      background: var(--ha-card-background, var(--card-background-color, white));
     }
 
     ha-card.interactive {
@@ -351,27 +511,25 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     }
 
     ha-card.interactive:focus-visible {
-      outline: 2px solid rgba(var(--rgb-accent-color, 233, 30, 99), 0.55);
+      outline: 2px solid rgba(var(--flow-color-rgb), 0.45);
       outline-offset: 2px;
     }
 
     .energy-flow-container {
-      padding: 10px;
+      padding: var(--spacing);
     }
 
     .energy-grid {
-      --flow-color-rgb: var(--rgb-accent-color, 233, 30, 99);
       position: relative;
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
       grid-template-rows: repeat(3, minmax(0, 1fr));
-      gap: 10px;
+      gap: var(--spacing);
       aspect-ratio: 1 / 1;
       min-height: 250px;
-      border-radius: 16px;
-      padding: 10px;
-      background: var(--ha-card-background, var(--card-background-color));
-      border: 1px solid color-mix(in srgb, var(--divider-color) 58%, transparent);
+      border-radius: var(--control-border-radius);
+      padding: var(--spacing);
+      background: transparent;
       box-sizing: border-box;
     }
 
@@ -381,14 +539,20 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       align-items: center;
       justify-content: center;
       text-align: center;
-      border-radius: 14px;
-      padding: 8px 10px;
-      min-height: 76px;
-      background: var(--ha-card-background, var(--card-background-color));
-      border: 1px solid color-mix(in srgb, var(--divider-color) 66%, transparent);
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14);
+      justify-self: center;
+      align-self: center;
+      width: calc(100% - 12px);
+      max-width: 120px;
+      min-width: 0;
+      border-radius: calc(var(--control-border-radius) - 1px);
+      padding: 6px 8px;
+      min-height: 62px;
+      background: var(--ha-card-background, var(--card-background-color, white));
+      border: 1px solid rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.1);
+      box-shadow: none;
       z-index: 2;
       box-sizing: border-box;
+      overflow: hidden;
     }
 
     .energy-value.solar {
@@ -416,27 +580,10 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     }
 
     .energy-icon {
-      width: 20px;
-      height: 20px;
+      --mdc-icon-size: 18px;
       margin-bottom: 4px;
-      color: var(--primary-text-color);
+      color: var(--icon-color);
       flex: 0 0 auto;
-    }
-
-    .energy-value.solar .energy-icon {
-      color: var(--warning-color);
-    }
-
-    .energy-value.grid .energy-icon {
-      color: var(--info-color, var(--primary-color));
-    }
-
-    .energy-value.home .energy-icon {
-      color: rgba(var(--flow-color-rgb), 0.92);
-    }
-
-    .energy-value.battery .energy-icon {
-      color: var(--success-color);
     }
 
     .battery-top-row {
@@ -452,55 +599,56 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     }
 
     .battery-percentage {
-      font-size: 0.82rem;
-      line-height: 1;
+      font-size: var(--card-secondary-font-size);
+      line-height: var(--card-secondary-line-height);
       color: var(--secondary-text-color);
-      font-weight: 600;
+      font-weight: var(--card-primary-font-weight);
+      letter-spacing: var(--card-secondary-letter-spacing);
     }
 
     .energy-number {
-      font-size: 0.92rem;
-      line-height: 1.2;
-      font-weight: 600;
+      font-size: var(--card-primary-font-size);
+      line-height: var(--card-primary-line-height);
+      font-weight: var(--card-primary-font-weight);
       color: var(--primary-text-color);
+      letter-spacing: var(--card-primary-letter-spacing);
       white-space: nowrap;
     }
 
     .energy-label {
       margin-top: 2px;
-      font-size: 0.72rem;
-      line-height: 1.2;
+      font-size: var(--card-secondary-font-size);
+      line-height: var(--card-secondary-line-height);
       color: var(--secondary-text-color);
-      font-weight: 500;
-      letter-spacing: 0.01em;
+      font-weight: var(--card-secondary-font-weight);
+      letter-spacing: var(--card-secondary-letter-spacing);
     }
 
     .home-core {
       grid-column: 2;
       grid-row: 2;
-      width: 70px;
-      height: 70px;
-      border-radius: 18px;
+      width: 64px;
+      height: 64px;
+      border-radius: var(--control-border-radius);
       display: grid;
       place-items: center;
       justify-self: center;
       align-self: center;
-      background: var(--ha-card-background, var(--card-background-color));
-      border: 2px solid rgba(var(--flow-color-rgb), 0.35);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+      background: var(--ha-card-background, var(--card-background-color, white));
+      border: 1px solid rgba(var(--flow-color-rgb), 0.32);
+      box-shadow: none;
       z-index: 3;
     }
 
     .home-core ha-icon {
-      width: 36px;
-      height: 36px;
-      color: rgba(var(--flow-color-rgb), 0.95);
+      --mdc-icon-size: 28px;
+      color: var(--icon-color);
     }
 
     .flow-line {
       position: absolute;
       border-radius: 999px;
-      background: color-mix(in srgb, var(--divider-color) 74%, transparent);
+      background: var(--flow-track-color);
       overflow: hidden;
       z-index: 1;
     }
@@ -513,11 +661,11 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     }
 
     .flow-line.horizontal {
-      height: 4px;
+      height: 3px;
     }
 
     .flow-line.vertical {
-      width: 4px;
+      width: 3px;
     }
 
     .flow-line.left {
@@ -611,11 +759,11 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     @media (prefers-reduced-motion: reduce) {
       .flow-line.active::after {
         animation: none !important;
-        opacity: 0.55;
+        opacity: 0.6;
       }
     }
 
-    @media (max-width: 420px) {
+    @container (max-width: 520px) {
       .energy-grid {
         min-height: 220px;
         gap: 8px;
@@ -623,8 +771,10 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       }
 
       .energy-value {
-        min-height: 68px;
-        padding: 6px 8px;
+        width: calc(100% - 8px);
+        max-width: 108px;
+        min-height: 58px;
+        padding: 5px 7px;
       }
 
       .energy-number {
@@ -641,8 +791,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       }
 
       .home-core ha-icon {
-        width: 30px;
-        height: 30px;
+        --mdc-icon-size: 24px;
       }
     }
   `;

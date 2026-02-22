@@ -55,6 +55,17 @@ grid_label: Grid
 solar_label: Solar
 home_label: House
 battery_label: Battery
+solar_icon: mdi:weather-sunny
+grid_icon: mdi:transmission-tower
+home_icon: mdi:home-lightning-bolt
+battery_icon: mdi:battery-outline
+core_icon: mdi:home
+solar_icon_color: state
+grid_icon_color: state
+home_icon_color: state
+battery_icon_color: state
+core_icon_color: purple
+flow_color: purple
 decimals: 1
 unit: kW
 tap_action:
