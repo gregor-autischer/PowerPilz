@@ -110,8 +110,6 @@ mode_options:
   - Fast
   - Solar
 command_entity: switch.wallbox_charging_enabled
-start_label: Start
-stop_label: Stop
 decimals: 1
 ```
 
@@ -119,6 +117,7 @@ Wallbox control options:
 - `mode_entity` expects `select.*` or `input_select.*` and updates via `select_option`.
 - `mode_options` can be set as a fallback list if your mode entity has delayed/missing options.
 - `command_entity` toggles with `turn_on`/`turn_off` for Start/Stop.
+- Start/Stop button labels are fixed defaults in the card.
 - For custom services instead of `command_entity`, use:
   - `start_service` + optional `start_service_data`
   - `stop_service` + optional `stop_service_data`

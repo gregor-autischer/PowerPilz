@@ -27,6 +27,11 @@ export interface LovelaceCard {
   getCardSize?(): number;
 }
 
+export interface LovelaceCardEditor {
+  hass?: HomeAssistant;
+  setConfig(config: LovelaceCardConfig): void;
+}
+
 declare global {
   interface HTMLElementTagNameMap {
     "ha-card": HTMLElement;

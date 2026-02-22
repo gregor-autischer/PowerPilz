@@ -19,19 +19,19 @@ window.customCards = window.customCards || [];
 
 const cards = [
   {
-    type: "custom:power-schwammerl-energy-card",
+    type: "power-schwammerl-energy-card",
     name: "PowerSchwammerl Energy Card",
     description: "Mushroom-inspired card for live home energy metrics.",
     preview: true
   },
   {
-    type: "custom:power-schwammerl-energy-breakdown-card",
+    type: "power-schwammerl-energy-breakdown-card",
     name: "PowerSchwammerl Energy Breakdown Card",
     description: "Detailed energy telemetry card for drill-down dashboards.",
     preview: true
   },
   {
-    type: "custom:power-schwammerl-wallbox-card",
+    type: "power-schwammerl-wallbox-card",
     name: "PowerSchwammerl Wallbox Card",
     description: "Mushroom-inspired card focused on EV wallbox telemetry.",
     preview: true

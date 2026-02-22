@@ -1,9 +1,43 @@
 import { LitElement, css, html, type TemplateResult } from "lit";
 import { property, state } from "lit/decorators.js";
-import type { HassEntity, HomeAssistant, LovelaceCard, LovelaceCardConfig } from "../types";
+import { styleMap } from "lit/directives/style-map.js";
+import type {
+  HassEntity,
+  HomeAssistant,
+  LovelaceCard,
+  LovelaceCardConfig,
+  LovelaceCardEditor
+} from "../types";
 import { getEntity, readNumber, readState, readUnit } from "../utils/entity";
+import "./editors/wallbox-card-editor";
 
 const EPSILON = 0.01;
+const COLOR_RGB_FALLBACK: Record<string, string> = {
+  red: "244, 67, 54",
+  pink: "233, 30, 99",
+  purple: "156, 39, 176",
+  "deep-purple": "103, 58, 183",
+  indigo: "63, 81, 181",
+  blue: "33, 150, 243",
+  "light-blue": "3, 169, 244",
+  cyan: "0, 188, 212",
+  teal: "0, 150, 136",
+  green: "76, 175, 80",
+  "light-green": "139, 195, 74",
+  lime: "205, 220, 57",
+  yellow: "255, 235, 59",
+  amber: "255, 193, 7",
+  orange: "255, 152, 0",
+  "deep-orange": "255, 87, 34",
+  brown: "121, 85, 72",
+  "light-grey": "189, 189, 189",
+  grey: "158, 158, 158",
+  "dark-grey": "97, 97, 97",
+  "blue-grey": "96, 125, 139",
+  black: "0, 0, 0",
+  white: "255, 255, 255",
+  disabled: "189, 189, 189"
+};
 
 interface ServiceCommand {
   domain: string;
@@ -15,6 +49,7 @@ interface PowerSchwammerlWallboxCardConfig extends LovelaceCardConfig {
   type: "custom:power-schwammerl-wallbox-card";
   name?: string;
   icon?: string;
+  icon_color?: string | number[];
   power_entity: string;
   status_entity?: string;
   mode_entity?: string;
@@ -24,16 +59,19 @@ interface PowerSchwammerlWallboxCardConfig extends LovelaceCardConfig {
   stop_service?: string;
   start_service_data?: Record<string, unknown>;
   stop_service_data?: Record<string, unknown>;
-  start_label?: string;
-  stop_label?: string;
   decimals?: number;
 }
 
 export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCard {
-  public static async getStubConfig(hass: HomeAssistant): Promise<PowerSchwammerlWallboxCardConfig> {
-    const entityIds = Object.keys(hass.states);
+  public static async getConfigElement(): Promise<LovelaceCardEditor> {
+    return document.createElement("power-schwammerl-wallbox-card-editor") as LovelaceCardEditor;
+  }
+
+  public static async getStubConfig(hass?: HomeAssistant): Promise<PowerSchwammerlWallboxCardConfig> {
+    const states = hass?.states ?? {};
+    const entityIds = Object.keys(states);
     const pick = (...candidates: string[]): string | undefined =>
-      candidates.find((entityId) => entityId in hass.states);
+      candidates.find((entityId) => entityId in states);
     const firstByDomain = (domain: string): string | undefined =>
       entityIds.find((entityId) => entityId.startsWith(`${domain}.`));
 
@@ -72,17 +110,13 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
   private _modeMenuOpen = false;
 
   public setConfig(config: PowerSchwammerlWallboxCardConfig): void {
-    if (!config.power_entity) {
-      throw new Error("You need to define power_entity.");
-    }
-
+    const powerEntity = config.power_entity ?? "sensor.dev_wallbox_power";
     this._config = {
-      icon: "mdi:power-plug",
-      name: "Wallbox",
-      start_label: "Start",
-      stop_label: "Stop",
-      decimals: 1,
-      ...config
+      ...config,
+      icon: config.icon ?? "mdi:power-plug",
+      name: config.name ?? "Wallbox",
+      decimals: config.decimals ?? 1,
+      power_entity: powerEntity
     };
   }
 
@@ -108,7 +142,7 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
     const modeOptions = this.getModeOptions(modeEntity, config.mode_options, modeValue);
     const isCharging = this.isCharging(status, power, config.command_entity);
     const command = this.resolveActionCommand(isCharging);
-    const actionLabel = isCharging ? config.stop_label ?? "Stop" : config.start_label ?? "Start";
+    const actionLabel = isCharging ? "Stop" : "Start";
     const actionIcon = isCharging ? "mdi:pause" : "mdi:play";
     const statusLabel = this.statusLabel(status, isCharging);
     const powerLabel = this.formatPower(power, powerUnit, config.decimals ?? 1);
@@ -117,13 +151,15 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
     const selectedMode = modeValue || modeOptions[0] || "Mode";
     const modeMenuOpen = this._modeMenuOpen && !modeDisabled && modeOptions.length > 0;
     const modeChevron = modeMenuOpen ? "mdi:chevron-up" : "mdi:chevron-down";
+    const iconStyle = this.iconStyle(config.icon_color);
+    const actionsClass = showModeSelector ? "actions" : "actions no-mode";
 
     return html`
       <ha-card>
         <div class="container">
           <div class="state-item">
             <div class="icon-wrap">
-              <div class="icon-shape">
+              <div class="icon-shape" style=${styleMap(iconStyle)}>
                 <ha-icon .icon=${config.icon ?? "mdi:ev-station"}></ha-icon>
               </div>
             </div>
@@ -133,7 +169,7 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
             </div>
           </div>
 
-          <div class="actions">
+          <div class=${actionsClass}>
             ${showModeSelector
               ? html`
                   <div class="mode-select-wrap">
@@ -171,7 +207,7 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
                       : html``}
                   </div>
                 `
-              : html`<div class="mode-select-wrap placeholder"></div>`}
+              : html``}
 
             <div class="live-value">
               <span>${statusLabel}</span>
@@ -310,6 +346,89 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
     return null;
   }
 
+  private iconStyle(value?: string | number[]): Record<string, string> {
+    const rgbCss = this.toRgbCss(value);
+    if (rgbCss) {
+      return {
+        "--icon-color": `rgb(${rgbCss})`,
+        "--shape-color": `rgba(${rgbCss}, 0.2)`
+      };
+    }
+
+    if (typeof value === "string" && value.trim().length > 0 && value !== "none") {
+      const cssColor = value.trim();
+      return {
+        "--icon-color": cssColor,
+        "--shape-color": `color-mix(in srgb, ${cssColor} 20%, transparent)`
+      };
+    }
+
+    return {};
+  }
+
+  private toRgbCss(value?: string | number[]): string | null {
+    if (Array.isArray(value) && value.length >= 3) {
+      const nums = value.slice(0, 3).map((channel) => Number(channel));
+      if (nums.every((channel) => Number.isFinite(channel))) {
+        const [r, g, b] = nums.map((channel) => Math.max(0, Math.min(255, Math.round(channel))));
+        return `${r}, ${g}, ${b}`;
+      }
+      return null;
+    }
+
+    if (typeof value !== "string") {
+      return null;
+    }
+
+    const raw = value.trim().toLowerCase();
+    if (raw === "none") {
+      return null;
+    }
+    if (raw.startsWith("var(--rgb-")) {
+      return raw;
+    }
+    if (raw === "state") {
+      return "var(--rgb-state-entity, var(--rgb-primary-color, 3, 169, 244))";
+    }
+    if (raw === "primary") {
+      return "var(--rgb-primary-color, 3, 169, 244)";
+    }
+    if (raw === "accent") {
+      return "var(--rgb-accent-color, 255, 152, 0)";
+    }
+    if (raw in COLOR_RGB_FALLBACK) {
+      return `var(--rgb-${raw}, ${COLOR_RGB_FALLBACK[raw]})`;
+    }
+
+    const hex = raw;
+    const short = /^#([a-fA-F0-9]{3})$/;
+    const long = /^#([a-fA-F0-9]{6})$/;
+
+    if (short.test(hex)) {
+      const [, raw] = hex.match(short) ?? [];
+      if (!raw) {
+        return null;
+      }
+      const r = parseInt(raw[0] + raw[0], 16);
+      const g = parseInt(raw[1] + raw[1], 16);
+      const b = parseInt(raw[2] + raw[2], 16);
+      return `${r}, ${g}, ${b}`;
+    }
+
+    if (long.test(hex)) {
+      const [, raw] = hex.match(long) ?? [];
+      if (!raw) {
+        return null;
+      }
+      const r = parseInt(raw.slice(0, 2), 16);
+      const g = parseInt(raw.slice(2, 4), 16);
+      const b = parseInt(raw.slice(4, 6), 16);
+      return `${r}, ${g}, ${b}`;
+    }
+
+    return null;
+  }
+
   public connectedCallback(): void {
     super.connectedCallback();
     window.addEventListener("pointerdown", this.handleGlobalPointerDown, true);
@@ -419,6 +538,7 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
   static styles = css`
     :host {
       display: block;
+      container-type: inline-size;
       --spacing: var(--mush-spacing, 10px);
       --card-primary-font-size: var(--mush-card-primary-font-size, 14px);
       --card-secondary-font-size: var(--mush-card-secondary-font-size, 12px);
@@ -524,10 +644,11 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
     }
 
     .actions {
-      display: flex;
-      flex-direction: row;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
       align-items: center;
-      gap: var(--control-spacing);
+      column-gap: var(--control-spacing);
+      row-gap: 8px;
       padding: var(--control-spacing);
       padding-top: 0;
       box-sizing: border-box;
@@ -535,15 +656,12 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
     }
 
     .mode-select-wrap {
-      flex: 1;
-      min-width: 120px;
-      max-width: 220px;
+      grid-column: 1;
+      min-width: 0;
+      max-width: none;
+      width: 100%;
       height: var(--control-height);
       position: relative;
-    }
-
-    .mode-select-wrap.placeholder {
-      display: none;
     }
 
     .mode-select {
@@ -639,11 +757,12 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
     }
 
     .live-value {
+      grid-column: 2;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 6px;
-      min-width: 120px;
+      min-width: 0;
       padding: 0 2px;
       color: var(--primary-text-color);
       font-size: var(--card-primary-font-size);
@@ -651,6 +770,8 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
       line-height: var(--card-primary-line-height);
       letter-spacing: var(--card-primary-letter-spacing);
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .live-value .dot {
@@ -658,6 +779,8 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
     }
 
     .action-button {
+      grid-column: 3;
+      justify-self: end;
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -672,6 +795,20 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
       background-color: rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.05);
       line-height: 0;
       font-size: var(--control-height);
+      margin-left: auto;
+    }
+
+    .actions.no-mode {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .actions.no-mode .live-value {
+      grid-column: 1;
+      justify-content: flex-start;
+    }
+
+    .actions.no-mode .action-button {
+      grid-column: 2;
     }
 
     .action-button:disabled {
@@ -689,24 +826,33 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
       color: var(--icon-color-disabled);
     }
 
-    @media (max-width: 420px) {
+    @container (max-width: 420px) {
       .actions {
-        flex-wrap: wrap;
+        grid-template-columns: minmax(0, 1fr) auto;
       }
 
       .mode-select-wrap {
-        max-width: none;
-        min-width: 0;
-        flex: 1 1 100%;
+        grid-column: 1 / -1;
+        grid-row: 1;
       }
 
       .live-value {
-        flex: 1;
+        grid-column: 1;
+        grid-row: 2;
         justify-content: flex-start;
       }
 
       .action-button {
-        margin-left: auto;
+        grid-column: 2;
+        grid-row: 2;
+      }
+
+      .actions.no-mode .live-value {
+        grid-row: 1;
+      }
+
+      .actions.no-mode .action-button {
+        grid-row: 1;
       }
     }
   `;

@@ -1,7 +1,8 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import type { HomeAssistant, LovelaceCard, LovelaceCardConfig } from "../types";
+import type { HomeAssistant, LovelaceCard, LovelaceCardConfig, LovelaceCardEditor } from "../types";
 import { readNumber, readUnit } from "../utils/entity";
+import "./editors/energy-breakdown-card-editor";
 
 const DEFAULT_DECIMALS = 1;
 const EPSILON = 0.01;
@@ -30,10 +31,15 @@ interface PowerSchwammerlEnergyBreakdownCardConfig extends LovelaceCardConfig {
 
 @customElement("power-schwammerl-energy-breakdown-card")
 export class PowerSchwammerlEnergyBreakdownCard extends LitElement implements LovelaceCard {
-  public static async getStubConfig(hass: HomeAssistant): Promise<PowerSchwammerlEnergyBreakdownCardConfig> {
-    const entityIds = Object.keys(hass.states);
+  public static async getConfigElement(): Promise<LovelaceCardEditor> {
+    return document.createElement("power-schwammerl-energy-breakdown-card-editor") as LovelaceCardEditor;
+  }
+
+  public static async getStubConfig(hass?: HomeAssistant): Promise<PowerSchwammerlEnergyBreakdownCardConfig> {
+    const states = hass?.states ?? {};
+    const entityIds = Object.keys(states);
     const pick = (...candidates: string[]): string | undefined =>
-      candidates.find((entityId) => entityId in hass.states);
+      candidates.find((entityId) => entityId in states);
     const firstByDomain = (domain: string): string | undefined =>
       entityIds.find((entityId) => entityId.startsWith(`${domain}.`));
 
@@ -67,10 +73,7 @@ export class PowerSchwammerlEnergyBreakdownCard extends LitElement implements Lo
   private _config?: PowerSchwammerlEnergyBreakdownCardConfig;
 
   public setConfig(config: PowerSchwammerlEnergyBreakdownCardConfig): void {
-    const homeEntity = config.home_entity ?? config.consumption_entity;
-    if (!homeEntity) {
-      throw new Error("You need to define home_entity (or consumption_entity).");
-    }
+    const homeEntity = config.home_entity ?? config.consumption_entity ?? "sensor.dev_home_power";
 
     const decimals =
       typeof config.decimals === "number" && Number.isFinite(config.decimals)
