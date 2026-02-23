@@ -2406,6 +2406,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       --icon-border-radius: var(--mush-icon-border-radius, 50%);
       --icon-symbol-size: var(--mush-icon-symbol-size, 0.667em);
       --icon-color: var(--primary-text-color);
+      --main-node-margin: 12px;
       --flow-line-size: 3px;
       --shape-color: color-mix(
         in srgb,
@@ -2442,8 +2443,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       display: flex;
       align-items: center;
       justify-content: center;
-      padding-inline: var(--spacing);
-      padding-block: 0;
+      padding: var(--spacing);
       box-sizing: border-box;
     }
 
@@ -2453,8 +2453,8 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       grid-template-columns: repeat(var(--grid-columns, 6), minmax(0, 1fr));
       grid-template-rows: repeat(var(--grid-rows, 6), minmax(0, 1fr));
       gap: 4px;
-      aspect-ratio: var(--grid-aspect, 1 / 1);
-      width: min(100%, calc((100% * var(--grid-columns, 6)) / 6));
+      width: 100%;
+      height: 100%;
       min-height: 0;
       border-radius: var(--control-border-radius);
       padding: 0;
@@ -2470,14 +2470,11 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       align-items: center;
       justify-content: center;
       text-align: center;
-      justify-self: center;
-      align-self: center;
-      width: calc(100% - 2px);
-      height: calc(100% - 2px);
-      max-width: 132px;
-      max-height: 132px;
+      justify-self: stretch;
+      align-self: stretch;
+      margin: var(--main-node-margin);
+      min-height: 0;
       min-width: 0;
-      aspect-ratio: 1 / 1;
       border-radius: calc(var(--control-border-radius) - 1px);
       padding: 8px 10px;
       background: var(--ha-card-background, var(--card-background-color, white));
@@ -2574,10 +2571,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       align-self: center;
       width: calc(100% - 2px);
       height: calc(100% - 2px);
-      max-width: 74px;
-      max-height: 74px;
       min-width: 0;
-      aspect-ratio: 1 / 1;
       border-radius: calc(var(--control-border-radius) - 4px);
       padding: 3px 4px;
       background: var(--ha-card-background, var(--card-background-color, white));
@@ -2831,42 +2825,40 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       }
     }
 
-    @container (max-width: 520px) {
+    @container (max-width: 350px) {
       .energy-grid {
         gap: 3px;
         padding: 0;
+        --main-node-margin: 8px;
       }
 
       .energy-value {
-        width: calc(100% - 6px);
-        max-width: 116px;
-        max-height: 116px;
         padding: 6px 8px;
       }
 
       .energy-sub-value {
-        max-width: 64px;
-        max-height: 64px;
       }
 
     }
 
-    @container (max-width: 380px) {
+    @container (max-width: 300px) {
+      .energy-grid {
+        --main-node-margin: 4px;
+      }
+    }
+
+    @container (max-width: 275px) {
       .energy-grid {
         gap: 2px;
         padding: 0;
+        --main-node-margin: 0px;
       }
 
       .energy-value {
-        width: calc(100% - 1px);
-        max-width: 96px;
-        max-height: 96px;
         padding: 4px 6px;
       }
 
       .energy-sub-value {
-        max-width: 52px;
-        max-height: 52px;
       }
 
       .energy-sub-icon {
