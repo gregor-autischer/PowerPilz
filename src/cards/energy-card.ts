@@ -556,8 +556,12 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
               </div>
             </div>
 
-            ${this.renderSubNodes("solar", solarSubBlocks, normalizedSolarSubPositions, decimals)}
-            ${this.renderSubNodes("home", visibleHomeSubBlocks, normalizedHomeSubPositions, decimals)}
+            ${this._showSubBlocks
+              ? this.renderSubNodes("solar", solarSubBlocks, normalizedSolarSubPositions, decimals)
+              : nothing}
+            ${this._showSubBlocks
+              ? this.renderSubNodes("home", visibleHomeSubBlocks, normalizedHomeSubPositions, decimals)
+              : nothing}
 
             ${batteryVisible && batteryPlacement
               ? html`
