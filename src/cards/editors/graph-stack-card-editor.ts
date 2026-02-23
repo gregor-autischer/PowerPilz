@@ -6,7 +6,7 @@ type GraphLegendLayout = "row" | "column";
 type GraphTimeframeHours = 6 | 12 | 24;
 
 interface GraphStackCardConfig extends LovelaceCardConfig {
-  type: "custom:power-schwammerl-graph-stack-card";
+  type: "custom:power-pilz-graph-stack-card";
   legend_layout?: GraphLegendLayout;
   timeframe_hours?: GraphTimeframeHours | number | string;
   unit?: string;
@@ -161,8 +161,8 @@ const LABELS: Record<string, string> = {
   decimals: "Decimals"
 };
 
-@customElement("power-schwammerl-graph-stack-card-editor")
-export class PowerSchwammerlGraphStackCardEditor extends LitElement implements LovelaceCardEditor {
+@customElement("power-pilz-graph-stack-card-editor")
+export class PowerPilzGraphStackCardEditor extends LitElement implements LovelaceCardEditor {
   @property({ attribute: false })
   public hass?: HomeAssistant;
 
@@ -172,7 +172,7 @@ export class PowerSchwammerlGraphStackCardEditor extends LitElement implements L
   public setConfig(config: GraphStackCardConfig): void {
     const next: GraphStackCardConfig = {
       ...config,
-      type: "custom:power-schwammerl-graph-stack-card",
+      type: "custom:power-pilz-graph-stack-card",
       legend_layout: config.legend_layout === "column" ? "column" : "row",
       timeframe_hours: this.normalizeTimeframeHours(config.timeframe_hours),
       hover_enabled: config.hover_enabled ?? true,
@@ -274,7 +274,7 @@ export class PowerSchwammerlGraphStackCardEditor extends LitElement implements L
   private valueChanged = (event: CustomEvent<{ value: GraphStackCardConfig }>): void => {
     const nextConfig: GraphStackCardConfig = {
       ...event.detail.value,
-      type: "custom:power-schwammerl-graph-stack-card"
+      type: "custom:power-pilz-graph-stack-card"
     };
     this._config = nextConfig;
     this.dispatchEvent(
@@ -289,6 +289,6 @@ export class PowerSchwammerlGraphStackCardEditor extends LitElement implements L
 
 declare global {
   interface HTMLElementTagNameMap {
-    "power-schwammerl-graph-stack-card-editor": PowerSchwammerlGraphStackCardEditor;
+    "power-pilz-graph-stack-card-editor": PowerPilzGraphStackCardEditor;
   }
 }

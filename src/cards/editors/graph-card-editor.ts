@@ -6,7 +6,7 @@ type GraphLegendLayout = "row" | "column";
 type GraphTimeframeHours = 6 | 12 | 24;
 
 interface GraphCardConfig extends LovelaceCardConfig {
-  type: "custom:power-schwammerl-graph-card";
+  type: "custom:power-pilz-graph-card";
   legend_layout?: GraphLegendLayout;
   timeframe_hours?: GraphTimeframeHours | number | string;
   unit?: string;
@@ -158,8 +158,8 @@ const LABELS: Record<string, string> = {
   decimals: "Decimals"
 };
 
-@customElement("power-schwammerl-graph-card-editor")
-export class PowerSchwammerlGraphCardEditor extends LitElement implements LovelaceCardEditor {
+@customElement("power-pilz-graph-card-editor")
+export class PowerPilzGraphCardEditor extends LitElement implements LovelaceCardEditor {
   @property({ attribute: false })
   public hass?: HomeAssistant;
 
@@ -169,7 +169,7 @@ export class PowerSchwammerlGraphCardEditor extends LitElement implements Lovela
   public setConfig(config: GraphCardConfig): void {
     const next: GraphCardConfig = {
       ...config,
-      type: "custom:power-schwammerl-graph-card",
+      type: "custom:power-pilz-graph-card",
       legend_layout: config.legend_layout === "column" ? "column" : "row",
       timeframe_hours: this.normalizeTimeframeHours(config.timeframe_hours),
       hover_enabled: config.hover_enabled ?? true,
@@ -270,7 +270,7 @@ export class PowerSchwammerlGraphCardEditor extends LitElement implements Lovela
   private valueChanged = (event: CustomEvent<{ value: GraphCardConfig }>): void => {
     const nextConfig: GraphCardConfig = {
       ...event.detail.value,
-      type: "custom:power-schwammerl-graph-card"
+      type: "custom:power-pilz-graph-card"
     };
     this._config = nextConfig;
     this.dispatchEvent(
@@ -285,6 +285,6 @@ export class PowerSchwammerlGraphCardEditor extends LitElement implements Lovela
 
 declare global {
   interface HTMLElementTagNameMap {
-    "power-schwammerl-graph-card-editor": PowerSchwammerlGraphCardEditor;
+    "power-pilz-graph-card-editor": PowerPilzGraphCardEditor;
   }
 }

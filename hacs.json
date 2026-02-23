@@ -1,7 +1,7 @@
 {
-  "name": "PowerSchwammerl",
+  "name": "PowerPilz",
   "render_readme": true,
   "homeassistant": "2023.8.0",
   "content_in_root": true,
-  "filename": "power-schwammerl.js"
+  "filename": "power-pilz.js"
 }

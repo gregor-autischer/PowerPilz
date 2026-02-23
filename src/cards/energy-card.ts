@@ -122,8 +122,8 @@ interface GridBounds {
   rows: number;
 }
 
-interface PowerSchwammerlEnergyCardConfig extends LovelaceCardConfig {
-  type: "custom:power-schwammerl-energy-card";
+interface PowerPilzEnergyCardConfig extends LovelaceCardConfig {
+  type: "custom:power-pilz-energy-card";
   name?: string;
   solar_visible?: boolean;
   grid_visible?: boolean;
@@ -195,13 +195,13 @@ interface PowerSchwammerlEnergyCardConfig extends LovelaceCardConfig {
   tap_action?: TapActionConfig;
 }
 
-@customElement("power-schwammerl-energy-card")
-export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCard {
+@customElement("power-pilz-energy-card")
+export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
   public static async getConfigElement(): Promise<LovelaceCardEditor> {
-    return document.createElement("power-schwammerl-energy-card-editor") as LovelaceCardEditor;
+    return document.createElement("power-pilz-energy-card-editor") as LovelaceCardEditor;
   }
 
-  public static async getStubConfig(hass?: HomeAssistant): Promise<PowerSchwammerlEnergyCardConfig> {
+  public static async getStubConfig(hass?: HomeAssistant): Promise<PowerPilzEnergyCardConfig> {
     const states = hass?.states ?? {};
     const entityIds = Object.keys(states);
     const pick = (...candidates: string[]): string | undefined =>
@@ -222,7 +222,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       ?? firstByDomain("sensor");
 
     return {
-      type: "custom:power-schwammerl-energy-card",
+      type: "custom:power-pilz-energy-card",
       name: "Energy Flow",
       solar_visible: true,
       grid_visible: true,
@@ -243,7 +243,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
   public hass!: HomeAssistant;
 
   @state()
-  private _config?: PowerSchwammerlEnergyCardConfig;
+  private _config?: PowerPilzEnergyCardConfig;
 
   @state()
   private _trendSeries: Partial<Record<NodeKey, TrendPoint[]>> = {};
@@ -265,7 +265,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
   > = {};
   private _canvasColorContext?: CanvasRenderingContext2D | null;
 
-  public setConfig(config: PowerSchwammerlEnergyCardConfig): void {
+  public setConfig(config: PowerPilzEnergyCardConfig): void {
     const homeEntity = config.home_entity ?? config.consumption_entity ?? "sensor.dev_home_power";
 
     const decimals =
@@ -798,7 +798,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
 
   private collectSubBlocks(
     node: "solar" | "home" | "grid" | "grid_secondary",
-    config: PowerSchwammerlEnergyCardConfig
+    config: PowerPilzEnergyCardConfig
   ): EnergySubBlockEntry[] {
     if (!this.hass) {
       return [];
@@ -2147,7 +2147,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     }
   }
 
-  private enabledTrendNodes(config: PowerSchwammerlEnergyCardConfig): NodeKey[] {
+  private enabledTrendNodes(config: PowerPilzEnergyCardConfig): NodeKey[] {
     const nodes: NodeKey[] = [];
     if (config.solar_trend) {
       nodes.push("solar");
@@ -2170,7 +2170,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     return nodes;
   }
 
-  private trendEntityId(node: NodeKey, config: PowerSchwammerlEnergyCardConfig): string | undefined {
+  private trendEntityId(node: NodeKey, config: PowerPilzEnergyCardConfig): string | undefined {
     switch (node) {
       case "solar":
         return config.solar_entity;
@@ -2286,7 +2286,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     }
   }
 
-  private resolveTapAction(config: PowerSchwammerlEnergyCardConfig): Required<TapActionConfig> {
+  private resolveTapAction(config: PowerPilzEnergyCardConfig): Required<TapActionConfig> {
     const source = config.tap_action;
     if (source) {
       const action: TapActionType = source.action ?? (source.navigation_path ? "navigate" : "none");

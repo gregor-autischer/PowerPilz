@@ -3,7 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import type { HomeAssistant, LovelaceCardConfig, LovelaceCardEditor } from "../../types";
 
 interface WallboxCardConfig extends LovelaceCardConfig {
-  type: "custom:power-schwammerl-wallbox-card";
+  type: "custom:power-pilz-wallbox-card";
   name?: string;
   icon?: string;
   icon_color?: number[] | string;
@@ -71,8 +71,8 @@ const LABELS: Record<string, string> = {
   decimals: "Decimals"
 };
 
-@customElement("power-schwammerl-wallbox-card-editor")
-export class PowerSchwammerlWallboxCardEditor extends LitElement implements LovelaceCardEditor {
+@customElement("power-pilz-wallbox-card-editor")
+export class PowerPilzWallboxCardEditor extends LitElement implements LovelaceCardEditor {
   @property({ attribute: false })
   public hass?: HomeAssistant;
 
@@ -85,7 +85,7 @@ export class PowerSchwammerlWallboxCardEditor extends LitElement implements Love
       show_mode_selector: config.show_mode_selector ?? true,
       show_live_value: config.show_live_value ?? true,
       show_command_button: config.show_command_button ?? true,
-      type: "custom:power-schwammerl-wallbox-card"
+      type: "custom:power-pilz-wallbox-card"
     };
   }
 
@@ -113,7 +113,7 @@ export class PowerSchwammerlWallboxCardEditor extends LitElement implements Love
   private valueChanged = (event: CustomEvent<{ value: WallboxCardConfig }>): void => {
     const nextConfig: WallboxCardConfig = {
       ...event.detail.value,
-      type: "custom:power-schwammerl-wallbox-card"
+      type: "custom:power-pilz-wallbox-card"
     };
     this._config = nextConfig;
     this.dispatchEvent(
@@ -128,6 +128,6 @@ export class PowerSchwammerlWallboxCardEditor extends LitElement implements Love
 
 declare global {
   interface HTMLElementTagNameMap {
-    "power-schwammerl-wallbox-card-editor": PowerSchwammerlWallboxCardEditor;
+    "power-pilz-wallbox-card-editor": PowerPilzWallboxCardEditor;
   }
 }

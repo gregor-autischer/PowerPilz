@@ -1,19 +1,19 @@
 {
-  "name": "power-schwammerl",
+  "name": "power-pilz",
   "version": "0.1.0",
   "description": "Custom Home Assistant cards with Mushroom-inspired styling for energy and wallbox data.",
   "type": "module",
-  "main": "dist/power-schwammerl.js",
+  "main": "dist/power-pilz.js",
   "files": [
     "dist",
-    "power-schwammerl.js",
+    "power-pilz.js",
     "README.md",
     "hacs.json"
   ],
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:hacs": "npm run build && cp dist/power-schwammerl.js power-schwammerl.js",
+    "build:hacs": "npm run build && cp dist/power-pilz.js power-pilz.js",
     "build:watch": "vite build --watch",
     "check": "tsc --noEmit"
   },

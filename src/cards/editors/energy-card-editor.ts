@@ -3,7 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import type { HomeAssistant, LovelaceCardConfig, LovelaceCardEditor } from "../../types";
 
 interface EnergyCardConfig extends LovelaceCardConfig {
-  type: "custom:power-schwammerl-energy-card";
+  type: "custom:power-pilz-energy-card";
   name?: string;
   solar_visible?: boolean;
   grid_visible?: boolean;
@@ -385,8 +385,8 @@ const LABELS: Record<string, string> = {
   decimals: "Decimals"
 };
 
-@customElement("power-schwammerl-energy-card-editor")
-export class PowerSchwammerlEnergyCardEditor extends LitElement implements LovelaceCardEditor {
+@customElement("power-pilz-energy-card-editor")
+export class PowerPilzEnergyCardEditor extends LitElement implements LovelaceCardEditor {
   @property({ attribute: false })
   public hass?: HomeAssistant;
 
@@ -402,7 +402,7 @@ export class PowerSchwammerlEnergyCardEditor extends LitElement implements Lovel
       battery_visible: config.battery_visible ?? true,
       battery_secondary_visible: config.battery_secondary_visible ?? false,
       battery_dual_alignment: config.battery_dual_alignment ?? "center",
-      type: "custom:power-schwammerl-energy-card"
+      type: "custom:power-pilz-energy-card"
     };
   }
 
@@ -449,7 +449,7 @@ export class PowerSchwammerlEnergyCardEditor extends LitElement implements Lovel
   private valueChanged = (event: CustomEvent<{ value: EnergyCardConfig }>): void => {
     const nextConfig: EnergyCardConfig = {
       ...event.detail.value,
-      type: "custom:power-schwammerl-energy-card"
+      type: "custom:power-pilz-energy-card"
     };
     this._config = nextConfig;
     this.dispatchEvent(
@@ -464,6 +464,6 @@ export class PowerSchwammerlEnergyCardEditor extends LitElement implements Lovel
 
 declare global {
   interface HTMLElementTagNameMap {
-    "power-schwammerl-energy-card-editor": PowerSchwammerlEnergyCardEditor;
+    "power-pilz-energy-card-editor": PowerPilzEnergyCardEditor;
   }
 }

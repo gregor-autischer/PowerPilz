@@ -4,9 +4,9 @@ export default defineConfig({
   build: {
     sourcemap: true,
     lib: {
-      entry: "src/power-schwammerl.ts",
+      entry: "src/power-pilz.ts",
       formats: ["es"],
-      fileName: () => "power-schwammerl.js"
+      fileName: () => "power-pilz.js"
     },
     rollupOptions: {
       output: {

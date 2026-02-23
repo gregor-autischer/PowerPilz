@@ -20,26 +20,26 @@ window.customCards = window.customCards || [];
 
 const cards = [
   {
-    type: "power-schwammerl-energy-card",
-    name: "PowerSchwammerl Energy Card",
+    type: "power-pilz-energy-card",
+    name: "PowerPilz Energy Card",
     description: "Mushroom-inspired card for live home energy metrics.",
     preview: true
   },
   {
-    type: "power-schwammerl-wallbox-card",
-    name: "PowerSchwammerl Wallbox Card",
+    type: "power-pilz-wallbox-card",
+    name: "PowerPilz Wallbox Card",
     description: "Mushroom-inspired card focused on EV wallbox telemetry.",
     preview: true
   },
   {
-    type: "power-schwammerl-graph-card",
-    name: "PowerSchwammerl Graph Card",
+    type: "power-pilz-graph-card",
+    name: "PowerPilz Graph Card",
     description: "Mushroom-style trend card with full-card historical graph.",
     preview: true
   },
   {
-    type: "power-schwammerl-graph-stack-card",
-    name: "PowerSchwammerl Graph Stack Card",
+    type: "power-pilz-graph-stack-card",
+    name: "PowerPilz Graph Stack Card",
     description: "Mushroom-style cumulative stacked trend card for up to four entities.",
     preview: true
   }
@@ -52,7 +52,7 @@ for (const card of cards) {
 }
 
 console.info(
-  `%cPOWER SCHWAMMERL%c v${VERSION}`,
+  `%cPOWER PILZ%c v${VERSION}`,
   "background: #1f7a45; color: white; padding: 4px 8px; border-radius: 8px 0 0 8px; font-weight: 700;",
   "background: #3e4b53; color: white; padding: 4px 8px; border-radius: 0 8px 8px 0;"
 );

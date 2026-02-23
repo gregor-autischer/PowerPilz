@@ -47,8 +47,8 @@ interface ServiceCommand {
   data: Record<string, unknown>;
 }
 
-interface PowerSchwammerlWallboxCardConfig extends LovelaceCardConfig {
-  type: "custom:power-schwammerl-wallbox-card";
+interface PowerPilzWallboxCardConfig extends LovelaceCardConfig {
+  type: "custom:power-pilz-wallbox-card";
   name?: string;
   icon?: string;
   icon_color?: string | number[];
@@ -67,12 +67,12 @@ interface PowerSchwammerlWallboxCardConfig extends LovelaceCardConfig {
   decimals?: number;
 }
 
-export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCard {
+export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
   public static async getConfigElement(): Promise<LovelaceCardEditor> {
-    return document.createElement("power-schwammerl-wallbox-card-editor") as LovelaceCardEditor;
+    return document.createElement("power-pilz-wallbox-card-editor") as LovelaceCardEditor;
   }
 
-  public static async getStubConfig(hass?: HomeAssistant): Promise<PowerSchwammerlWallboxCardConfig> {
+  public static async getStubConfig(hass?: HomeAssistant): Promise<PowerPilzWallboxCardConfig> {
     const states = hass?.states ?? {};
     const entityIds = Object.keys(states);
     const pick = (...candidates: string[]): string | undefined =>
@@ -91,7 +91,7 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
       ?? firstByDomain("switch");
 
     return {
-      type: "custom:power-schwammerl-wallbox-card",
+      type: "custom:power-pilz-wallbox-card",
       name: "Wallbox",
       power_entity: powerEntity,
       status_entity: pick("sensor.dev_wallbox_status", "sensor.wallbox_status"),
@@ -109,7 +109,7 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
   public layout: string | undefined;
 
   @state()
-  private _config?: PowerSchwammerlWallboxCardConfig;
+  private _config?: PowerPilzWallboxCardConfig;
 
   @state()
   private _actionBusy = false;
@@ -117,7 +117,7 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
   @state()
   private _modeMenuOpen = false;
 
-  public setConfig(config: PowerSchwammerlWallboxCardConfig): void {
+  public setConfig(config: PowerPilzWallboxCardConfig): void {
     const powerEntity = config.power_entity ?? "sensor.dev_wallbox_power";
     this._config = {
       ...config,
@@ -344,7 +344,7 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
     return [];
   }
 
-  private showModeSelector(config: PowerSchwammerlWallboxCardConfig, modeOptions?: string[]): boolean {
+  private showModeSelector(config: PowerPilzWallboxCardConfig, modeOptions?: string[]): boolean {
     if (config.show_mode_selector === false) {
       return false;
     }
@@ -354,11 +354,11 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
     return Boolean(config.mode_entity) || (config.mode_options?.length ?? 0) > 0;
   }
 
-  private showCommandButton(config: PowerSchwammerlWallboxCardConfig): boolean {
+  private showCommandButton(config: PowerPilzWallboxCardConfig): boolean {
     return config.show_command_button !== false;
   }
 
-  private showLiveValue(config: PowerSchwammerlWallboxCardConfig): boolean {
+  private showLiveValue(config: PowerPilzWallboxCardConfig): boolean {
     return config.show_live_value !== false;
   }
 
@@ -1019,19 +1019,19 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
   `;
 }
 
-export class PowerSchwammerlWallboxCardV2 extends PowerSchwammerlWallboxCard {}
+export class PowerPilzWallboxCardV2 extends PowerPilzWallboxCard {}
 
-if (!customElements.get("power-schwammerl-wallbox-card")) {
-  customElements.define("power-schwammerl-wallbox-card", PowerSchwammerlWallboxCard);
+if (!customElements.get("power-pilz-wallbox-card")) {
+  customElements.define("power-pilz-wallbox-card", PowerPilzWallboxCard);
 }
 
-if (!customElements.get("power-schwammerl-wallbox-card-v2")) {
-  customElements.define("power-schwammerl-wallbox-card-v2", PowerSchwammerlWallboxCardV2);
+if (!customElements.get("power-pilz-wallbox-card-v2")) {
+  customElements.define("power-pilz-wallbox-card-v2", PowerPilzWallboxCardV2);
 }
 
 declare global {
   interface HTMLElementTagNameMap {
-    "power-schwammerl-wallbox-card": PowerSchwammerlWallboxCard;
-    "power-schwammerl-wallbox-card-v2": PowerSchwammerlWallboxCardV2;
+    "power-pilz-wallbox-card": PowerPilzWallboxCard;
+    "power-pilz-wallbox-card-v2": PowerPilzWallboxCardV2;
   }
 }

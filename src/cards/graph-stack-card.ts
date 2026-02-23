@@ -100,8 +100,8 @@ interface GraphDrawConfig {
   lineWidth: number;
 }
 
-interface PowerSchwammerlGraphStackCardConfig extends LovelaceCardConfig {
-  type: "custom:power-schwammerl-graph-stack-card";
+interface PowerPilzGraphStackCardConfig extends LovelaceCardConfig {
+  type: "custom:power-pilz-graph-stack-card";
   legend_layout?: GraphLegendLayout;
   timeframe_hours?: GraphTimeframeHours | number | string;
   unit?: string;
@@ -146,13 +146,13 @@ interface PowerSchwammerlGraphStackCardConfig extends LovelaceCardConfig {
   entity_4_trend_color?: string | number[];
 }
 
-@customElement("power-schwammerl-graph-stack-card")
-export class PowerSchwammerlGraphStackCard extends LitElement implements LovelaceCard {
+@customElement("power-pilz-graph-stack-card")
+export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard {
   public static async getConfigElement(): Promise<LovelaceCardEditor> {
-    return document.createElement("power-schwammerl-graph-stack-card-editor") as LovelaceCardEditor;
+    return document.createElement("power-pilz-graph-stack-card-editor") as LovelaceCardEditor;
   }
 
-  public static async getStubConfig(hass?: HomeAssistant): Promise<PowerSchwammerlGraphStackCardConfig> {
+  public static async getStubConfig(hass?: HomeAssistant): Promise<PowerPilzGraphStackCardConfig> {
     const states = hass?.states ?? {};
     const entityIds = Object.keys(states);
     const pick = (...candidates: string[]): string | undefined =>
@@ -168,7 +168,7 @@ export class PowerSchwammerlGraphStackCard extends LitElement implements Lovelac
     const entity4 = pick("sensor.dev_battery_power", "sensor.battery_power");
 
     return {
-      type: "custom:power-schwammerl-graph-stack-card",
+      type: "custom:power-pilz-graph-stack-card",
       legend_layout: "row",
       timeframe_hours: DEFAULT_TIMEFRAME_HOURS,
       hover_enabled: true,
@@ -202,7 +202,7 @@ export class PowerSchwammerlGraphStackCard extends LitElement implements Lovelac
   public hass!: HomeAssistant;
 
   @state()
-  private _config?: PowerSchwammerlGraphStackCardConfig;
+  private _config?: PowerPilzGraphStackCardConfig;
 
   @state()
   private _trendSeries: Partial<Record<GraphSlot, TrendPoint[]>> = {};
@@ -222,7 +222,7 @@ export class PowerSchwammerlGraphStackCard extends LitElement implements Lovelac
   private _trendResizeObserver?: ResizeObserver;
   private _canvasColorContext?: CanvasRenderingContext2D | null;
 
-  public setConfig(config: PowerSchwammerlGraphStackCardConfig): void {
+  public setConfig(config: PowerPilzGraphStackCardConfig): void {
     const decimals =
       typeof config.decimals === "number" && Number.isFinite(config.decimals)
         ? Math.min(3, Math.max(0, Math.round(config.decimals)))
@@ -234,7 +234,7 @@ export class PowerSchwammerlGraphStackCard extends LitElement implements Lovelac
 
     this._config = {
       ...config,
-      type: "custom:power-schwammerl-graph-stack-card",
+      type: "custom:power-pilz-graph-stack-card",
       legend_layout: this.normalizeLegendLayout(config.legend_layout),
       timeframe_hours: this.normalizeTimeframeHours(config.timeframe_hours),
       line_thickness: this.normalizeLineThickness(config.line_thickness),
@@ -389,7 +389,7 @@ export class PowerSchwammerlGraphStackCard extends LitElement implements Lovelac
     `;
   }
 
-  private collectSeriesEntries(config: PowerSchwammerlGraphStackCardConfig, decimals: number): GraphSeriesEntry[] {
+  private collectSeriesEntries(config: PowerPilzGraphStackCardConfig, decimals: number): GraphSeriesEntry[] {
     const entries: GraphSeriesEntry[] = [];
 
     for (let index = 1; index <= GRAPH_SLOT_COUNT; index += 1) {
@@ -451,7 +451,7 @@ export class PowerSchwammerlGraphStackCard extends LitElement implements Lovelac
     });
   }
 
-  private slotEntityId(slot: GraphSlot, config: PowerSchwammerlGraphStackCardConfig): string | undefined {
+  private slotEntityId(slot: GraphSlot, config: PowerPilzGraphStackCardConfig): string | undefined {
     switch (slot) {
       case 1:
         return this.readConfigString(config.entity_1);
@@ -466,7 +466,7 @@ export class PowerSchwammerlGraphStackCard extends LitElement implements Lovelac
     }
   }
 
-  private slotEnabled(slot: GraphSlot, config: PowerSchwammerlGraphStackCardConfig): boolean {
+  private slotEnabled(slot: GraphSlot, config: PowerPilzGraphStackCardConfig): boolean {
     switch (slot) {
       case 1:
         return config.entity_1_enabled !== false;
@@ -481,7 +481,7 @@ export class PowerSchwammerlGraphStackCard extends LitElement implements Lovelac
     }
   }
 
-  private slotShowIcon(slot: GraphSlot, config: PowerSchwammerlGraphStackCardConfig): boolean {
+  private slotShowIcon(slot: GraphSlot, config: PowerPilzGraphStackCardConfig): boolean {
     switch (slot) {
       case 1:
         return config.entity_1_show_icon !== false;
@@ -496,7 +496,7 @@ export class PowerSchwammerlGraphStackCard extends LitElement implements Lovelac
     }
   }
 
-  private slotIcon(slot: GraphSlot, config: PowerSchwammerlGraphStackCardConfig): string {
+  private slotIcon(slot: GraphSlot, config: PowerPilzGraphStackCardConfig): string {
     switch (slot) {
       case 1:
         return config.entity_1_icon ?? "mdi:chart-line";
@@ -511,7 +511,7 @@ export class PowerSchwammerlGraphStackCard extends LitElement implements Lovelac
     }
   }
 
-  private slotIconColor(slot: GraphSlot, config: PowerSchwammerlGraphStackCardConfig): string | number[] | undefined {
+  private slotIconColor(slot: GraphSlot, config: PowerPilzGraphStackCardConfig): string | number[] | undefined {
     switch (slot) {
       case 1:
         return config.entity_1_icon_color;
@@ -526,7 +526,7 @@ export class PowerSchwammerlGraphStackCard extends LitElement implements Lovelac
     }
   }
 
-  private slotTrendColor(slot: GraphSlot, config: PowerSchwammerlGraphStackCardConfig): string | number[] | undefined {
+  private slotTrendColor(slot: GraphSlot, config: PowerPilzGraphStackCardConfig): string | number[] | undefined {
     switch (slot) {
       case 1:
         return config.entity_1_trend_color;
@@ -583,7 +583,7 @@ export class PowerSchwammerlGraphStackCard extends LitElement implements Lovelac
     return DEFAULT_TIMEFRAME_HOURS;
   }
 
-  private trendWindowMs(config?: PowerSchwammerlGraphStackCardConfig): number {
+  private trendWindowMs(config?: PowerPilzGraphStackCardConfig): number {
     return this.normalizeTimeframeHours(config?.timeframe_hours) * 60 * 60 * 1000;
   }
 
@@ -1522,7 +1522,7 @@ export class PowerSchwammerlGraphStackCard extends LitElement implements Lovelac
     }
   }
 
-  private enabledSlots(config: PowerSchwammerlGraphStackCardConfig): GraphSlot[] {
+  private enabledSlots(config: PowerPilzGraphStackCardConfig): GraphSlot[] {
     const slots: GraphSlot[] = [];
     for (let index = 1; index <= GRAPH_SLOT_COUNT; index += 1) {
       const slot = index as GraphSlot;
@@ -1778,6 +1778,6 @@ export class PowerSchwammerlGraphStackCard extends LitElement implements Lovelac
 
 declare global {
   interface HTMLElementTagNameMap {
-    "power-schwammerl-graph-stack-card": PowerSchwammerlGraphStackCard;
+    "power-pilz-graph-stack-card": PowerPilzGraphStackCard;
   }
 }

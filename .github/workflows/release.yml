@@ -29,4 +29,4 @@ jobs:
       - name: Upload asset
         uses: softprops/action-gh-release@v2
         with:
-          files: power-schwammerl.js
+          files: power-pilz.js

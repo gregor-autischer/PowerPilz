@@ -1,31 +1,31 @@
-# PowerSchwammerl
+# PowerPilz
 
-PowerSchwammerl is a Home Assistant Lovelace card bundle with a visual language inspired by Mushroom cards, built for personal energy and wallbox dashboards.
+PowerPilz is a Home Assistant Lovelace card bundle with a visual language inspired by Mushroom cards, built for personal energy and wallbox dashboards.
 
 ## Included Cards
 
-- `custom:power-schwammerl-energy-card`
-- `custom:power-schwammerl-graph-card`
-- `custom:power-schwammerl-graph-stack-card`
-- `custom:power-schwammerl-wallbox-card`
+- `custom:power-pilz-energy-card`
+- `custom:power-pilz-graph-card`
+- `custom:power-pilz-graph-stack-card`
+- `custom:power-pilz-wallbox-card`
 
 ## Installation (HACS)
 
 1. Push this repository to GitHub.
 2. In Home Assistant, open HACS -> Frontend -> menu (top-right) -> Custom repositories.
 3. Add your repository URL and select category `Dashboard`.
-4. Install `PowerSchwammerl` from HACS.
+4. Install `PowerPilz` from HACS.
 5. HACS should auto-register the dashboard resource in storage mode.
 6. If your dashboard is in YAML mode or auto-registration is disabled, add this resource manually:
-   - URL: `/hacsfiles/<your-repository-name>/power-schwammerl.js`
+   - URL: `/hacsfiles/<your-repository-name>/power-pilz.js`
    - Type: `module`
 
 ## Installation (Manual)
 
 1. Build the project with `npm install && npm run build`.
-2. Copy `dist/power-schwammerl.js` to your Home Assistant `www` folder.
+2. Copy `dist/power-pilz.js` to your Home Assistant `www` folder.
 3. Add a dashboard resource:
-   - URL: `/local/power-schwammerl.js`
+   - URL: `/local/power-pilz.js`
    - Type: `module`
 
 ## Development
@@ -46,7 +46,7 @@ npm run build
 Energy card:
 
 ```yaml
-type: custom:power-schwammerl-energy-card
+type: custom:power-pilz-energy-card
 name: Energy Flow
 home_entity: sensor.house_consumption_power
 solar_entity: sensor.solar_production_power
@@ -79,7 +79,7 @@ Energy sign convention:
 - `grid_entity`: positive = import from grid, negative = export to grid
 - `battery_entity`: positive = charging, negative = discharging
 
-Tap action options on `power-schwammerl-energy-card`:
+Tap action options on `power-pilz-energy-card`:
 - `tap_action.action: navigate` with `tap_action.navigation_path`
 - `tap_action.action: more-info` with optional `tap_action.entity`
 - `details_navigation_path` as a shorthand for navigate
@@ -91,7 +91,7 @@ Compatibility aliases:
 Wallbox card:
 
 ```yaml
-type: custom:power-schwammerl-wallbox-card
+type: custom:power-pilz-wallbox-card
 name: Garage Wallbox
 icon: mdi:ev-station
 power_entity: sensor.wallbox_power
@@ -120,7 +120,7 @@ Wallbox control options:
 Graph card:
 
 ```yaml
-type: custom:power-schwammerl-graph-card
+type: custom:power-pilz-graph-card
 legend_layout: row
 timeframe_hours: 24
 hover_enabled: true
@@ -145,7 +145,7 @@ decimals: 1
 Graph stack card:
 
 ```yaml
-type: custom:power-schwammerl-graph-stack-card
+type: custom:power-pilz-graph-stack-card
 legend_layout: row
 timeframe_hours: 24
 hover_enabled: true
@@ -168,12 +168,12 @@ decimals: 1
 
 ## Release for HACS
 
-To ship a HACS-friendly artifact (`power-schwammerl.js` in repository root):
+To ship a HACS-friendly artifact (`power-pilz.js` in repository root):
 
-1. Run `npm run build:hacs` and commit updated `power-schwammerl.js`.
+1. Run `npm run build:hacs` and commit updated `power-pilz.js`.
 2. Create and push a tag such as `v0.1.0`.
 3. Create a GitHub Release for that tag.
-4. The included release workflow uploads `power-schwammerl.js` as a release asset.
+4. The included release workflow uploads `power-pilz.js` as a release asset.
 
 ## License
 
