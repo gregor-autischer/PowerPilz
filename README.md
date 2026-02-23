@@ -109,6 +109,9 @@ Wallbox control options:
 - `mode_entity` expects `select.*` or `input_select.*` and updates via `select_option`.
 - `mode_options` can be set as a fallback list if your mode entity has delayed/missing options.
 - `command_entity` toggles with `turn_on`/`turn_off` for Start/Stop.
+- `show_mode_selector` toggles visibility of the charging mode selector (default: `true`).
+- `show_live_value` toggles visibility of live status and power (`Idle • 7.2 kW`) (default: `true`).
+- `show_command_button` toggles visibility of the play/pause action button (default: `true`).
 - Start/Stop button labels are fixed defaults in the card.
 - For custom services instead of `command_entity`, use:
   - `start_service` + optional `start_service_data`

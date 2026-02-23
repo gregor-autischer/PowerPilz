@@ -11,6 +11,9 @@ interface WallboxCardConfig extends LovelaceCardConfig {
   status_entity?: string;
   mode_entity?: string;
   command_entity?: string;
+  show_mode_selector?: boolean;
+  show_live_value?: boolean;
+  show_command_button?: boolean;
   decimals?: number;
 }
 
@@ -42,6 +45,15 @@ const SCHEMA: HaFormSchema[] = [
       }
     ]
   },
+  {
+    type: "grid",
+    name: "",
+    schema: [
+      { name: "show_mode_selector", selector: { boolean: {} } },
+      { name: "show_live_value", selector: { boolean: {} } },
+      { name: "show_command_button", selector: { boolean: {} } }
+    ]
+  },
   { name: "decimals", selector: { number: { mode: "box", min: 0, max: 3, step: 1 } } }
 ];
 
@@ -53,6 +65,9 @@ const LABELS: Record<string, string> = {
   status_entity: "Status entity",
   mode_entity: "Mode entity",
   command_entity: "Command entity",
+  show_mode_selector: "Show mode selector",
+  show_live_value: "Show live status and power",
+  show_command_button: "Show play/pause button",
   decimals: "Decimals"
 };
 
@@ -67,6 +82,9 @@ export class PowerSchwammerlWallboxCardEditor extends LitElement implements Love
   public setConfig(config: WallboxCardConfig): void {
     this._config = {
       ...config,
+      show_mode_selector: config.show_mode_selector ?? true,
+      show_live_value: config.show_live_value ?? true,
+      show_command_button: config.show_command_button ?? true,
       type: "custom:power-schwammerl-wallbox-card"
     };
   }

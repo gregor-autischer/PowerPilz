@@ -61,6 +61,9 @@ interface PowerSchwammerlWallboxCardConfig extends LovelaceCardConfig {
   stop_service?: string;
   start_service_data?: Record<string, unknown>;
   stop_service_data?: Record<string, unknown>;
+  show_mode_selector?: boolean;
+  show_live_value?: boolean;
+  show_command_button?: boolean;
   decimals?: number;
 }
 
@@ -120,6 +123,9 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
       ...config,
       icon: config.icon ?? "mdi:power-plug",
       name: config.name ?? "Wallbox",
+      show_mode_selector: config.show_mode_selector ?? true,
+      show_live_value: config.show_live_value ?? true,
+      show_command_button: config.show_command_button ?? true,
       decimals: config.decimals ?? 1,
       power_entity: powerEntity
     };
@@ -170,17 +176,34 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
     const statusLabel = this.statusLabel(status, isCharging);
     const powerLabel = this.formatPower(power, powerUnit, config.decimals ?? 1);
     const showModeSelector = this.showModeSelector(config, modeOptions);
+    const showLiveValue = this.showLiveValue(config);
+    const showCommandButton = this.showCommandButton(config);
     const modeDisabled = this._actionBusy || !config.mode_entity || modeOptions.length === 0;
     const selectedMode = modeValue || modeOptions[0] || "Mode";
     const modeMenuOpen = this._modeMenuOpen && !modeDisabled && modeOptions.length > 0;
     const modeChevron = modeMenuOpen ? "mdi:chevron-up" : "mdi:chevron-down";
     const iconStyle = this.iconStyle(config.icon_color);
-    const actionsClass = showModeSelector ? "actions" : "actions no-mode";
+    const trailingCount = Number(showLiveValue) + Number(showCommandButton);
+    const inlineTrailing = trailingCount === 1;
+    const forceButtonToHeader = showModeSelector && showLiveValue && showCommandButton;
+    const showLiveInHeader = inlineTrailing && showLiveValue;
+    const showButtonInHeader = (inlineTrailing && showCommandButton) || forceButtonToHeader;
+    const showHeaderTrailing = showLiveInHeader || showButtonInHeader;
+    const showLiveInActions = showLiveValue && !showLiveInHeader;
+    const showButtonInActions = showCommandButton && !showButtonInHeader;
+    const renderActions = showModeSelector || showLiveInActions || showButtonInActions;
+    const actionsClass = !showModeSelector
+      ? "actions no-mode"
+      : showLiveInActions || showButtonInActions
+        ? showButtonInActions
+          ? "actions"
+          : "actions no-command"
+        : "actions mode-only";
 
     return html`
       <ha-card>
         <div class="container">
-          <div class="state-item">
+          <div class="state-item ${showHeaderTrailing ? "compact-state" : ""}">
             <div class="icon-wrap">
               <div class="icon-shape" style=${styleMap(iconStyle)}>
                 <ha-icon .icon=${config.icon ?? "mdi:ev-station"}></ha-icon>
@@ -190,65 +213,108 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
               <div class="primary">${config.name}</div>
               <div class="secondary">EV charger</div>
             </div>
-          </div>
 
-          <div class=${actionsClass}>
-            ${showModeSelector
+            ${showHeaderTrailing
               ? html`
-                  <div class="mode-select-wrap">
-                    <button
-                      type="button"
-                      class="mode-select"
-                      ?disabled=${modeDisabled}
-                      @click=${this.toggleModeMenu}
-                      aria-haspopup="listbox"
-                      aria-expanded=${modeMenuOpen ? "true" : "false"}
-                      title="Charging mode"
-                    >
-                      <span class="mode-select-label">${selectedMode}</span>
-                      <ha-icon class="mode-select-chevron" .icon=${modeChevron}></ha-icon>
-                    </button>
-                    ${modeMenuOpen
+                  <div class="compact-trailing ${showButtonInHeader ? "button-only" : ""}">
+                    ${showLiveInHeader
                       ? html`
-                          <div class="mode-menu" role="listbox">
-                            ${modeOptions.map(
-                              (option) => html`
-                                <button
-                                  type="button"
-                                  class="mode-option ${option === selectedMode ? "selected" : ""}"
-                                  data-option=${option}
-                                  role="option"
-                                  aria-selected=${option === selectedMode ? "true" : "false"}
-                                  @click=${this.handleModeOptionClick}
-                                >
-                                  ${option}
-                                </button>
-                              `
-                            )}
+                          <div class="compact-live-value">
+                            <span>${statusLabel}</span>
+                            <span class="dot">•</span>
+                            <span>${powerLabel}</span>
                           </div>
+                        `
+                      : html``}
+
+                    ${showButtonInHeader
+                      ? html`
+                          <button
+                            type="button"
+                            class="action-button"
+                            ?disabled=${this._actionBusy || !command}
+                            @click=${this.handleActionClick}
+                            title=${actionLabel}
+                            aria-label=${actionLabel}
+                          >
+                            <ha-icon .icon=${actionIcon}></ha-icon>
+                          </button>
                         `
                       : html``}
                   </div>
                 `
               : html``}
-
-            <div class="live-value">
-              <span>${statusLabel}</span>
-              <span class="dot">•</span>
-              <span>${powerLabel}</span>
-            </div>
-
-            <button
-              type="button"
-              class="action-button"
-              ?disabled=${this._actionBusy || !command}
-              @click=${this.handleActionClick}
-              title=${actionLabel}
-              aria-label=${actionLabel}
-            >
-              <ha-icon .icon=${actionIcon}></ha-icon>
-            </button>
           </div>
+
+          ${renderActions
+            ? html`
+                <div class=${actionsClass}>
+                  ${showModeSelector
+                    ? html`
+                        <div class="mode-select-wrap">
+                          <button
+                            type="button"
+                            class="mode-select"
+                            ?disabled=${modeDisabled}
+                            @click=${this.toggleModeMenu}
+                            aria-haspopup="listbox"
+                            aria-expanded=${modeMenuOpen ? "true" : "false"}
+                            title="Charging mode"
+                          >
+                            <span class="mode-select-label">${selectedMode}</span>
+                            <ha-icon class="mode-select-chevron" .icon=${modeChevron}></ha-icon>
+                          </button>
+                          ${modeMenuOpen
+                            ? html`
+                                <div class="mode-menu" role="listbox">
+                                  ${modeOptions.map(
+                                    (option) => html`
+                                      <button
+                                        type="button"
+                                        class="mode-option ${option === selectedMode ? "selected" : ""}"
+                                        data-option=${option}
+                                        role="option"
+                                        aria-selected=${option === selectedMode ? "true" : "false"}
+                                        @click=${this.handleModeOptionClick}
+                                      >
+                                        ${option}
+                                      </button>
+                                    `
+                                  )}
+                                </div>
+                              `
+                            : html``}
+                        </div>
+                      `
+                    : html``}
+
+                  ${showLiveInActions
+                    ? html`
+                        <div class="live-value">
+                          <span>${statusLabel}</span>
+                          <span class="dot">•</span>
+                          <span>${powerLabel}</span>
+                        </div>
+                      `
+                    : html``}
+
+                  ${showButtonInActions
+                    ? html`
+                        <button
+                          type="button"
+                          class="action-button"
+                          ?disabled=${this._actionBusy || !command}
+                          @click=${this.handleActionClick}
+                          title=${actionLabel}
+                          aria-label=${actionLabel}
+                        >
+                          <ha-icon .icon=${actionIcon}></ha-icon>
+                        </button>
+                      `
+                    : html``}
+                </div>
+              `
+            : html``}
         </div>
       </ha-card>
     `;
@@ -279,10 +345,21 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
   }
 
   private showModeSelector(config: PowerSchwammerlWallboxCardConfig, modeOptions?: string[]): boolean {
+    if (config.show_mode_selector === false) {
+      return false;
+    }
     if (Array.isArray(modeOptions)) {
       return Boolean(config.mode_entity) || modeOptions.length > 0;
     }
     return Boolean(config.mode_entity) || (config.mode_options?.length ?? 0) > 0;
+  }
+
+  private showCommandButton(config: PowerSchwammerlWallboxCardConfig): boolean {
+    return config.show_command_button !== false;
+  }
+
+  private showLiveValue(config: PowerSchwammerlWallboxCardConfig): boolean {
+    return config.show_live_value !== false;
   }
 
   private statusLabel(status: string | undefined, charging: boolean): string {
@@ -620,6 +697,10 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
       min-width: 0;
     }
 
+    .state-item.compact-state {
+      align-items: center;
+    }
+
     .icon-wrap {
       position: relative;
       flex: none;
@@ -656,6 +737,40 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
       flex-direction: column;
     }
 
+    .compact-trailing {
+      margin-left: auto;
+      min-width: 0;
+      max-width: min(52%, 280px);
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: var(--spacing);
+    }
+
+    .compact-trailing.button-only {
+      max-width: none;
+    }
+
+    .compact-live-value {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+      min-width: 0;
+      color: var(--primary-text-color);
+      font-size: var(--card-primary-font-size);
+      font-weight: var(--card-primary-font-weight);
+      line-height: var(--card-primary-line-height);
+      letter-spacing: var(--card-primary-letter-spacing);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .compact-live-value .dot {
+      color: var(--secondary-text-color);
+    }
+
     .primary {
       font-weight: var(--card-primary-font-weight);
       font-size: var(--card-primary-font-size);
@@ -680,7 +795,7 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
 
     .actions {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto auto;
+      grid-template-columns: clamp(122px, 46%, 220px) minmax(0, 1fr) auto;
       align-items: center;
       column-gap: var(--control-spacing);
       row-gap: 8px;
@@ -795,7 +910,7 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
       grid-column: 2;
       display: flex;
       align-items: center;
-      justify-content: center;
+      justify-content: flex-start;
       gap: 6px;
       min-width: 0;
       padding: 0 2px;
@@ -846,6 +961,45 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
       grid-column: 2;
     }
 
+    .actions.no-command {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .actions.no-command .mode-select-wrap {
+      grid-column: 1;
+    }
+
+    .actions.no-command .live-value {
+      grid-column: 2;
+      justify-content: flex-start;
+    }
+
+    .actions.no-mode.no-command {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .actions.no-mode.no-command .live-value {
+      grid-column: 1;
+      justify-content: flex-start;
+    }
+
+    .actions.mode-only {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .actions.mode-only .mode-select-wrap {
+      grid-column: 1;
+    }
+
+    .state-item.compact-state .action-button {
+      height: var(--icon-size);
+      width: var(--icon-size);
+      font-size: var(--icon-size);
+      border-radius: calc(var(--control-border-radius) - 2px);
+      margin-left: 0;
+      flex: none;
+    }
+
     .action-button:disabled {
       cursor: not-allowed;
       background-color: rgba(var(--rgb-disabled, 189, 189, 189), 0.2);
@@ -861,35 +1015,7 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
       color: var(--icon-color-disabled);
     }
 
-    @container (max-width: 420px) {
-      .actions {
-        grid-template-columns: minmax(0, 1fr) auto;
-      }
-
-      .mode-select-wrap {
-        grid-column: 1 / -1;
-        grid-row: 1;
-      }
-
-      .live-value {
-        grid-column: 1;
-        grid-row: 2;
-        justify-content: flex-start;
-      }
-
-      .action-button {
-        grid-column: 2;
-        grid-row: 2;
-      }
-
-      .actions.no-mode .live-value {
-        grid-row: 1;
-      }
-
-      .actions.no-mode .action-button {
-        grid-row: 1;
-      }
-    }
+    /* Keep wallbox control placement deterministic across viewport sizes. */
   `;
 }
 
