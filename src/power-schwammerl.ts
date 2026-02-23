@@ -1,4 +1,5 @@
 import "./cards/energy-card";
+import "./cards/graph-card";
 import "./cards/wallbox-card";
 
 declare global {
@@ -27,6 +28,12 @@ const cards = [
     type: "power-schwammerl-wallbox-card",
     name: "PowerSchwammerl Wallbox Card",
     description: "Mushroom-inspired card focused on EV wallbox telemetry.",
+    preview: true
+  },
+  {
+    type: "power-schwammerl-graph-card",
+    name: "PowerSchwammerl Graph Card",
+    description: "Mushroom-style trend card with full-card historical graph.",
     preview: true
   }
 ];
