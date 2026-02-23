@@ -6,12 +6,14 @@
   "main": "dist/power-schwammerl.js",
   "files": [
     "dist",
+    "power-schwammerl.js",
     "README.md",
     "hacs.json"
   ],
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:hacs": "npm run build && cp dist/power-schwammerl.js power-schwammerl.js",
     "build:watch": "vite build --watch",
     "check": "tsc --noEmit"
   },

@@ -2,5 +2,6 @@
   "name": "PowerSchwammerl",
   "render_readme": true,
   "homeassistant": "2023.8.0",
+  "content_in_root": true,
   "filename": "power-schwammerl.js"
 }

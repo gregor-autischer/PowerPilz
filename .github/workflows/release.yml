@@ -24,9 +24,9 @@ jobs:
         run: npm ci
 
       - name: Build
-        run: npm run build
+        run: npm run build:hacs
 
       - name: Upload asset
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/power-schwammerl.js
+          files: power-schwammerl.js

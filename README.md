@@ -15,8 +15,9 @@ PowerSchwammerl is a Home Assistant Lovelace card bundle with a visual language 
 2. In Home Assistant, open HACS -> Frontend -> menu (top-right) -> Custom repositories.
 3. Add your repository URL and select category `Dashboard`.
 4. Install `PowerSchwammerl` from HACS.
-5. Add the dashboard resource:
-   - URL: `/hacsfiles/<your-repo-name>/power-schwammerl.js`
+5. HACS should auto-register the dashboard resource in storage mode.
+6. If your dashboard is in YAML mode or auto-registration is disabled, add this resource manually:
+   - URL: `/hacsfiles/<your-repository-name>/power-schwammerl.js`
    - Type: `module`
 
 ## Installation (Manual)
@@ -164,11 +165,12 @@ decimals: 1
 
 ## Release for HACS
 
-To ship a HACS-friendly artifact (`power-schwammerl.js`):
+To ship a HACS-friendly artifact (`power-schwammerl.js` in repository root):
 
-1. Create and push a tag such as `v0.1.0`.
-2. Create a GitHub Release for that tag.
-3. The included release workflow builds and uploads the card bundle as a release asset.
+1. Run `npm run build:hacs` and commit updated `power-schwammerl.js`.
+2. Create and push a tag such as `v0.1.0`.
+3. Create a GitHub Release for that tag.
+4. The included release workflow uploads `power-schwammerl.js` as a release asset.
 
 ## License
 

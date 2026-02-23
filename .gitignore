@@ -3,3 +3,5 @@ dist
 .vscode
 .DS_Store
 *.log
+Bildschirmfoto*.png
+converted image*.png
