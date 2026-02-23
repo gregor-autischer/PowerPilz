@@ -95,6 +95,14 @@ interface EnergySubBlockEntry {
   value: number | null;
 }
 
+interface SubNodeConnectorSegment {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  node: "solar" | "home";
+}
+
 interface PowerSchwammerlEnergyCardConfig extends LovelaceCardConfig {
   type: "custom:power-schwammerl-energy-card";
   name?: string;
@@ -197,10 +205,14 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
   @state()
   private _showSubBlocks = false;
 
+  @state()
+  private _subNodeConnectorSegments: SubNodeConnectorSegment[] = [];
+
   private _trendRefreshTimer?: number;
   private _trendRefreshInFlight = false;
   private _lastTrendRefresh = 0;
   private _trendCanvasRaf?: number;
+  private _subNodeConnectorRaf?: number;
   private _trendResizeObserver?: ResizeObserver;
   private _trendDrawConfig: Partial<
     Record<NodeKey, { currentValue: number | null; color: string; threshold: number | null; thresholdColor: string }>
@@ -342,6 +354,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
             ${this.renderFlowLine("horizontal left", gridFlow)}
             ${this.renderFlowLine("horizontal right", homeFlow)}
             ${this.renderFlowLine("vertical bottom", batteryFlow)}
+            ${this.renderSubNodeConnectors()}
 
             <div class="energy-value solar ${solar === null ? "missing" : ""}">
               ${this.renderTrend("solar", solar, Boolean(config.solar_trend), solarTrendColor, null, "")}
@@ -425,6 +438,30 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     const className =
       direction === "none" ? `flow-line ${baseClass}` : `flow-line ${baseClass} active ${direction}`;
     return html`<div class=${className} aria-hidden="true"></div>`;
+  }
+
+  private renderSubNodeConnectors(): TemplateResult | typeof nothing {
+    if (!this._showSubBlocks || this._subNodeConnectorSegments.length === 0) {
+      return nothing;
+    }
+
+    return html`
+      <div class="subnode-connectors" aria-hidden="true">
+        ${this._subNodeConnectorSegments.map((segment) =>
+          html`
+            <div
+              class="subnode-connector-segment ${segment.node}"
+              style=${styleMap({
+                left: `${segment.left}px`,
+                top: `${segment.top}px`,
+                width: `${segment.width}px`,
+                height: `${segment.height}px`
+              })}
+            ></div>
+          `
+        )}
+      </div>
+    `;
   }
 
   private collectSubBlocks(
@@ -761,6 +798,126 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     }
   }
 
+  private scheduleSubNodeConnectorDraw(): void {
+    if (this._subNodeConnectorRaf !== undefined) {
+      return;
+    }
+
+    this._subNodeConnectorRaf = window.requestAnimationFrame(() => {
+      this._subNodeConnectorRaf = undefined;
+      this.drawSubNodeConnectors();
+    });
+  }
+
+  private drawSubNodeConnectors(): void {
+    if (!this._showSubBlocks) {
+      if (this._subNodeConnectorSegments.length > 0) {
+        this._subNodeConnectorSegments = [];
+      }
+      return;
+    }
+
+    const grid = this.renderRoot.querySelector<HTMLElement>(".energy-grid");
+    const homeNode = this.renderRoot.querySelector<HTMLElement>(".energy-value.home");
+    const solarNode = this.renderRoot.querySelector<HTMLElement>(".energy-value.solar");
+    if (!grid || !homeNode || !solarNode) {
+      if (this._subNodeConnectorSegments.length > 0) {
+        this._subNodeConnectorSegments = [];
+      }
+      return;
+    }
+
+    const gridRect = grid.getBoundingClientRect();
+    const homeRect = homeNode.getBoundingClientRect();
+    const solarRect = solarNode.getBoundingClientRect();
+    const homeCenterX = homeRect.left + (homeRect.width / 2);
+    const solarCenterY = solarRect.top + (solarRect.height / 2);
+
+    const toLocalX = (x: number): number => x - gridRect.left;
+    const toLocalY = (y: number): number => y - gridRect.top;
+    const round = (value: number): number => Math.round(value * 10) / 10;
+    const segments: SubNodeConnectorSegment[] = [];
+
+    const pushHorizontal = (x1: number, x2: number, y: number, node: "solar" | "home"): void => {
+      const left = Math.min(x1, x2);
+      const width = Math.abs(x2 - x1);
+      if (width <= 0.5) {
+        return;
+      }
+      segments.push({
+        node,
+        left: round(left),
+        top: round(y - 1),
+        width: round(width),
+        height: 2
+      });
+    };
+
+    const pushVertical = (y1: number, y2: number, x: number, node: "solar" | "home"): void => {
+      const top = Math.min(y1, y2);
+      const height = Math.abs(y2 - y1);
+      if (height <= 0.5) {
+        return;
+      }
+      segments.push({
+        node,
+        left: round(x - 1),
+        top: round(top),
+        width: 2,
+        height: round(height)
+      });
+    };
+
+    this.renderRoot.querySelectorAll<HTMLElement>(".energy-sub-value.home-sub").forEach((subNode) => {
+      const rect = subNode.getBoundingClientRect();
+      const centerY = rect.top + (rect.height / 2);
+      const startX = (rect.left + (rect.width / 2)) < homeCenterX ? rect.right : rect.left;
+      const startY = centerY;
+      const endY = centerY < homeRect.top
+        ? homeRect.top
+        : centerY > homeRect.bottom
+          ? homeRect.bottom
+          : centerY;
+      const x = toLocalX(homeCenterX);
+      const y1 = toLocalY(startY);
+      const y2 = toLocalY(endY);
+      const sx = toLocalX(startX);
+      pushHorizontal(sx, x, y1, "home");
+      pushVertical(y1, y2, x, "home");
+    });
+
+    this.renderRoot.querySelectorAll<HTMLElement>(".energy-sub-value.solar-sub").forEach((subNode) => {
+      const rect = subNode.getBoundingClientRect();
+      const centerX = rect.left + (rect.width / 2);
+      const startY = (rect.top + (rect.height / 2)) < solarCenterY ? rect.bottom : rect.top;
+      const startX = centerX;
+      const endX = centerX < solarRect.left
+        ? solarRect.left
+        : centerX > solarRect.right
+          ? solarRect.right
+          : centerX;
+      const y = toLocalY(solarCenterY);
+      const x1 = toLocalX(startX);
+      const x2 = toLocalX(endX);
+      const sy = toLocalY(startY);
+      pushVertical(sy, y, x1, "solar");
+      pushHorizontal(x1, x2, y, "solar");
+    });
+
+    const same =
+      segments.length === this._subNodeConnectorSegments.length
+      && segments.every((segment, index) =>
+        segment.node === this._subNodeConnectorSegments[index]?.node
+        && segment.left === this._subNodeConnectorSegments[index]?.left
+        && segment.top === this._subNodeConnectorSegments[index]?.top
+        && segment.width === this._subNodeConnectorSegments[index]?.width
+        && segment.height === this._subNodeConnectorSegments[index]?.height
+      );
+    if (!same) {
+      this._subNodeConnectorSegments = segments;
+    }
+  }
+
   private syncTrendResizeObserver(): void {
     if (typeof ResizeObserver === "undefined") {
       return;
@@ -769,6 +926,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     if (!this._trendResizeObserver) {
       this._trendResizeObserver = new ResizeObserver(() => {
         this.updateSubBlockVisibility();
+        this.scheduleSubNodeConnectorDraw();
         this.scheduleTrendCanvasDraw();
       });
     }
@@ -1105,6 +1263,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     void this.updateComplete.then(() => {
       this.syncTrendResizeObserver();
       this.updateSubBlockVisibility();
+      this.scheduleSubNodeConnectorDraw();
       this.scheduleTrendCanvasDraw();
     });
   }
@@ -1117,6 +1276,10 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     if (this._trendCanvasRaf !== undefined) {
       window.cancelAnimationFrame(this._trendCanvasRaf);
       this._trendCanvasRaf = undefined;
+    }
+    if (this._subNodeConnectorRaf !== undefined) {
+      window.cancelAnimationFrame(this._subNodeConnectorRaf);
+      this._subNodeConnectorRaf = undefined;
     }
     if (this._trendResizeObserver) {
       this._trendResizeObserver.disconnect();
@@ -1133,6 +1296,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     }
     this.syncTrendResizeObserver();
     this.updateSubBlockVisibility();
+    this.scheduleSubNodeConnectorDraw();
     this.scheduleTrendCanvasDraw();
   }
 
@@ -1579,7 +1743,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       aspect-ratio: 1 / 1;
       min-height: 266px;
       border-radius: var(--control-border-radius);
-      padding: var(--spacing);
+      padding: 0;
       background: transparent;
       box-sizing: border-box;
     }
@@ -1665,6 +1829,25 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
 
     .energy-value.missing .energy-number {
       color: var(--disabled-text-color);
+    }
+
+    .subnode-connectors {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .subnode-connector-segment {
+      position: absolute;
+      background: color-mix(
+        in srgb,
+        var(--primary-text-color) 34%,
+        var(--ha-card-background, var(--card-background-color, white))
+      );
+      border-radius: 999px;
     }
 
     .energy-sub-value {
@@ -1937,7 +2120,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       .energy-grid {
         min-height: 234px;
         gap: 3px;
-        padding: 6px;
+        padding: 0;
       }
 
       .energy-value {
@@ -1962,7 +2145,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       .energy-grid {
         min-height: 202px;
         gap: 2px;
-        padding: 2px;
+        padding: 0;
       }
 
       .energy-value {
