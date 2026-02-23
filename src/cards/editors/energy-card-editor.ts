@@ -10,6 +10,7 @@ interface EnergyCardConfig extends LovelaceCardConfig {
   grid_secondary_visible?: boolean;
   battery_visible?: boolean;
   battery_secondary_visible?: boolean;
+  battery_dual_alignment?: "center" | "left" | "right";
   home_entity?: string;
   solar_entity?: string;
   grid_entity?: string;
@@ -62,6 +63,8 @@ interface EnergyCardConfig extends LovelaceCardConfig {
   battery_secondary_trend_color?: string | number[];
   battery_low_alert?: boolean;
   battery_low_threshold?: number;
+  battery_secondary_low_alert?: boolean;
+  battery_secondary_low_threshold?: number;
   flow_color?: string | number[];
   unit?: string;
   decimals?: number;
@@ -70,8 +73,9 @@ interface EnergyCardConfig extends LovelaceCardConfig {
 type HaFormSchema = Record<string, unknown>;
 const SOLAR_SUB_BLOCK_COUNT = 4;
 const HOME_SUB_BLOCK_COUNT = 8;
+const GRID_SUB_BLOCK_COUNT = 2;
 
-const subBlockFields = (prefix: "solar" | "home", index: number): HaFormSchema[] => {
+const subBlockFields = (prefix: "solar" | "home" | "grid" | "grid_secondary", index: number): HaFormSchema[] => {
   const slot = `${prefix}_sub_${index}`;
   return [
     { name: `${slot}_enabled`, selector: { boolean: {} } },
@@ -96,7 +100,7 @@ const subBlockFields = (prefix: "solar" | "home", index: number): HaFormSchema[]
 };
 
 const subBlockSchemas = (
-  prefix: "solar" | "home",
+  prefix: "solar" | "home" | "grid" | "grid_secondary",
   title: string,
   icon: string,
   count: number
@@ -128,6 +132,15 @@ const SCHEMA: HaFormSchema[] = [
       { name: "battery_visible", selector: { boolean: {} } },
       { name: "battery_secondary_visible", selector: { boolean: {} } }
     ]
+  },
+  {
+    name: "battery_dual_alignment",
+    selector: {
+      select: {
+        mode: "dropdown",
+        options: ["center", "left", "right"]
+      }
+    }
   },
   {
     type: "grid",
@@ -266,6 +279,11 @@ const SCHEMA: HaFormSchema[] = [
           {
             name: "battery_secondary_trend_color",
             selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
+          },
+          { name: "battery_secondary_low_alert", selector: { boolean: {} } },
+          {
+            name: "battery_secondary_low_threshold",
+            selector: { number: { mode: "box", min: 0, max: 100, step: 1, unit_of_measurement: "%" } }
           }
         ]
       },
@@ -287,6 +305,8 @@ const SCHEMA: HaFormSchema[] = [
     ]
   },
   subBlockSchemas("solar", "Solar sub blocks", "mdi:solar-power-variant", SOLAR_SUB_BLOCK_COUNT),
+  subBlockSchemas("grid", "Grid 1 sub blocks", "mdi:transmission-tower", GRID_SUB_BLOCK_COUNT),
+  subBlockSchemas("grid_secondary", "Grid 2 sub blocks", "mdi:transmission-tower", GRID_SUB_BLOCK_COUNT),
   subBlockSchemas("home", "Home sub blocks", "mdi:flash", HOME_SUB_BLOCK_COUNT),
   {
     type: "grid",
@@ -305,6 +325,7 @@ const LABELS: Record<string, string> = {
   grid_secondary_visible: "Show second grid node",
   battery_visible: "Show battery node",
   battery_secondary_visible: "Show second battery node",
+  battery_dual_alignment: "Dual battery alignment",
   home_entity: "Home entity",
   solar_entity: "Solar entity",
   grid_entity: "Grid entity",
@@ -355,6 +376,8 @@ const LABELS: Record<string, string> = {
   battery_secondary_trend_color: "Second battery trend color",
   battery_low_alert: "Low battery alert",
   battery_low_threshold: "Low battery threshold",
+  battery_secondary_low_alert: "Second low battery alert",
+  battery_secondary_low_threshold: "Second low battery threshold",
   core_icon: "Core icon",
   core_icon_color: "Core color",
   flow_color: "Flow color",
@@ -378,6 +401,7 @@ export class PowerSchwammerlEnergyCardEditor extends LitElement implements Lovel
       grid_secondary_visible: config.grid_secondary_visible ?? false,
       battery_visible: config.battery_visible ?? true,
       battery_secondary_visible: config.battery_secondary_visible ?? false,
+      battery_dual_alignment: config.battery_dual_alignment ?? "center",
       type: "custom:power-schwammerl-energy-card"
     };
   }
@@ -400,10 +424,16 @@ export class PowerSchwammerlEnergyCardEditor extends LitElement implements Lovel
 
   private computeLabel = (schema: { name?: string }): string => {
     const name = schema.name ?? "";
-    const subMatch = name.match(/^(solar|home)_sub_(\d+)_(enabled|entity|label|icon|icon_color)$/);
+    const subMatch = name.match(/^(solar|home|grid|grid_secondary)_sub_(\d+)_(enabled|entity|label|icon|icon_color)$/);
     if (subMatch) {
       const [, node, index, field] = subMatch;
-      const nodeLabel = node === "solar" ? "Solar" : "Home";
+      const nodeLabel = node === "solar"
+        ? "Solar"
+        : node === "home"
+          ? "Home"
+          : node === "grid"
+            ? "Grid 1"
+            : "Grid 2";
       const fieldLabels: Record<string, string> = {
         enabled: "Enabled",
         entity: "Entity",
