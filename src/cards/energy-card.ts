@@ -326,7 +326,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       rows: 4,
       min_columns: 6,
       max_columns: 12,
-      min_rows: 4,
+      min_rows: 3,
       max_rows: 8
     };
   }
@@ -2387,6 +2387,8 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     :host {
       display: block;
       container-type: inline-size;
+      height: 100%;
+      box-sizing: border-box;
       --spacing: var(--mush-spacing, 10px);
       --card-primary-font-size: var(--mush-card-primary-font-size, 14px);
       --card-secondary-font-size: var(--mush-card-secondary-font-size, 12px);
@@ -2417,8 +2419,9 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       display: flex;
       flex-direction: column;
       justify-content: var(--mush-layout-align, center);
-      height: auto;
+      height: 100%;
       background: var(--ha-card-background, var(--card-background-color, white));
+      overflow: hidden;
     }
 
     ha-card.interactive {
@@ -2431,7 +2434,14 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     }
 
     .energy-flow-container {
-      padding: var(--spacing);
+      height: 100%;
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding-inline: var(--spacing);
+      padding-block: 0;
+      box-sizing: border-box;
     }
 
     .energy-grid {
@@ -2442,7 +2452,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       gap: 4px;
       aspect-ratio: var(--grid-aspect, 1 / 1);
       width: min(100%, calc((100% * var(--grid-columns, 6)) / 6));
-      min-height: calc(266px * var(--grid-rows, 6) / 6);
+      min-height: 0;
       border-radius: var(--control-border-radius);
       padding: 0;
       background: transparent;
@@ -2820,7 +2830,6 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
 
     @container (max-width: 520px) {
       .energy-grid {
-        min-height: calc(234px * var(--grid-rows, 6) / 6);
         gap: 3px;
         padding: 0;
       }
@@ -2845,7 +2854,6 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
 
     @container (max-width: 380px) {
       .energy-grid {
-        min-height: calc(202px * var(--grid-rows, 6) / 6);
         gap: 2px;
         padding: 0;
       }
