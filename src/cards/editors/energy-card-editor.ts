@@ -9,12 +9,15 @@ interface EnergyCardConfig extends LovelaceCardConfig {
   grid_visible?: boolean;
   grid_secondary_visible?: boolean;
   battery_visible?: boolean;
+  battery_secondary_visible?: boolean;
   home_entity?: string;
   solar_entity?: string;
   grid_entity?: string;
   grid_secondary_entity?: string;
   battery_entity?: string;
   battery_percentage_entity?: string;
+  battery_secondary_entity?: string;
+  battery_secondary_percentage_entity?: string;
   solar_sub_enabled?: boolean;
   solar_sub_entity?: string;
   solar_sub_label?: string;
@@ -29,29 +32,34 @@ interface EnergyCardConfig extends LovelaceCardConfig {
   solar_label?: string;
   home_label?: string;
   battery_label?: string;
+  battery_secondary_label?: string;
   grid_secondary_label?: string;
   solar_icon?: string;
   grid_icon?: string;
   grid_secondary_icon?: string;
   home_icon?: string;
   battery_icon?: string;
+  battery_secondary_icon?: string;
   core_icon?: string;
   solar_icon_color?: string | number[];
   grid_icon_color?: string | number[];
   grid_secondary_icon_color?: string | number[];
   home_icon_color?: string | number[];
   battery_icon_color?: string | number[];
+  battery_secondary_icon_color?: string | number[];
   core_icon_color?: string | number[];
   solar_trend?: boolean;
   grid_trend?: boolean;
   grid_secondary_trend?: boolean;
   home_trend?: boolean;
   battery_trend?: boolean;
+  battery_secondary_trend?: boolean;
   solar_trend_color?: string | number[];
   grid_trend_color?: string | number[];
   grid_secondary_trend_color?: string | number[];
   home_trend_color?: string | number[];
   battery_trend_color?: string | number[];
+  battery_secondary_trend_color?: string | number[];
   battery_low_alert?: boolean;
   battery_low_threshold?: number;
   flow_color?: string | number[];
@@ -117,7 +125,8 @@ const SCHEMA: HaFormSchema[] = [
       { name: "solar_visible", selector: { boolean: {} } },
       { name: "grid_visible", selector: { boolean: {} } },
       { name: "grid_secondary_visible", selector: { boolean: {} } },
-      { name: "battery_visible", selector: { boolean: {} } }
+      { name: "battery_visible", selector: { boolean: {} } },
+      { name: "battery_secondary_visible", selector: { boolean: {} } }
     ]
   },
   {
@@ -134,10 +143,18 @@ const SCHEMA: HaFormSchema[] = [
     schema: [
       { name: "grid_entity", selector: { entity: { filter: { domain: "sensor" } } } },
       { name: "grid_secondary_entity", selector: { entity: { filter: { domain: "sensor" } } } },
-      { name: "battery_entity", selector: { entity: { filter: { domain: "sensor" } } } }
+      { name: "battery_entity", selector: { entity: { filter: { domain: "sensor" } } } },
+      { name: "battery_secondary_entity", selector: { entity: { filter: { domain: "sensor" } } } }
     ]
   },
-  { name: "battery_percentage_entity", selector: { entity: { filter: { domain: "sensor" } } } },
+  {
+    type: "grid",
+    name: "",
+    schema: [
+      { name: "battery_percentage_entity", selector: { entity: { filter: { domain: "sensor" } } } },
+      { name: "battery_secondary_percentage_entity", selector: { entity: { filter: { domain: "sensor" } } } }
+    ]
+  },
   {
     type: "expandable",
     name: "",
@@ -239,6 +256,23 @@ const SCHEMA: HaFormSchema[] = [
         type: "grid",
         name: "",
         schema: [
+          { name: "battery_secondary_label", selector: { text: {} } },
+          { name: "battery_secondary_icon", selector: { icon: {} }, context: { icon_entity: "battery_secondary_entity" } },
+          {
+            name: "battery_secondary_icon_color",
+            selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+          },
+          { name: "battery_secondary_trend", selector: { boolean: {} } },
+          {
+            name: "battery_secondary_trend_color",
+            selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
+          }
+        ]
+      },
+      {
+        type: "grid",
+        name: "",
+        schema: [
           { name: "core_icon", selector: { icon: {} }, context: { icon_entity: "home_entity" } },
           {
             name: "core_icon_color",
@@ -270,12 +304,15 @@ const LABELS: Record<string, string> = {
   grid_visible: "Show grid node",
   grid_secondary_visible: "Show second grid node",
   battery_visible: "Show battery node",
+  battery_secondary_visible: "Show second battery node",
   home_entity: "Home entity",
   solar_entity: "Solar entity",
   grid_entity: "Grid entity",
   grid_secondary_entity: "Second grid entity",
   battery_entity: "Battery entity",
   battery_percentage_entity: "Battery percentage entity",
+  battery_secondary_entity: "Second battery entity",
+  battery_secondary_percentage_entity: "Second battery percentage entity",
   solar_sub_enabled: "Enable solar sub block",
   solar_sub_entity: "Solar sub entity",
   solar_sub_label: "Solar sub label",
@@ -291,6 +328,7 @@ const LABELS: Record<string, string> = {
   grid_label: "Grid label",
   grid_secondary_label: "Second grid label",
   battery_label: "Battery label",
+  battery_secondary_label: "Second battery label",
   solar_icon: "Solar icon",
   solar_icon_color: "Solar color",
   solar_trend: "Solar trend",
@@ -311,6 +349,10 @@ const LABELS: Record<string, string> = {
   battery_icon_color: "Battery color",
   battery_trend: "Battery trend",
   battery_trend_color: "Battery trend color",
+  battery_secondary_icon: "Second battery icon",
+  battery_secondary_icon_color: "Second battery color",
+  battery_secondary_trend: "Second battery trend",
+  battery_secondary_trend_color: "Second battery trend color",
   battery_low_alert: "Low battery alert",
   battery_low_threshold: "Low battery threshold",
   core_icon: "Core icon",
@@ -335,6 +377,7 @@ export class PowerSchwammerlEnergyCardEditor extends LitElement implements Lovel
       grid_visible: config.grid_visible ?? true,
       grid_secondary_visible: config.grid_secondary_visible ?? false,
       battery_visible: config.battery_visible ?? true,
+      battery_secondary_visible: config.battery_secondary_visible ?? false,
       type: "custom:power-schwammerl-energy-card"
     };
   }

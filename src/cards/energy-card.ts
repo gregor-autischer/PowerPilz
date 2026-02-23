@@ -14,7 +14,7 @@ import "./editors/energy-card-editor";
 
 type FlowDirection = "none" | "forward" | "backward";
 type TapActionType = "none" | "navigate" | "more-info";
-type NodeKey = "solar" | "grid" | "grid_secondary" | "home" | "battery";
+type NodeKey = "solar" | "grid" | "grid_secondary" | "home" | "battery" | "battery_secondary";
 
 const EPSILON = 0.01;
 const DEFAULT_DECIMALS = 1;
@@ -126,6 +126,7 @@ interface PowerSchwammerlEnergyCardConfig extends LovelaceCardConfig {
   grid_visible?: boolean;
   grid_secondary_visible?: boolean;
   battery_visible?: boolean;
+  battery_secondary_visible?: boolean;
   home_entity?: string;
   consumption_entity?: string;
   solar_entity?: string;
@@ -134,6 +135,8 @@ interface PowerSchwammerlEnergyCardConfig extends LovelaceCardConfig {
   grid_secondary_entity?: string;
   battery_entity?: string;
   battery_percentage_entity?: string;
+  battery_secondary_entity?: string;
+  battery_secondary_percentage_entity?: string;
   solar_sub_enabled?: boolean;
   solar_sub_entity?: string;
   solar_sub_label?: string;
@@ -149,28 +152,33 @@ interface PowerSchwammerlEnergyCardConfig extends LovelaceCardConfig {
   solar_label?: string;
   home_label?: string;
   battery_label?: string;
+  battery_secondary_label?: string;
   solar_icon?: string;
   grid_icon?: string;
   grid_secondary_icon?: string;
   home_icon?: string;
   battery_icon?: string;
+  battery_secondary_icon?: string;
   core_icon?: string;
   solar_icon_color?: string | number[];
   grid_icon_color?: string | number[];
   grid_secondary_icon_color?: string | number[];
   home_icon_color?: string | number[];
   battery_icon_color?: string | number[];
+  battery_secondary_icon_color?: string | number[];
   core_icon_color?: string | number[];
   solar_trend?: boolean;
   grid_trend?: boolean;
   grid_secondary_trend?: boolean;
   home_trend?: boolean;
   battery_trend?: boolean;
+  battery_secondary_trend?: boolean;
   solar_trend_color?: string | number[];
   grid_trend_color?: string | number[];
   grid_secondary_trend_color?: string | number[];
   home_trend_color?: string | number[];
   battery_trend_color?: string | number[];
+  battery_secondary_trend_color?: string | number[];
   battery_low_alert?: boolean;
   battery_low_threshold?: number;
   flow_color?: string | number[];
@@ -214,6 +222,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       grid_visible: true,
       grid_secondary_visible: false,
       battery_visible: true,
+      battery_secondary_visible: false,
       home_entity: homeEntity,
       solar_entity: solarEntity,
       grid_entity: gridEntity,
@@ -264,6 +273,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       grid_visible: config.grid_visible ?? true,
       grid_secondary_visible: config.grid_secondary_visible ?? false,
       battery_visible: config.battery_visible ?? true,
+      battery_secondary_visible: config.battery_secondary_visible ?? false,
       home_entity: homeEntity,
       solar_entity: config.solar_entity ?? config.production_entity,
       solar_sub_enabled: config.solar_sub_enabled ?? false,
@@ -277,10 +287,12 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       solar_label: config.solar_label ?? "Solar",
       home_label: config.home_label ?? "Home",
       battery_label: config.battery_label ?? "Battery",
+      battery_secondary_label: config.battery_secondary_label ?? "Battery 2",
       solar_icon: config.solar_icon ?? "mdi:weather-sunny",
       grid_icon: config.grid_icon ?? "mdi:transmission-tower",
       grid_secondary_icon: config.grid_secondary_icon ?? "mdi:transmission-tower",
       home_icon: config.home_icon ?? "mdi:home-lightning-bolt",
+      battery_secondary_icon: config.battery_secondary_icon ?? "mdi:battery-outline",
       core_icon: config.core_icon ?? "mdi:home",
       core_icon_color: config.core_icon_color,
       solar_trend: config.solar_trend ?? false,
@@ -288,6 +300,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       grid_secondary_trend: config.grid_secondary_trend ?? false,
       home_trend: config.home_trend ?? false,
       battery_trend: config.battery_trend ?? false,
+      battery_secondary_trend: config.battery_secondary_trend ?? false,
       battery_low_alert: config.battery_low_alert ?? false,
       battery_low_threshold: this.normalizeBatteryThreshold(config.battery_low_threshold),
       flow_color: config.flow_color,
@@ -333,6 +346,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     const gridVisible = config.grid_visible !== false;
     const gridSecondaryVisible = gridVisible && config.grid_secondary_visible === true;
     const batteryVisible = config.battery_visible !== false;
+    const batterySecondaryVisible = batteryVisible && config.battery_secondary_visible === true;
 
     const home = readNumber(this.hass, config.home_entity);
     const solar = solarVisible ? readNumber(this.hass, config.solar_entity) : null;
@@ -340,6 +354,8 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     const gridSecondary = gridSecondaryVisible ? readNumber(this.hass, config.grid_secondary_entity) : null;
     const battery = batteryVisible ? readNumber(this.hass, config.battery_entity) : null;
     const batteryPercentage = readNumber(this.hass, config.battery_percentage_entity);
+    const batterySecondary = batterySecondaryVisible ? readNumber(this.hass, config.battery_secondary_entity) : null;
+    const batterySecondaryPercentage = readNumber(this.hass, config.battery_secondary_percentage_entity);
 
     const fallbackUnit = config.unit ?? readUnit(this.hass, config.home_entity) ?? "kW";
     const solarUnit = config.unit ?? readUnit(this.hass, config.solar_entity) ?? fallbackUnit;
@@ -347,6 +363,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     const gridUnit = config.unit ?? readUnit(this.hass, config.grid_entity) ?? fallbackUnit;
     const gridSecondaryUnit = config.unit ?? readUnit(this.hass, config.grid_secondary_entity) ?? gridUnit;
     const batteryUnit = config.unit ?? readUnit(this.hass, config.battery_entity) ?? fallbackUnit;
+    const batterySecondaryUnit = config.unit ?? readUnit(this.hass, config.battery_secondary_entity) ?? batteryUnit;
 
     const solarFlow = this.toUnidirectionalFlow(solar);
     const homeFlow = this.toUnidirectionalFlow(home);
@@ -356,6 +373,10 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       ? "none"
       : this.toBidirectionalFlow((grid ?? 0) + (gridSecondary ?? 0));
     const batteryFlow = this.toBidirectionalFlow(battery);
+    const batterySecondaryFlow = this.toBidirectionalFlow(batterySecondary);
+    const batteryCombinedFlow = (battery === null && batterySecondary === null)
+      ? "none"
+      : this.toBidirectionalFlow((battery ?? 0) + (batterySecondary ?? 0));
     const tapAction = this.resolveTapAction(config);
     const interactive = tapAction.action !== "none";
 
@@ -397,13 +418,22 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     const gridSecondaryPlacementBase = gridSecondaryVisible
       ? { col: 1, row: 4, colSpan: 2, rowSpan: 2 }
       : null;
+    const batteryPlacementBase = batteryVisible
+      ? { col: batterySecondaryVisible ? 2 : 3, row: 5, colSpan: 2, rowSpan: 2 }
+      : null;
+    const batterySecondaryPlacementBase = batterySecondaryVisible
+      ? { col: 4, row: 5, colSpan: 2, rowSpan: 2 }
+      : null;
     const layoutBounds = this.computeGridBounds(
       solarVisible,
       gridVisible,
       gridSecondaryVisible,
       batteryVisible,
+      batterySecondaryVisible,
       gridPlacementBase,
       gridSecondaryPlacementBase,
+      batteryPlacementBase,
+      batterySecondaryPlacementBase,
       solarSubBlocks,
       visibleHomeSubBlocks,
       solarSubPositions,
@@ -415,8 +445,9 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       ? this.normalizePlacement(gridSecondaryPlacementBase, layoutBounds)
       : null;
     const homePlacement = this.normalizePlacement({ col: 5, row: 3, colSpan: 2, rowSpan: 2 }, layoutBounds);
-    const batteryPlacement = batteryVisible
-      ? this.normalizePlacement({ col: 3, row: 5, colSpan: 2, rowSpan: 2 }, layoutBounds)
+    const batteryPlacement = batteryPlacementBase ? this.normalizePlacement(batteryPlacementBase, layoutBounds) : null;
+    const batterySecondaryPlacement = batterySecondaryPlacementBase
+      ? this.normalizePlacement(batterySecondaryPlacementBase, layoutBounds)
       : null;
     const corePlacement = this.normalizePlacement({ col: 3, row: 3, colSpan: 2, rowSpan: 2 }, layoutBounds);
     const normalizedSolarSubPositions = this.normalizePositions(solarSubPositions, layoutBounds);
@@ -427,6 +458,18 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     const batteryIsLow = batteryLowAlertEnabled && batteryPercentage !== null && batteryPercentage <= batteryLowThreshold;
     const batteryIconStyle = this.iconColorStyle(batteryIsLow ? "red" : config.battery_icon_color);
     const batteryIcon = this.batteryIcon(batteryPercentage, battery, config.battery_icon);
+    const batterySecondaryIsLow =
+      batteryLowAlertEnabled
+      && batterySecondaryPercentage !== null
+      && batterySecondaryPercentage <= batteryLowThreshold;
+    const batterySecondaryIconStyle = this.iconColorStyle(
+      batterySecondaryIsLow ? "red" : config.battery_secondary_icon_color
+    );
+    const batterySecondaryIcon = this.batteryIcon(
+      batterySecondaryPercentage,
+      batterySecondary,
+      config.battery_secondary_icon
+    );
 
     const flowRgb = this.toRgbCss(config.flow_color) ?? DEFAULT_NEUTRAL_RGB;
     const flowStyle = { "--flow-color-rgb": flowRgb };
@@ -437,12 +480,18 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     const gridSecondaryTrendColor = this.resolveColor(config.grid_secondary_trend_color, defaultTrendColor);
     const homeTrendColor = this.resolveColor(config.home_trend_color, defaultTrendColor);
     const batteryTrendColor = this.resolveColor(config.battery_trend_color, defaultTrendColor);
+    const batterySecondaryTrendColor = this.resolveColor(config.battery_secondary_trend_color, defaultTrendColor);
     const batteryTrendAlertColor = this.resolveColor("red");
     const batteryTrendThreshold = batteryLowAlertEnabled
       && (Boolean(config.battery_percentage_entity) || batteryPercentage !== null)
       ? batteryLowThreshold
       : null;
     const batteryTrendValue = batteryPercentage ?? battery;
+    const batterySecondaryTrendThreshold = batteryLowAlertEnabled
+      && (Boolean(config.battery_secondary_percentage_entity) || batterySecondaryPercentage !== null)
+      ? batteryLowThreshold
+      : null;
+    const batterySecondaryTrendValue = batterySecondaryPercentage ?? batterySecondary;
 
     const flowSegments = this.buildFlowSegments(
       homePlacement,
@@ -453,10 +502,13 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
         ...(gridSecondaryPlacement ? [{ placement: gridSecondaryPlacement, direction: gridSecondaryFlow }] : [])
       ],
       gridCombinedFlow,
-      batteryPlacement,
+      [
+        ...(batteryPlacement ? [{ placement: batteryPlacement, direction: batteryFlow }] : []),
+        ...(batterySecondaryPlacement ? [{ placement: batterySecondaryPlacement, direction: batterySecondaryFlow }] : [])
+      ],
+      batteryCombinedFlow,
       solarFlow,
       homeFlow,
-      batteryFlow,
       layoutBounds
     );
     return html`
@@ -611,6 +663,42 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
                       </div>
                       <div class="energy-number">${this.formatValue(battery, batteryUnit, decimals)}</div>
                       <div class="energy-label">${config.battery_label}</div>
+                    </div>
+                  </div>
+                `
+              : nothing}
+
+            ${batterySecondaryVisible && batterySecondaryPlacement
+              ? html`
+                  <div
+                    class="energy-value battery-secondary ${batterySecondary === null ? "missing" : ""}"
+                    style=${styleMap(this.gridPlacementStyle(batterySecondaryPlacement))}
+                  >
+                    ${this.renderTrend(
+                      "battery_secondary",
+                      batterySecondaryTrendValue,
+                      Boolean(config.battery_secondary_trend),
+                      batterySecondaryTrendColor,
+                      batterySecondaryTrendThreshold,
+                      batteryTrendAlertColor
+                    )}
+                    <div class="energy-content">
+                      <div class="battery-top-row">
+                        <ha-icon
+                          class="energy-icon"
+                          .icon=${batterySecondaryIcon}
+                          style=${styleMap(batterySecondaryIconStyle)}
+                        ></ha-icon>
+                        ${batterySecondaryPercentage !== null
+                          ? html`
+                              <div class="battery-percentage ${batterySecondaryIsLow ? "alert" : ""}">
+                                ${this.formatBatteryPercentage(batterySecondaryPercentage)}
+                              </div>
+                            `
+                          : nothing}
+                      </div>
+                      <div class="energy-number">${this.formatValue(batterySecondary, batterySecondaryUnit, decimals)}</div>
+                      <div class="energy-label">${config.battery_secondary_label}</div>
                     </div>
                   </div>
                 `
@@ -813,8 +901,11 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     gridVisible: boolean,
     gridSecondaryVisible: boolean,
     batteryVisible: boolean,
+    batterySecondaryVisible: boolean,
     gridPlacementBase: GridPlacement | null,
     gridSecondaryPlacementBase: GridPlacement | null,
+    batteryPlacementBase: GridPlacement | null,
+    batterySecondaryPlacementBase: GridPlacement | null,
     solarSubBlocks: EnergySubBlockEntry[],
     homeSubBlocks: EnergySubBlockEntry[],
     solarSubPositions: Record<number, { row: number; col: number }>,
@@ -834,8 +925,11 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     if (gridSecondaryVisible && gridSecondaryPlacementBase) {
       placements.push(gridSecondaryPlacementBase);
     }
-    if (batteryVisible) {
-      placements.push({ col: 3, row: 5, colSpan: 2, rowSpan: 2 });
+    if (batteryVisible && batteryPlacementBase) {
+      placements.push(batteryPlacementBase);
+    }
+    if (batterySecondaryVisible && batterySecondaryPlacementBase) {
+      placements.push(batterySecondaryPlacementBase);
     }
 
     solarSubBlocks.forEach((entry) => {
@@ -883,10 +977,10 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     solarPlacement: GridPlacement | null,
     gridPlacements: Array<{ placement: GridPlacement; direction: FlowDirection }>,
     gridTrunkFlow: FlowDirection,
-    batteryPlacement: GridPlacement | null,
+    batteryPlacements: Array<{ placement: GridPlacement; direction: FlowDirection }>,
+    batteryTrunkFlow: FlowDirection,
     solarFlow: FlowDirection,
     homeFlow: FlowDirection,
-    batteryFlow: FlowDirection,
     bounds: GridBounds
   ): Array<{
     orientation: "horizontal" | "vertical";
@@ -970,9 +1064,25 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       });
     }
 
-    if (batteryPlacement) {
-      const batteryCenter = this.placementCenter(batteryPlacement, bounds);
-      vertical(coreCenter.y, batteryCenter.y, coreCenter.x, batteryFlow);
+    if (batteryPlacements.length === 1) {
+      const [{ placement, direction }] = batteryPlacements;
+      const batteryCenter = this.placementCenter(placement, bounds);
+      vertical(coreCenter.y, batteryCenter.y, coreCenter.x, direction);
+    } else if (batteryPlacements.length >= 2) {
+      const centers = batteryPlacements
+        .map((entry) => ({
+          direction: entry.direction,
+          center: this.placementCenter(entry.placement, bounds)
+        }))
+        .sort((a, b) => a.center.y - b.center.y);
+      const topY = Math.min(...centers.map((entry) => entry.center.y));
+      const splitY = coreCenter.y + ((topY - coreCenter.y) * 0.55);
+
+      vertical(coreCenter.y, splitY, coreCenter.x, batteryTrunkFlow);
+      centers.forEach((entry) => {
+        horizontal(coreCenter.x, entry.center.x, splitY, entry.direction);
+        vertical(splitY, entry.center.y, entry.center.x, entry.direction);
+      });
     }
 
     return segments;
@@ -1412,7 +1522,14 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       const node = canvas.dataset.node;
       if (
         !node
-        || (node !== "solar" && node !== "grid" && node !== "grid_secondary" && node !== "home" && node !== "battery")
+        || (
+          node !== "solar"
+          && node !== "grid"
+          && node !== "grid_secondary"
+          && node !== "home"
+          && node !== "battery"
+          && node !== "battery_secondary"
+        )
       ) {
         return;
       }
@@ -1761,6 +1878,9 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     if (config.battery_trend) {
       nodes.push("battery");
     }
+    if (config.battery_secondary_visible && config.battery_secondary_trend) {
+      nodes.push("battery_secondary");
+    }
     return nodes;
   }
 
@@ -1776,6 +1896,8 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
         return config.home_entity;
       case "battery":
         return config.battery_percentage_entity ?? config.battery_entity;
+      case "battery_secondary":
+        return config.battery_secondary_percentage_entity ?? config.battery_secondary_entity;
       default:
         return undefined;
     }
