@@ -6,6 +6,7 @@ PowerSchwammerl is a Home Assistant Lovelace card bundle with a visual language 
 
 - `custom:power-schwammerl-energy-card`
 - `custom:power-schwammerl-graph-card`
+- `custom:power-schwammerl-graph-stack-card`
 - `custom:power-schwammerl-wallbox-card`
 
 ## Installation (HACS)
@@ -116,6 +117,31 @@ Graph card:
 
 ```yaml
 type: custom:power-schwammerl-graph-card
+legend_layout: row
+timeframe_hours: 24
+hover_enabled: true
+fill_area_enabled: true
+normalize_stack_to_percent: false
+line_thickness: 1.5
+clip_graph_to_labels: false
+entity_1: sensor.dev_home_power
+entity_1_enabled: true
+entity_1_show_icon: true
+entity_1_icon: mdi:chart-line
+entity_1_icon_color: state
+entity_1_trend_color: purple
+entity_2: sensor.dev_solar_power
+entity_2_enabled: true
+entity_2_show_icon: true
+entity_2_icon: mdi:chart-line-variant
+entity_2_trend_color: blue
+decimals: 1
+```
+
+Graph stack card:
+
+```yaml
+type: custom:power-schwammerl-graph-stack-card
 legend_layout: row
 timeframe_hours: 24
 hover_enabled: true

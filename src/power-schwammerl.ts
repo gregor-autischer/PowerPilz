@@ -1,5 +1,6 @@
 import "./cards/energy-card";
 import "./cards/graph-card";
+import "./cards/graph-stack-card";
 import "./cards/wallbox-card";
 
 declare global {
@@ -34,6 +35,12 @@ const cards = [
     type: "power-schwammerl-graph-card",
     name: "PowerSchwammerl Graph Card",
     description: "Mushroom-style trend card with full-card historical graph.",
+    preview: true
+  },
+  {
+    type: "power-schwammerl-graph-stack-card",
+    name: "PowerSchwammerl Graph Stack Card",
+    description: "Mushroom-style cumulative stacked trend card for up to four entities.",
     preview: true
   }
 ];

@@ -10,7 +10,7 @@ import type {
   LovelaceLayoutOptions
 } from "../types";
 import { readNumber, readUnit } from "../utils/entity";
-import "./editors/graph-card-editor";
+import "./editors/graph-stack-card-editor";
 
 const DEFAULT_DECIMALS = 1;
 const DEFAULT_TIMEFRAME_HOURS = 24;
@@ -66,6 +66,11 @@ interface TrendCanvasPoint {
   value: number;
 }
 
+interface TrendValueRange {
+  min: number;
+  max: number;
+}
+
 interface GraphSeriesEntry {
   slot: GraphSlot;
   entityId: string;
@@ -95,8 +100,8 @@ interface GraphDrawConfig {
   lineWidth: number;
 }
 
-interface PowerSchwammerlGraphCardConfig extends LovelaceCardConfig {
-  type: "custom:power-schwammerl-graph-card";
+interface PowerSchwammerlGraphStackCardConfig extends LovelaceCardConfig {
+  type: "custom:power-schwammerl-graph-stack-card";
   legend_layout?: GraphLegendLayout;
   timeframe_hours?: GraphTimeframeHours | number | string;
   unit?: string;
@@ -105,6 +110,7 @@ interface PowerSchwammerlGraphCardConfig extends LovelaceCardConfig {
   clip_graph_to_labels?: boolean;
   hover_enabled?: boolean;
   fill_area_enabled?: boolean;
+  normalize_stack_to_percent?: boolean;
 
   entity?: string;
   icon?: string;
@@ -140,13 +146,13 @@ interface PowerSchwammerlGraphCardConfig extends LovelaceCardConfig {
   entity_4_trend_color?: string | number[];
 }
 
-@customElement("power-schwammerl-graph-card")
-export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard {
+@customElement("power-schwammerl-graph-stack-card")
+export class PowerSchwammerlGraphStackCard extends LitElement implements LovelaceCard {
   public static async getConfigElement(): Promise<LovelaceCardEditor> {
-    return document.createElement("power-schwammerl-graph-card-editor") as LovelaceCardEditor;
+    return document.createElement("power-schwammerl-graph-stack-card-editor") as LovelaceCardEditor;
   }
 
-  public static async getStubConfig(hass?: HomeAssistant): Promise<PowerSchwammerlGraphCardConfig> {
+  public static async getStubConfig(hass?: HomeAssistant): Promise<PowerSchwammerlGraphStackCardConfig> {
     const states = hass?.states ?? {};
     const entityIds = Object.keys(states);
     const pick = (...candidates: string[]): string | undefined =>
@@ -162,11 +168,12 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
     const entity4 = pick("sensor.dev_battery_power", "sensor.battery_power");
 
     return {
-      type: "custom:power-schwammerl-graph-card",
+      type: "custom:power-schwammerl-graph-stack-card",
       legend_layout: "row",
       timeframe_hours: DEFAULT_TIMEFRAME_HOURS,
       hover_enabled: true,
       fill_area_enabled: true,
+      normalize_stack_to_percent: false,
       entity_1: entity1,
       entity_1_enabled: true,
       entity_1_show_icon: true,
@@ -195,7 +202,7 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
   public hass!: HomeAssistant;
 
   @state()
-  private _config?: PowerSchwammerlGraphCardConfig;
+  private _config?: PowerSchwammerlGraphStackCardConfig;
 
   @state()
   private _trendSeries: Partial<Record<GraphSlot, TrendPoint[]>> = {};
@@ -215,7 +222,7 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
   private _trendResizeObserver?: ResizeObserver;
   private _canvasColorContext?: CanvasRenderingContext2D | null;
 
-  public setConfig(config: PowerSchwammerlGraphCardConfig): void {
+  public setConfig(config: PowerSchwammerlGraphStackCardConfig): void {
     const decimals =
       typeof config.decimals === "number" && Number.isFinite(config.decimals)
         ? Math.min(3, Math.max(0, Math.round(config.decimals)))
@@ -227,13 +234,14 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
 
     this._config = {
       ...config,
-      type: "custom:power-schwammerl-graph-card",
+      type: "custom:power-schwammerl-graph-stack-card",
       legend_layout: this.normalizeLegendLayout(config.legend_layout),
       timeframe_hours: this.normalizeTimeframeHours(config.timeframe_hours),
       line_thickness: this.normalizeLineThickness(config.line_thickness),
       clip_graph_to_labels: config.clip_graph_to_labels ?? false,
       hover_enabled: config.hover_enabled ?? true,
       fill_area_enabled: config.fill_area_enabled ?? true,
+      normalize_stack_to_percent: config.normalize_stack_to_percent ?? false,
       entity_1: entity1,
       entity_1_enabled: config.entity_1_enabled ?? true,
       entity_1_show_icon: config.entity_1_show_icon ?? true,
@@ -291,7 +299,9 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
     const config = this._config;
     const decimals = config.decimals ?? DEFAULT_DECIMALS;
     const lineThickness = this.normalizeLineThickness(config.line_thickness);
+    const normalizeToPercent = config.normalize_stack_to_percent === true;
     const entries = this.collectSeriesEntries(config, decimals);
+    const displayEntries = this.withStackedCurrentValues(entries, normalizeToPercent);
     const legendLayout = this.normalizeLegendLayout(config.legend_layout);
     const hoverEnabled = config.hover_enabled !== false;
     const hoverState = this._hoverState;
@@ -337,12 +347,12 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
                 ? html`
                     <div class="state-item empty">
                       <div class="info">
-                        <div class="primary">Graph card</div>
+                        <div class="primary">Graph Stack card</div>
                         <div class="secondary">Select at least one entity</div>
                       </div>
                     </div>
                   `
-                : entries.map((entry) =>
+                : displayEntries.map((entry) =>
                     this.renderSeriesItem(
                       entry,
                       hoverState && hoverState.slot === entry.slot ? hoverState.value : null
@@ -379,7 +389,7 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
     `;
   }
 
-  private collectSeriesEntries(config: PowerSchwammerlGraphCardConfig, decimals: number): GraphSeriesEntry[] {
+  private collectSeriesEntries(config: PowerSchwammerlGraphStackCardConfig, decimals: number): GraphSeriesEntry[] {
     const entries: GraphSeriesEntry[] = [];
 
     for (let index = 1; index <= GRAPH_SLOT_COUNT; index += 1) {
@@ -416,7 +426,32 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
     return entries;
   }
 
-  private slotEntityId(slot: GraphSlot, config: PowerSchwammerlGraphCardConfig): string | undefined {
+  private withStackedCurrentValues(entries: GraphSeriesEntry[], normalizeToPercent: boolean): GraphSeriesEntry[] {
+    const total = entries.reduce((sum, entry) => sum + (entry.currentValue ?? 0), 0);
+    const totalValid = Number.isFinite(total) && Math.abs(total) > EPSILON;
+    let running = 0;
+    let hasAnyValue = false;
+    return entries.map((entry) => {
+      if (entry.currentValue !== null && Number.isFinite(entry.currentValue)) {
+        running += entry.currentValue;
+        hasAnyValue = true;
+      }
+
+      const stackedValue = hasAnyValue
+        ? normalizeToPercent
+          ? (totalValid ? (running / total) * 100 : 0)
+          : running
+        : null;
+      const unit = normalizeToPercent ? "%" : entry.unit;
+      return {
+        ...entry,
+        unit,
+        secondary: this.formatValue(stackedValue, unit, entry.decimals)
+      };
+    });
+  }
+
+  private slotEntityId(slot: GraphSlot, config: PowerSchwammerlGraphStackCardConfig): string | undefined {
     switch (slot) {
       case 1:
         return this.readConfigString(config.entity_1);
@@ -431,7 +466,7 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
     }
   }
 
-  private slotEnabled(slot: GraphSlot, config: PowerSchwammerlGraphCardConfig): boolean {
+  private slotEnabled(slot: GraphSlot, config: PowerSchwammerlGraphStackCardConfig): boolean {
     switch (slot) {
       case 1:
         return config.entity_1_enabled !== false;
@@ -446,7 +481,7 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
     }
   }
 
-  private slotShowIcon(slot: GraphSlot, config: PowerSchwammerlGraphCardConfig): boolean {
+  private slotShowIcon(slot: GraphSlot, config: PowerSchwammerlGraphStackCardConfig): boolean {
     switch (slot) {
       case 1:
         return config.entity_1_show_icon !== false;
@@ -461,7 +496,7 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
     }
   }
 
-  private slotIcon(slot: GraphSlot, config: PowerSchwammerlGraphCardConfig): string {
+  private slotIcon(slot: GraphSlot, config: PowerSchwammerlGraphStackCardConfig): string {
     switch (slot) {
       case 1:
         return config.entity_1_icon ?? "mdi:chart-line";
@@ -476,7 +511,7 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
     }
   }
 
-  private slotIconColor(slot: GraphSlot, config: PowerSchwammerlGraphCardConfig): string | number[] | undefined {
+  private slotIconColor(slot: GraphSlot, config: PowerSchwammerlGraphStackCardConfig): string | number[] | undefined {
     switch (slot) {
       case 1:
         return config.entity_1_icon_color;
@@ -491,7 +526,7 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
     }
   }
 
-  private slotTrendColor(slot: GraphSlot, config: PowerSchwammerlGraphCardConfig): string | number[] | undefined {
+  private slotTrendColor(slot: GraphSlot, config: PowerSchwammerlGraphStackCardConfig): string | number[] | undefined {
     switch (slot) {
       case 1:
         return config.entity_1_trend_color;
@@ -548,7 +583,7 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
     return DEFAULT_TIMEFRAME_HOURS;
   }
 
-  private trendWindowMs(config?: PowerSchwammerlGraphCardConfig): number {
+  private trendWindowMs(config?: PowerSchwammerlGraphStackCardConfig): number {
     return this.normalizeTimeframeHours(config?.timeframe_hours) * 60 * 60 * 1000;
   }
 
@@ -673,15 +708,19 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
     return points;
   }
 
-  private toTrendCoordinates(points: TrendPoint[], windowMs: number): TrendCoordinate[] {
+  private toTrendCoordinates(
+    points: TrendPoint[],
+    windowMs: number,
+    valueRange?: TrendValueRange | null
+  ): TrendCoordinate[] {
     const now = Date.now();
     const start = now - windowMs;
     const xMin = 0;
     const xMax = 100;
 
     const values = points.map((point) => point.value);
-    const min = Math.min(...values);
-    const max = Math.max(...values);
+    const min = valueRange?.min ?? Math.min(...values);
+    const max = valueRange?.max ?? Math.max(...values);
 
     if (!Number.isFinite(min) || !Number.isFinite(max)) {
       return [];
@@ -862,16 +901,24 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
     }
 
     const fillAreaEnabled = this._config?.fill_area_enabled !== false;
+    const normalizeToPercent = this._config?.normalize_stack_to_percent === true;
     const windowMs = this.trendWindowMs(this._config);
     const linePointsBySlot: Partial<Record<GraphSlot, TrendCanvasPoint[]>> = {};
+    const stackedSeriesBySlotRaw = this.buildStackedTrendSeries(windowMs);
+    const stackedSeriesBySlot = normalizeToPercent
+      ? this.normalizeStackedSeriesToPercent(stackedSeriesBySlotRaw)
+      : stackedSeriesBySlotRaw;
+    const stackedRange = normalizeToPercent
+      ? { min: 0, max: 100 }
+      : this.computeStackedValueRange(stackedSeriesBySlot);
     const drawOrder = [...this._drawConfigs].sort((left, right) => right.slot - left.slot);
     drawOrder.forEach((drawConfig) => {
-      const points = this.trendPoints(drawConfig.slot, drawConfig.currentValue);
+      const points = stackedSeriesBySlot[drawConfig.slot] ?? [];
       if (points.length < 2) {
         return;
       }
 
-      const coordinates = this.toTrendCoordinates(points, windowMs);
+      const coordinates = this.toTrendCoordinates(points, windowMs, stackedRange);
       if (coordinates.length < 2) {
         return;
       }
@@ -889,6 +936,204 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
     if (this._hoverState && !linePointsBySlot[this._hoverState.slot]) {
       this._hoverState = undefined;
     }
+  }
+
+  private buildStackedTrendSeries(windowMs: number): Partial<Record<GraphSlot, TrendPoint[]>> {
+    const seriesBySlot: Partial<Record<GraphSlot, TrendPoint[]>> = {};
+    const sourceOrder = [...this._drawConfigs].sort((left, right) => left.slot - right.slot);
+
+    let cumulative: TrendPoint[] | null = null;
+    sourceOrder.forEach((drawConfig) => {
+      const current = this.trendPoints(drawConfig.slot, drawConfig.currentValue);
+      if (current.length === 0) {
+        return;
+      }
+
+      const normalizedCurrent = this.normalizeTrendSeries(current, windowMs);
+      if (normalizedCurrent.length === 0) {
+        return;
+      }
+
+      const stacked = cumulative
+        ? this.sumTrendSeries(cumulative, normalizedCurrent)
+        : normalizedCurrent;
+      seriesBySlot[drawConfig.slot] = stacked;
+      cumulative = stacked;
+    });
+
+    return seriesBySlot;
+  }
+
+  private normalizeTrendSeries(points: TrendPoint[], windowMs: number): TrendPoint[] {
+    const cutoff = Date.now() - windowMs;
+    const sorted = [...points]
+      .filter((point) => Number.isFinite(point.ts) && Number.isFinite(point.value) && point.ts >= cutoff)
+      .sort((left, right) => left.ts - right.ts);
+    if (sorted.length === 0) {
+      return [];
+    }
+
+    const deduped: TrendPoint[] = [];
+    sorted.forEach((point) => {
+      const last = deduped[deduped.length - 1];
+      if (last && Math.abs(last.ts - point.ts) <= 0.5) {
+        deduped[deduped.length - 1] = point;
+      } else {
+        deduped.push(point);
+      }
+    });
+    return deduped;
+  }
+
+  private sumTrendSeries(base: TrendPoint[], add: TrendPoint[]): TrendPoint[] {
+    if (base.length === 0) {
+      return [...add];
+    }
+    if (add.length === 0) {
+      return [...base];
+    }
+
+    const timestamps = this.mergeTimestamps(base, add);
+    return timestamps.map((ts) => ({
+      ts,
+      value: this.interpolateTrendValue(base, ts) + this.interpolateTrendValue(add, ts)
+    }));
+  }
+
+  private mergeTimestamps(first: TrendPoint[], second: TrendPoint[]): number[] {
+    const merged: number[] = [];
+    let left = 0;
+    let right = 0;
+
+    const push = (value: number): void => {
+      const last = merged[merged.length - 1];
+      if (last === undefined || Math.abs(last - value) > 0.5) {
+        merged.push(value);
+      }
+    };
+
+    while (left < first.length || right < second.length) {
+      const leftValue = left < first.length ? first[left].ts : Number.POSITIVE_INFINITY;
+      const rightValue = right < second.length ? second[right].ts : Number.POSITIVE_INFINITY;
+      if (leftValue <= rightValue) {
+        push(leftValue);
+        left += 1;
+        if (Math.abs(leftValue - rightValue) <= 0.5) {
+          right += 1;
+        }
+      } else {
+        push(rightValue);
+        right += 1;
+      }
+    }
+
+    return merged;
+  }
+
+  private interpolateTrendValue(points: TrendPoint[], ts: number): number {
+    if (points.length === 0) {
+      return 0;
+    }
+
+    if (ts <= points[0].ts) {
+      return points[0].value;
+    }
+    const last = points[points.length - 1];
+    if (ts >= last.ts) {
+      return last.value;
+    }
+
+    let low = 0;
+    let high = points.length - 1;
+    while (low <= high) {
+      const middle = Math.floor((low + high) / 2);
+      const point = points[middle];
+      if (Math.abs(point.ts - ts) <= 0.5) {
+        return point.value;
+      }
+      if (point.ts < ts) {
+        low = middle + 1;
+      } else {
+        high = middle - 1;
+      }
+    }
+
+    const rightIndex = Math.max(1, Math.min(points.length - 1, low));
+    const leftPoint = points[rightIndex - 1];
+    const rightPoint = points[rightIndex];
+    const span = rightPoint.ts - leftPoint.ts;
+    if (Math.abs(span) <= EPSILON) {
+      return rightPoint.value;
+    }
+
+    const ratio = (ts - leftPoint.ts) / span;
+    return leftPoint.value + ((rightPoint.value - leftPoint.value) * ratio);
+  }
+
+  private computeStackedValueRange(
+    seriesBySlot: Partial<Record<GraphSlot, TrendPoint[]>>
+  ): TrendValueRange | null {
+    const values: number[] = [];
+    (Object.values(seriesBySlot) as TrendPoint[][]).forEach((series) => {
+      series.forEach((point) => values.push(point.value));
+    });
+
+    if (values.length === 0) {
+      return null;
+    }
+
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    if (!Number.isFinite(min) || !Number.isFinite(max)) {
+      return null;
+    }
+
+    return { min, max };
+  }
+
+  private normalizeStackedSeriesToPercent(
+    seriesBySlot: Partial<Record<GraphSlot, TrendPoint[]>>
+  ): Partial<Record<GraphSlot, TrendPoint[]>> {
+    const normalized: Partial<Record<GraphSlot, TrendPoint[]>> = {};
+    const slots = (Object.keys(seriesBySlot) as unknown[])
+      .map((value) => Number(value))
+      .filter((value): value is number => Number.isFinite(value) && value >= 1 && value <= GRAPH_SLOT_COUNT)
+      .sort((left, right) => left - right) as GraphSlot[];
+    if (slots.length === 0) {
+      return normalized;
+    }
+
+    const totalSlot = slots[slots.length - 1];
+    const totalSeries = seriesBySlot[totalSlot] ?? [];
+    if (totalSeries.length < 1) {
+      return normalized;
+    }
+
+    slots.forEach((slot) => {
+      const series = seriesBySlot[slot] ?? [];
+      if (series.length === 0) {
+        return;
+      }
+
+      normalized[slot] = series.map((point) => {
+        const total = this.interpolateTrendValue(totalSeries, point.ts);
+        if (!Number.isFinite(total) || Math.abs(total) <= EPSILON) {
+          return { ts: point.ts, value: 0 };
+        }
+
+        if (slot === totalSlot) {
+          return { ts: point.ts, value: 100 };
+        }
+
+        const percent = (point.value / total) * 100;
+        return {
+          ts: point.ts,
+          value: Math.max(0, Math.min(100, percent))
+        };
+      });
+    });
+
+    return normalized;
   }
 
   private prepareTrendCanvas(
@@ -1277,7 +1522,7 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
     }
   }
 
-  private enabledSlots(config: PowerSchwammerlGraphCardConfig): GraphSlot[] {
+  private enabledSlots(config: PowerSchwammerlGraphStackCardConfig): GraphSlot[] {
     const slots: GraphSlot[] = [];
     for (let index = 1; index <= GRAPH_SLOT_COUNT; index += 1) {
       const slot = index as GraphSlot;
@@ -1533,6 +1778,6 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
 
 declare global {
   interface HTMLElementTagNameMap {
-    "power-schwammerl-graph-card": PowerSchwammerlGraphCard;
+    "power-schwammerl-graph-stack-card": PowerSchwammerlGraphStackCard;
   }
 }
