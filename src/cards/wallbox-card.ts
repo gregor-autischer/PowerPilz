@@ -6,7 +6,9 @@ import type {
   HomeAssistant,
   LovelaceCard,
   LovelaceCardConfig,
-  LovelaceCardEditor
+  LovelaceCardEditor,
+  LovelaceGridOptions,
+  LovelaceLayoutOptions
 } from "../types";
 import { getEntity, readNumber, readState, readUnit } from "../utils/entity";
 import "./editors/wallbox-card-editor";
@@ -100,6 +102,9 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
   @property({ attribute: false })
   public hass!: HomeAssistant;
 
+  @property({ reflect: true, type: String })
+  public layout: string | undefined;
+
   @state()
   private _config?: PowerSchwammerlWallboxCardConfig;
 
@@ -121,7 +126,25 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
   }
 
   public getCardSize(): number {
-    return 3;
+    return 2;
+  }
+
+  public getGridOptions(): LovelaceGridOptions {
+    return {
+      columns: 6,
+      rows: 2,
+      min_columns: 4,
+      min_rows: 1,
+      max_rows: 3
+    };
+  }
+
+  // For HA < 2024.11
+  public getLayoutOptions(): LovelaceLayoutOptions {
+    return {
+      grid_columns: 2,
+      grid_rows: this.getCardSize()
+    };
   }
 
   protected render(): TemplateResult {
@@ -146,7 +169,7 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
     const actionIcon = isCharging ? "mdi:pause" : "mdi:play";
     const statusLabel = this.statusLabel(status, isCharging);
     const powerLabel = this.formatPower(power, powerUnit, config.decimals ?? 1);
-    const showModeSelector = Boolean(config.mode_entity) || modeOptions.length > 0;
+    const showModeSelector = this.showModeSelector(config, modeOptions);
     const modeDisabled = this._actionBusy || !config.mode_entity || modeOptions.length === 0;
     const selectedMode = modeValue || modeOptions[0] || "Mode";
     const modeMenuOpen = this._modeMenuOpen && !modeDisabled && modeOptions.length > 0;
@@ -253,6 +276,13 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
       return [current];
     }
     return [];
+  }
+
+  private showModeSelector(config: PowerSchwammerlWallboxCardConfig, modeOptions?: string[]): boolean {
+    if (Array.isArray(modeOptions)) {
+      return Boolean(config.mode_entity) || modeOptions.length > 0;
+    }
+    return Boolean(config.mode_entity) || (config.mode_options?.length ?? 0) > 0;
   }
 
   private statusLabel(status: string | undefined, charging: boolean): string {
@@ -539,6 +569,8 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
     :host {
       display: block;
       container-type: inline-size;
+      height: 100%;
+      box-sizing: border-box;
       --spacing: var(--mush-spacing, 10px);
       --card-primary-font-size: var(--mush-card-primary-font-size, 14px);
       --card-secondary-font-size: var(--mush-card-secondary-font-size, 12px);
@@ -567,7 +599,8 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
       flex-direction: column;
       justify-content: var(--mush-layout-align, center);
       box-sizing: border-box;
-      height: auto;
+      height: 100%;
+      overflow: hidden;
     }
 
     .container {
@@ -575,6 +608,8 @@ export class PowerSchwammerlWallboxCard extends LitElement implements LovelaceCa
       flex-direction: column;
       box-sizing: border-box;
       justify-content: space-between;
+      height: 100%;
+      min-height: 0;
     }
 
     .state-item {
