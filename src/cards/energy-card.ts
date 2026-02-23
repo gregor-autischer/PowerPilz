@@ -23,8 +23,10 @@ const TREND_REFRESH_MS = 5 * 60 * 1000;
 const SOLAR_SUB_BLOCK_SLOT_COUNT = 4;
 const HOME_SUB_BLOCK_SLOT_COUNT = 8;
 const GRID_SUB_BLOCK_SLOT_COUNT = 2;
-const SUB_BLOCKS_MIN_WIDTH = 400;
-const SUB_BLOCKS_MIN_HEIGHT = 300;
+const SUB_BLOCKS_MIN_COLUMNS = 12;
+const SUB_BLOCKS_MIN_ROWS = 7;
+const SUB_BLOCKS_FALLBACK_MIN_WIDTH = 400;
+const SUB_BLOCKS_FALLBACK_MIN_HEIGHT = 300;
 const DEFAULT_NEUTRAL_RGB = "var(--rgb-primary-text-color, 33, 33, 33)";
 const COLOR_RGB_FALLBACK: Record<string, string> = {
   red: "244, 67, 54",
@@ -1397,11 +1399,71 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       return;
     }
 
-    const rect = grid.getBoundingClientRect();
-    const shouldShow = rect.width >= SUB_BLOCKS_MIN_WIDTH && rect.height >= SUB_BLOCKS_MIN_HEIGHT;
-    if (shouldShow !== this._showSubBlocks) {
-      this._showSubBlocks = shouldShow;
+    const columns = this.findLayoutSpan("column");
+    const rows = this.findLayoutSpan("row");
+    const shouldShow =
+      columns !== null
+      && rows !== null
+      && columns >= SUB_BLOCKS_MIN_COLUMNS
+      && rows >= SUB_BLOCKS_MIN_ROWS;
+    const fallbackRect = grid.getBoundingClientRect();
+    const fallbackShouldShow =
+      fallbackRect.width >= SUB_BLOCKS_FALLBACK_MIN_WIDTH
+      && fallbackRect.height >= SUB_BLOCKS_FALLBACK_MIN_HEIGHT;
+    const resolvedShouldShow = (columns !== null && rows !== null) ? shouldShow : fallbackShouldShow;
+
+    if (resolvedShouldShow !== this._showSubBlocks) {
+      this._showSubBlocks = resolvedShouldShow;
     }
+  }
+
+  private findLayoutSpan(axis: "row" | "column"): number | null {
+    let node: HTMLElement | null = this;
+    while (node) {
+      const inlineSpan = this.parseGridSpanCandidates(
+        axis === "row"
+          ? [node.style.gridRowStart, node.style.gridRowEnd, node.style.gridRow]
+          : [node.style.gridColumnStart, node.style.gridColumnEnd, node.style.gridColumn]
+      );
+      if (inlineSpan !== null) {
+        return inlineSpan;
+      }
+
+      const computed = getComputedStyle(node);
+      const computedSpan = this.parseGridSpanCandidates(
+        axis === "row"
+          ? [computed.gridRowStart, computed.gridRowEnd, computed.gridRow]
+          : [computed.gridColumnStart, computed.gridColumnEnd, computed.gridColumn]
+      );
+      if (computedSpan !== null) {
+        return computedSpan;
+      }
+
+      node = node.parentElement;
+    }
+    return null;
+  }
+
+  private parseGridSpan(value: string | null | undefined): number | null {
+    if (!value) {
+      return null;
+    }
+    const match = value.match(/span\s+(\d+)/i);
+    if (!match) {
+      return null;
+    }
+    const span = Number.parseInt(match[1], 10);
+    return Number.isFinite(span) && span > 0 ? span : null;
+  }
+
+  private parseGridSpanCandidates(values: Array<string | null | undefined>): number | null {
+    for (const value of values) {
+      const parsed = this.parseGridSpan(value);
+      if (parsed !== null) {
+        return parsed;
+      }
+    }
+    return null;
   }
 
   private scheduleSubNodeConnectorDraw(): void {
@@ -2608,7 +2670,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       letter-spacing: var(--card-primary-letter-spacing);
       white-space: nowrap;
       overflow: hidden;
-      text-overflow: ellipsis;
+      text-overflow: clip;
       width: 100%;
     }
 
@@ -2621,7 +2683,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       letter-spacing: var(--card-secondary-letter-spacing);
       white-space: nowrap;
       overflow: hidden;
-      text-overflow: ellipsis;
+      text-overflow: clip;
       width: 100%;
     }
 
