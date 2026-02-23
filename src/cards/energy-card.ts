@@ -366,9 +366,30 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
     const coreIconStyle = this.iconShapeStyle(config.core_icon_color);
     const solarSubBlocks = solarVisible ? this.collectSubBlocks("solar", config) : [];
     const homeSubBlocks = this.collectSubBlocks("home", config);
+    const homeSubIndexes = new Set(homeSubBlocks.map((entry) => entry.index));
+    const solarSubIndexes = new Set(solarSubBlocks.map((entry) => entry.index));
+    const homeHas7And8 = homeSubIndexes.has(7) && homeSubIndexes.has(8);
+    const homeHasAny5To8 = [5, 6, 7, 8].some((index) => homeSubIndexes.has(index));
+    const solarHas1And2Only =
+      solarSubIndexes.has(1)
+      && solarSubIndexes.has(2)
+      && !solarSubIndexes.has(3)
+      && !solarSubIndexes.has(4);
+    const solarHas3And4 = solarSubIndexes.has(3) && solarSubIndexes.has(4);
+    const forceSolarSubnodesLeft =
+      gridSecondaryVisible
+      && (
+        (solarHas1And2Only && homeHas7And8)
+        || (solarHas3And4 && homeHasAny5To8)
+      );
+    const useDualGridSolarPlacement = gridSecondaryVisible && !forceSolarSubnodesLeft;
     const homeHasExtendedSubLayout = homeSubBlocks.some((entry) => entry.index >= 7);
     const homeSubPositions = this.homeSubPositions(homeHasExtendedSubLayout);
-    const solarSubPositions = this.solarSubPositions(homeHasExtendedSubLayout, gridSecondaryVisible);
+    const solarSubPositions = this.solarSubPositions(
+      homeHasExtendedSubLayout,
+      useDualGridSolarPlacement,
+      forceSolarSubnodesLeft
+    );
     const visibleHomeSubBlocks = homeSubBlocks.filter((entry) => entry.index <= (homeHasExtendedSubLayout ? 8 : 6));
     const gridPlacementBase = gridVisible
       ? { col: 1, row: gridSecondaryVisible ? 2 : 3, colSpan: 2, rowSpan: 2 }
@@ -706,7 +727,8 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
 
   private solarSubPositions(
     homeHasExtendedSubLayout: boolean,
-    useDualGridLayout = false
+    useDualGridLayout = false,
+    forceAllLeft = false
   ): Record<number, { row: number; col: number }> {
     if (useDualGridLayout) {
       return {
@@ -717,7 +739,7 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       };
     }
 
-    return homeHasExtendedSubLayout
+    return (homeHasExtendedSubLayout || forceAllLeft)
       ? {
           1: { row: 1, col: 2 },
           2: { row: 1, col: 1 },
