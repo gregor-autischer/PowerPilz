@@ -5,6 +5,9 @@ import type { HomeAssistant, LovelaceCardConfig, LovelaceCardEditor } from "../.
 interface EnergyCardConfig extends LovelaceCardConfig {
   type: "custom:power-schwammerl-energy-card";
   name?: string;
+  solar_visible?: boolean;
+  grid_visible?: boolean;
+  battery_visible?: boolean;
   home_entity?: string;
   solar_entity?: string;
   grid_entity?: string;
@@ -100,6 +103,15 @@ const subBlockSchemas = (
 
 const SCHEMA: HaFormSchema[] = [
   { name: "name", selector: { text: {} } },
+  {
+    type: "grid",
+    name: "",
+    schema: [
+      { name: "solar_visible", selector: { boolean: {} } },
+      { name: "grid_visible", selector: { boolean: {} } },
+      { name: "battery_visible", selector: { boolean: {} } }
+    ]
+  },
   {
     type: "grid",
     name: "",
@@ -228,6 +240,9 @@ const SCHEMA: HaFormSchema[] = [
 
 const LABELS: Record<string, string> = {
   name: "Name",
+  solar_visible: "Show solar node",
+  grid_visible: "Show grid node",
+  battery_visible: "Show battery node",
   home_entity: "Home entity",
   solar_entity: "Solar entity",
   grid_entity: "Grid entity",
@@ -283,6 +298,9 @@ export class PowerSchwammerlEnergyCardEditor extends LitElement implements Lovel
   public setConfig(config: EnergyCardConfig): void {
     this._config = {
       ...config,
+      solar_visible: config.solar_visible ?? true,
+      grid_visible: config.grid_visible ?? true,
+      battery_visible: config.battery_visible ?? true,
       type: "custom:power-schwammerl-energy-card"
     };
   }
