@@ -7,10 +7,12 @@ interface EnergyCardConfig extends LovelaceCardConfig {
   name?: string;
   solar_visible?: boolean;
   grid_visible?: boolean;
+  grid_secondary_visible?: boolean;
   battery_visible?: boolean;
   home_entity?: string;
   solar_entity?: string;
   grid_entity?: string;
+  grid_secondary_entity?: string;
   battery_entity?: string;
   battery_percentage_entity?: string;
   solar_sub_enabled?: boolean;
@@ -27,22 +29,27 @@ interface EnergyCardConfig extends LovelaceCardConfig {
   solar_label?: string;
   home_label?: string;
   battery_label?: string;
+  grid_secondary_label?: string;
   solar_icon?: string;
   grid_icon?: string;
+  grid_secondary_icon?: string;
   home_icon?: string;
   battery_icon?: string;
   core_icon?: string;
   solar_icon_color?: string | number[];
   grid_icon_color?: string | number[];
+  grid_secondary_icon_color?: string | number[];
   home_icon_color?: string | number[];
   battery_icon_color?: string | number[];
   core_icon_color?: string | number[];
   solar_trend?: boolean;
   grid_trend?: boolean;
+  grid_secondary_trend?: boolean;
   home_trend?: boolean;
   battery_trend?: boolean;
   solar_trend_color?: string | number[];
   grid_trend_color?: string | number[];
+  grid_secondary_trend_color?: string | number[];
   home_trend_color?: string | number[];
   battery_trend_color?: string | number[];
   battery_low_alert?: boolean;
@@ -109,6 +116,7 @@ const SCHEMA: HaFormSchema[] = [
     schema: [
       { name: "solar_visible", selector: { boolean: {} } },
       { name: "grid_visible", selector: { boolean: {} } },
+      { name: "grid_secondary_visible", selector: { boolean: {} } },
       { name: "battery_visible", selector: { boolean: {} } }
     ]
   },
@@ -125,6 +133,7 @@ const SCHEMA: HaFormSchema[] = [
     name: "",
     schema: [
       { name: "grid_entity", selector: { entity: { filter: { domain: "sensor" } } } },
+      { name: "grid_secondary_entity", selector: { entity: { filter: { domain: "sensor" } } } },
       { name: "battery_entity", selector: { entity: { filter: { domain: "sensor" } } } }
     ]
   },
@@ -166,6 +175,23 @@ const SCHEMA: HaFormSchema[] = [
           { name: "grid_trend", selector: { boolean: {} } },
           {
             name: "grid_trend_color",
+            selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
+          }
+        ]
+      },
+      {
+        type: "grid",
+        name: "",
+        schema: [
+          { name: "grid_secondary_label", selector: { text: {} } },
+          { name: "grid_secondary_icon", selector: { icon: {} }, context: { icon_entity: "grid_secondary_entity" } },
+          {
+            name: "grid_secondary_icon_color",
+            selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+          },
+          { name: "grid_secondary_trend", selector: { boolean: {} } },
+          {
+            name: "grid_secondary_trend_color",
             selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
           }
         ]
@@ -242,10 +268,12 @@ const LABELS: Record<string, string> = {
   name: "Name",
   solar_visible: "Show solar node",
   grid_visible: "Show grid node",
+  grid_secondary_visible: "Show second grid node",
   battery_visible: "Show battery node",
   home_entity: "Home entity",
   solar_entity: "Solar entity",
   grid_entity: "Grid entity",
+  grid_secondary_entity: "Second grid entity",
   battery_entity: "Battery entity",
   battery_percentage_entity: "Battery percentage entity",
   solar_sub_enabled: "Enable solar sub block",
@@ -261,6 +289,7 @@ const LABELS: Record<string, string> = {
   solar_label: "Solar label",
   home_label: "Home label",
   grid_label: "Grid label",
+  grid_secondary_label: "Second grid label",
   battery_label: "Battery label",
   solar_icon: "Solar icon",
   solar_icon_color: "Solar color",
@@ -268,6 +297,10 @@ const LABELS: Record<string, string> = {
   solar_trend_color: "Solar trend color",
   grid_icon: "Grid icon",
   grid_icon_color: "Grid color",
+  grid_secondary_icon: "Second grid icon",
+  grid_secondary_icon_color: "Second grid color",
+  grid_secondary_trend: "Second grid trend",
+  grid_secondary_trend_color: "Second grid trend color",
   grid_trend: "Grid trend",
   grid_trend_color: "Grid trend color",
   home_icon: "Home icon",
@@ -300,6 +333,7 @@ export class PowerSchwammerlEnergyCardEditor extends LitElement implements Lovel
       ...config,
       solar_visible: config.solar_visible ?? true,
       grid_visible: config.grid_visible ?? true,
+      grid_secondary_visible: config.grid_secondary_visible ?? false,
       battery_visible: config.battery_visible ?? true,
       type: "custom:power-schwammerl-energy-card"
     };
