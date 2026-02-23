@@ -1169,17 +1169,20 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
       const batteryCenter = this.placementCenter(placement, bounds);
       vertical(coreCenter.y, batteryCenter.y, coreCenter.x, direction);
     } else if (batteryPlacements.length >= 2) {
-      const centers = batteryPlacements
+      const entries = batteryPlacements
         .map((entry) => ({
+          placement: entry.placement,
           direction: entry.direction,
           center: this.placementCenter(entry.placement, bounds)
         }))
         .sort((a, b) => a.center.y - b.center.y);
-      const topY = Math.min(...centers.map((entry) => entry.center.y));
-      const splitY = coreCenter.y + ((topY - coreCenter.y) * 0.55);
+      const topEdgeY = Math.min(
+        ...entries.map((entry) => (((entry.placement.row - 1) / bounds.rows) * 100))
+      );
+      const splitY = Math.max(coreCenter.y + EPSILON, topEdgeY);
 
       vertical(coreCenter.y, splitY, coreCenter.x, batteryTrunkFlow);
-      centers.forEach((entry) => {
+      entries.forEach((entry) => {
         horizontal(coreCenter.x, entry.center.x, splitY, entry.direction);
         vertical(splitY, entry.center.y, entry.center.x, entry.direction);
       });
@@ -2846,10 +2849,6 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
         max-height: 64px;
       }
 
-      .home-core-icon {
-        width: var(--icon-size);
-        height: var(--icon-size);
-      }
     }
 
     @container (max-width: 380px) {
@@ -2910,11 +2909,6 @@ export class PowerSchwammerlEnergyCard extends LitElement implements LovelaceCar
         line-height: calc(var(--card-secondary-line-height) - 2px);
       }
 
-      .home-core-icon {
-        width: calc(var(--icon-size) - 8px);
-        height: calc(var(--icon-size) - 8px);
-        font-size: calc(var(--icon-size) - 8px);
-      }
     }
   `;
 }
