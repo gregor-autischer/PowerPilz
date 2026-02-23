@@ -2,45 +2,141 @@ import { LitElement, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { HomeAssistant, LovelaceCardConfig, LovelaceCardEditor } from "../../types";
 
+type GraphLegendLayout = "row" | "column";
+type GraphTimeframeHours = 6 | 12 | 24;
+
 interface GraphCardConfig extends LovelaceCardConfig {
   type: "custom:power-schwammerl-graph-card";
-  name?: string;
-  secondary?: string;
+  legend_layout?: GraphLegendLayout;
+  timeframe_hours?: GraphTimeframeHours | number | string;
+  unit?: string;
+  decimals?: number;
+  line_thickness?: number;
+  clip_graph_to_labels?: boolean;
+  hover_enabled?: boolean;
+  fill_area_enabled?: boolean;
+
   entity?: string;
   icon?: string;
   icon_color?: string | number[];
   trend_color?: string | number[];
-  unit?: string;
-  decimals?: number;
+
+  entity_1?: string;
+  entity_1_enabled?: boolean;
+  entity_1_icon?: string;
+  entity_1_show_icon?: boolean;
+  entity_1_icon_color?: string | number[];
+  entity_1_trend_color?: string | number[];
+
+  entity_2?: string;
+  entity_2_enabled?: boolean;
+  entity_2_icon?: string;
+  entity_2_show_icon?: boolean;
+  entity_2_icon_color?: string | number[];
+  entity_2_trend_color?: string | number[];
+
+  entity_3?: string;
+  entity_3_enabled?: boolean;
+  entity_3_icon?: string;
+  entity_3_show_icon?: boolean;
+  entity_3_icon_color?: string | number[];
+  entity_3_trend_color?: string | number[];
+
+  entity_4?: string;
+  entity_4_enabled?: boolean;
+  entity_4_icon?: string;
+  entity_4_show_icon?: boolean;
+  entity_4_icon_color?: string | number[];
+  entity_4_trend_color?: string | number[];
 }
 
 type HaFormSchema = Record<string, unknown>;
 
+const GRAPH_SLOT_COUNT = 4;
+const TREND_DEFAULTS: Record<number, string> = {
+  1: "purple",
+  2: "blue",
+  3: "amber",
+  4: "green"
+};
+
+const entitySchema = (index: number): HaFormSchema => ({
+  type: "expandable",
+  name: "",
+  title: `Entity ${index}`,
+  icon: "mdi:chart-line",
+  expanded: index === 1,
+  schema: [
+    { name: `entity_${index}_enabled`, selector: { boolean: {} } },
+    {
+      type: "grid",
+      name: "",
+      schema: [
+        { name: `entity_${index}`, selector: { entity: { filter: { domain: "sensor" } } } },
+        { name: `entity_${index}_show_icon`, selector: { boolean: {} } },
+        { name: `entity_${index}_icon`, selector: { icon: {} }, context: { icon_entity: `entity_${index}` } },
+        {
+          name: `entity_${index}_icon_color`,
+          selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+        },
+        {
+          name: `entity_${index}_trend_color`,
+          selector: {
+            ui_color: {
+              include_state: true,
+              include_none: false,
+              default_color: TREND_DEFAULTS[index] ?? "purple"
+            }
+          }
+        }
+      ]
+    }
+  ]
+});
+
 const SCHEMA: HaFormSchema[] = [
-  { name: "name", selector: { text: {} } },
-  { name: "secondary", selector: { text: {} } },
-  {
-    type: "grid",
-    name: "",
-    schema: [
-      { name: "entity", selector: { entity: { filter: { domain: "sensor" } } } },
-      { name: "icon", selector: { icon: {} }, context: { icon_entity: "entity" } }
-    ]
-  },
   {
     type: "grid",
     name: "",
     schema: [
       {
-        name: "icon_color",
-        selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+        name: "legend_layout",
+        selector: {
+          select: {
+            mode: "dropdown",
+            options: ["row", "column"]
+          }
+        }
       },
       {
-        name: "trend_color",
-        selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
+        name: "timeframe_hours",
+        selector: {
+          select: {
+            mode: "dropdown",
+            options: [
+              { label: "24 hours", value: 24 },
+              { label: "12 hours", value: 12 },
+              { label: "6 hours", value: 6 }
+            ]
+          }
+        }
       }
     ]
   },
+  {
+    type: "grid",
+    name: "",
+    schema: [
+      { name: "hover_enabled", selector: { boolean: {} } },
+      { name: "fill_area_enabled", selector: { boolean: {} } },
+      { name: "clip_graph_to_labels", selector: { boolean: {} } },
+      {
+        name: "line_thickness",
+        selector: { number: { mode: "box", min: 0.5, max: 6, step: 0.1 } }
+      }
+    ]
+  },
+  ...Array.from({ length: GRAPH_SLOT_COUNT }, (_, index) => entitySchema(index + 1)),
   {
     type: "grid",
     name: "",
@@ -52,12 +148,12 @@ const SCHEMA: HaFormSchema[] = [
 ];
 
 const LABELS: Record<string, string> = {
-  name: "Name",
-  secondary: "Secondary text",
-  entity: "Trend entity",
-  icon: "Icon",
-  icon_color: "Icon color",
-  trend_color: "Graph color",
+  legend_layout: "Label layout",
+  timeframe_hours: "Time range",
+  hover_enabled: "Enable hover",
+  fill_area_enabled: "Enable area fill",
+  clip_graph_to_labels: "Clip graph below labels",
+  line_thickness: "Line thickness",
   unit: "Unit override",
   decimals: "Decimals"
 };
@@ -71,10 +167,43 @@ export class PowerSchwammerlGraphCardEditor extends LitElement implements Lovela
   private _config?: GraphCardConfig;
 
   public setConfig(config: GraphCardConfig): void {
-    this._config = {
+    const next: GraphCardConfig = {
       ...config,
-      type: "custom:power-schwammerl-graph-card"
+      type: "custom:power-schwammerl-graph-card",
+      legend_layout: config.legend_layout === "column" ? "column" : "row",
+      timeframe_hours: this.normalizeTimeframeHours(config.timeframe_hours),
+      hover_enabled: config.hover_enabled ?? true,
+      fill_area_enabled: config.fill_area_enabled ?? true,
+      line_thickness:
+        typeof config.line_thickness === "number" && Number.isFinite(config.line_thickness)
+          ? Math.max(0.5, Math.min(6, config.line_thickness))
+          : 1.5,
+      clip_graph_to_labels: config.clip_graph_to_labels ?? false,
+
+      entity_1: this.readString(config.entity_1) ?? this.readString(config.entity),
+      entity_1_enabled: config.entity_1_enabled ?? true,
+      entity_1_show_icon: config.entity_1_show_icon ?? true,
+      entity_1_icon: config.entity_1_icon ?? config.icon,
+      entity_1_icon_color: config.entity_1_icon_color ?? config.icon_color,
+      entity_1_trend_color: config.entity_1_trend_color ?? config.trend_color,
+
+      entity_2: this.readString(config.entity_2),
+      entity_2_enabled: config.entity_2_enabled ?? false,
+      entity_2_show_icon: config.entity_2_show_icon ?? true,
+      entity_2_icon: config.entity_2_icon,
+
+      entity_3: this.readString(config.entity_3),
+      entity_3_enabled: config.entity_3_enabled ?? false,
+      entity_3_show_icon: config.entity_3_show_icon ?? true,
+      entity_3_icon: config.entity_3_icon,
+
+      entity_4: this.readString(config.entity_4),
+      entity_4_enabled: config.entity_4_enabled ?? false,
+      entity_4_show_icon: config.entity_4_show_icon ?? true,
+      entity_4_icon: config.entity_4_icon
     };
+
+    this._config = next;
   }
 
   protected render() {
@@ -93,8 +222,48 @@ export class PowerSchwammerlGraphCardEditor extends LitElement implements Lovela
     `;
   }
 
+  private readString(value: unknown): string | undefined {
+    if (typeof value !== "string") {
+      return undefined;
+    }
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  private normalizeTimeframeHours(value: unknown): GraphTimeframeHours {
+    const parsed =
+      typeof value === "number"
+        ? value
+        : typeof value === "string"
+          ? Number.parseInt(value, 10)
+          : NaN;
+    if (parsed === 6 || parsed === 12 || parsed === 24) {
+      return parsed;
+    }
+    return 24;
+  }
+
   private computeLabel = (schema: { name?: string }): string => {
     const name = schema.name ?? "";
+
+    const match = name.match(/^entity_(\d+)_(enabled|show_icon|icon|icon_color|trend_color)$/);
+    if (match) {
+      const [, index, field] = match;
+      const fieldLabel: Record<string, string> = {
+        enabled: "Enabled",
+        show_icon: "Show icon",
+        icon: "Icon",
+        icon_color: "Icon color",
+        trend_color: "Graph color"
+      };
+      return `Entity ${index} ${fieldLabel[field] ?? field}`;
+    }
+
+    const entityMatch = name.match(/^entity_(\d+)$/);
+    if (entityMatch) {
+      return `Entity ${entityMatch[1]}`;
+    }
+
     return LABELS[name] ?? name;
   };
 

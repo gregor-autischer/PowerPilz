@@ -116,12 +116,23 @@ Graph card:
 
 ```yaml
 type: custom:power-schwammerl-graph-card
-name: House Power
-secondary: Last 24 hours
-entity: sensor.dev_home_power
-icon: mdi:chart-line
-icon_color: state
-trend_color: purple
+legend_layout: row
+timeframe_hours: 24
+hover_enabled: true
+fill_area_enabled: true
+line_thickness: 1.5
+clip_graph_to_labels: false
+entity_1: sensor.dev_home_power
+entity_1_enabled: true
+entity_1_show_icon: true
+entity_1_icon: mdi:chart-line
+entity_1_icon_color: state
+entity_1_trend_color: purple
+entity_2: sensor.dev_solar_power
+entity_2_enabled: true
+entity_2_show_icon: true
+entity_2_icon: mdi:chart-line-variant
+entity_2_trend_color: blue
 decimals: 1
 ```
 

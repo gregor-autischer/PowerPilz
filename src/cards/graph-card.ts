@@ -1,4 +1,4 @@
-import { LitElement, css, html, type TemplateResult } from "lit";
+import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { styleMap } from "lit/directives/style-map.js";
 import type {
@@ -13,9 +13,11 @@ import { readNumber, readUnit } from "../utils/entity";
 import "./editors/graph-card-editor";
 
 const DEFAULT_DECIMALS = 1;
-const TREND_WINDOW_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_TIMEFRAME_HOURS = 24;
 const TREND_REFRESH_MS = 5 * 60 * 1000;
 const EPSILON = 0.01;
+const GRAPH_SLOT_COUNT = 4;
+const DEFAULT_TREND_COLOR = "rgb(var(--rgb-primary-text-color, 33, 33, 33))";
 const COLOR_RGB_FALLBACK: Record<string, string> = {
   red: "244, 67, 54",
   pink: "233, 30, 99",
@@ -43,6 +45,10 @@ const COLOR_RGB_FALLBACK: Record<string, string> = {
   disabled: "189, 189, 189"
 };
 
+type GraphLegendLayout = "row" | "column";
+type GraphSlot = 1 | 2 | 3 | 4;
+type GraphTimeframeHours = 6 | 12 | 24;
+
 interface TrendPoint {
   ts: number;
   value: number;
@@ -60,16 +66,78 @@ interface TrendCanvasPoint {
   value: number;
 }
 
+interface GraphSeriesEntry {
+  slot: GraphSlot;
+  entityId: string;
+  name: string;
+  secondary: string;
+  unit: string;
+  decimals: number;
+  currentValue: number | null;
+  icon: string;
+  showIcon: boolean;
+  iconStyle: Record<string, string>;
+  trendColor: string;
+}
+
+interface GraphHoverState {
+  slot: GraphSlot;
+  x: number;
+  y: number;
+  value: number;
+  color: string;
+}
+
+interface GraphDrawConfig {
+  slot: GraphSlot;
+  currentValue: number | null;
+  color: string;
+  lineWidth: number;
+}
+
 interface PowerSchwammerlGraphCardConfig extends LovelaceCardConfig {
   type: "custom:power-schwammerl-graph-card";
-  name?: string;
-  secondary?: string;
+  legend_layout?: GraphLegendLayout;
+  timeframe_hours?: GraphTimeframeHours | number | string;
+  unit?: string;
+  decimals?: number;
+  line_thickness?: number;
+  clip_graph_to_labels?: boolean;
+  hover_enabled?: boolean;
+  fill_area_enabled?: boolean;
+
   entity?: string;
   icon?: string;
   icon_color?: string | number[];
   trend_color?: string | number[];
-  unit?: string;
-  decimals?: number;
+
+  entity_1?: string;
+  entity_1_enabled?: boolean;
+  entity_1_icon?: string;
+  entity_1_show_icon?: boolean;
+  entity_1_icon_color?: string | number[];
+  entity_1_trend_color?: string | number[];
+
+  entity_2?: string;
+  entity_2_enabled?: boolean;
+  entity_2_icon?: string;
+  entity_2_show_icon?: boolean;
+  entity_2_icon_color?: string | number[];
+  entity_2_trend_color?: string | number[];
+
+  entity_3?: string;
+  entity_3_enabled?: boolean;
+  entity_3_icon?: string;
+  entity_3_show_icon?: boolean;
+  entity_3_icon_color?: string | number[];
+  entity_3_trend_color?: string | number[];
+
+  entity_4?: string;
+  entity_4_enabled?: boolean;
+  entity_4_icon?: string;
+  entity_4_show_icon?: boolean;
+  entity_4_icon_color?: string | number[];
+  entity_4_trend_color?: string | number[];
 }
 
 @customElement("power-schwammerl-graph-card")
@@ -86,12 +154,39 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
     const firstByDomain = (domain: string): string | undefined =>
       entityIds.find((entityId) => entityId.startsWith(`${domain}.`));
 
+    const entity1 = pick("sensor.dev_home_power", "sensor.home_power")
+      ?? firstByDomain("sensor")
+      ?? "sensor.dev_home_power";
+    const entity2 = pick("sensor.dev_solar_power", "sensor.solar_power");
+    const entity3 = pick("sensor.dev_grid_power", "sensor.grid_power");
+    const entity4 = pick("sensor.dev_battery_power", "sensor.battery_power");
+
     return {
       type: "custom:power-schwammerl-graph-card",
-      name: "Power Trend",
-      secondary: "Last 24 hours",
-      entity: pick("sensor.dev_home_power", "sensor.home_power") ?? firstByDomain("sensor") ?? "sensor.dev_home_power",
-      icon: "mdi:chart-line",
+      legend_layout: "row",
+      timeframe_hours: DEFAULT_TIMEFRAME_HOURS,
+      hover_enabled: true,
+      fill_area_enabled: true,
+      entity_1: entity1,
+      entity_1_enabled: true,
+      entity_1_show_icon: true,
+      entity_1_icon: "mdi:chart-line",
+      entity_1_trend_color: "purple",
+      entity_2: entity2,
+      entity_2_enabled: false,
+      entity_2_show_icon: true,
+      entity_2_icon: "mdi:chart-line-variant",
+      entity_2_trend_color: "blue",
+      entity_3: entity3,
+      entity_3_enabled: false,
+      entity_3_show_icon: true,
+      entity_3_icon: "mdi:chart-bell-curve",
+      entity_3_trend_color: "amber",
+      entity_4: entity4,
+      entity_4_enabled: false,
+      entity_4_show_icon: true,
+      entity_4_icon: "mdi:chart-timeline-variant",
+      entity_4_trend_color: "green",
       decimals: DEFAULT_DECIMALS
     };
   }
@@ -103,9 +198,16 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
   private _config?: PowerSchwammerlGraphCardConfig;
 
   @state()
-  private _trendSeries: TrendPoint[] = [];
+  private _trendSeries: Partial<Record<GraphSlot, TrendPoint[]>> = {};
 
-  private _drawConfig?: { currentValue: number | null; color: string };
+  @state()
+  private _graphTopInset = 0;
+
+  @state()
+  private _hoverState?: GraphHoverState;
+
+  private _drawConfigs: GraphDrawConfig[] = [];
+  private _linePointsBySlot: Partial<Record<GraphSlot, TrendCanvasPoint[]>> = {};
   private _trendRefreshTimer?: number;
   private _trendRefreshInFlight = false;
   private _lastTrendRefresh = 0;
@@ -114,19 +216,46 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
   private _canvasColorContext?: CanvasRenderingContext2D | null;
 
   public setConfig(config: PowerSchwammerlGraphCardConfig): void {
-    const entity = config.entity ?? "sensor.dev_home_power";
     const decimals =
       typeof config.decimals === "number" && Number.isFinite(config.decimals)
         ? Math.min(3, Math.max(0, Math.round(config.decimals)))
         : DEFAULT_DECIMALS;
 
+    const legacyEntity = this.readConfigString(config.entity);
+    const legacyIcon = this.readConfigString(config.icon);
+    const entity1 = this.readConfigString(config.entity_1) ?? legacyEntity ?? "sensor.dev_home_power";
+
     this._config = {
       ...config,
       type: "custom:power-schwammerl-graph-card",
-      name: config.name ?? "Power Trend",
-      secondary: config.secondary ?? "",
-      entity,
-      icon: config.icon ?? "mdi:chart-line",
+      legend_layout: this.normalizeLegendLayout(config.legend_layout),
+      timeframe_hours: this.normalizeTimeframeHours(config.timeframe_hours),
+      line_thickness: this.normalizeLineThickness(config.line_thickness),
+      clip_graph_to_labels: config.clip_graph_to_labels ?? false,
+      hover_enabled: config.hover_enabled ?? true,
+      fill_area_enabled: config.fill_area_enabled ?? true,
+      entity_1: entity1,
+      entity_1_enabled: config.entity_1_enabled ?? true,
+      entity_1_show_icon: config.entity_1_show_icon ?? true,
+      entity_1_icon: config.entity_1_icon ?? legacyIcon ?? "mdi:chart-line",
+      entity_1_icon_color: config.entity_1_icon_color ?? config.icon_color,
+      entity_1_trend_color: config.entity_1_trend_color ?? config.trend_color,
+
+      entity_2: this.readConfigString(config.entity_2),
+      entity_2_enabled: config.entity_2_enabled ?? false,
+      entity_2_show_icon: config.entity_2_show_icon ?? true,
+      entity_2_icon: config.entity_2_icon ?? "mdi:chart-line-variant",
+
+      entity_3: this.readConfigString(config.entity_3),
+      entity_3_enabled: config.entity_3_enabled ?? false,
+      entity_3_show_icon: config.entity_3_show_icon ?? true,
+      entity_3_icon: config.entity_3_icon ?? "mdi:chart-bell-curve",
+
+      entity_4: this.readConfigString(config.entity_4),
+      entity_4_enabled: config.entity_4_enabled ?? false,
+      entity_4_show_icon: config.entity_4_show_icon ?? true,
+      entity_4_icon: config.entity_4_icon ?? "mdi:chart-timeline-variant",
+
       decimals
     };
   }
@@ -140,15 +269,13 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
       columns: 6,
       rows: 2,
       min_columns: 3,
-      min_rows: 1,
-      max_rows: 4
+      min_rows: 1
     };
   }
 
   public getLayoutOptions(): LovelaceLayoutOptions {
     return {
-      grid_columns: 2,
-      grid_rows: this.getCardSize()
+      grid_columns: 2
     };
   }
 
@@ -162,39 +289,65 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
     }
 
     const config = this._config;
-    const currentValue = readNumber(this.hass, config.entity);
-    const unit = config.unit ?? readUnit(this.hass, config.entity) ?? "";
     const decimals = config.decimals ?? DEFAULT_DECIMALS;
-    const secondary = this.resolveSecondary(config.secondary, currentValue, unit, decimals);
-    const iconStyle = this.iconStyle(config.icon_color);
-    const trendColor = this.resolveColor(config.trend_color, "rgb(var(--rgb-primary-text-color, 33, 33, 33))");
+    const lineThickness = this.normalizeLineThickness(config.line_thickness);
+    const entries = this.collectSeriesEntries(config, decimals);
+    const legendLayout = this.normalizeLegendLayout(config.legend_layout);
+    const hoverEnabled = config.hover_enabled !== false;
+    const hoverState = this._hoverState;
+    const graphTopInset = (config.clip_graph_to_labels ?? false) ? this._graphTopInset : 0;
+    const graphStyle = graphTopInset > 0 ? { top: `${graphTopInset}px` } : {};
+    const hoverDotStyle =
+      hoverState
+        ? {
+            left: `${hoverState.x}px`,
+            top: `${hoverState.y + graphTopInset}px`,
+            "--hover-dot-color": hoverState.color
+          }
+        : {};
 
-    this._drawConfig = {
-      currentValue,
-      color: trendColor
-    };
+    this._drawConfigs = entries.map((entry) => ({
+      slot: entry.slot,
+      currentValue: entry.currentValue,
+      color: entry.trendColor,
+      lineWidth: lineThickness
+    }));
 
     return html`
       <ha-card>
-        <div class="container">
-          <div class="card-trend" aria-hidden="true">
+        <div
+          class="container"
+          @pointermove=${this.handlePointerMove}
+          @pointerleave=${this.handlePointerLeave}
+          @pointercancel=${this.handlePointerLeave}
+        >
+          <div class="card-trend" style=${styleMap(graphStyle)} aria-hidden="true">
             <canvas class="card-trend-canvas-area"></canvas>
           </div>
-          <div class="card-trend-line" aria-hidden="true">
+          <div class="card-trend-line" style=${styleMap(graphStyle)} aria-hidden="true">
             <canvas class="card-trend-canvas-line"></canvas>
           </div>
+          ${hoverEnabled && hoverState
+            ? html`<div class="hover-dot" aria-hidden="true" style=${styleMap(hoverDotStyle)}></div>`
+            : nothing}
 
           <div class="content">
-            <div class="state-item">
-              <div class="icon-wrap">
-                <div class="icon-shape" style=${styleMap(iconStyle)}>
-                  <ha-icon .icon=${config.icon ?? "mdi:chart-line"}></ha-icon>
-                </div>
-              </div>
-              <div class="info">
-                <div class="primary">${config.name}</div>
-                <div class="secondary">${secondary}</div>
-              </div>
+            <div class="series-list layout-${legendLayout}">
+              ${entries.length === 0
+                ? html`
+                    <div class="state-item empty">
+                      <div class="info">
+                        <div class="primary">Graph card</div>
+                        <div class="secondary">Select at least one entity</div>
+                      </div>
+                    </div>
+                  `
+                : entries.map((entry) =>
+                    this.renderSeriesItem(
+                      entry,
+                      hoverState && hoverState.slot === entry.slot ? hoverState.value : null
+                    )
+                  )}
             </div>
           </div>
         </div>
@@ -202,22 +355,208 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
     `;
   }
 
-  private resolveSecondary(
-    configured: string | undefined,
-    value: number | null,
-    unit: string,
-    decimals: number
-  ): string {
-    if (typeof configured === "string" && configured.trim().length > 0) {
-      return configured.trim();
+  private renderSeriesItem(entry: GraphSeriesEntry, hoveredValue: number | null): TemplateResult {
+    const secondary = hoveredValue === null
+      ? entry.secondary
+      : this.formatValue(hoveredValue, entry.unit, entry.decimals);
+
+    return html`
+      <div class="state-item" data-slot=${String(entry.slot)}>
+        ${entry.showIcon
+          ? html`
+              <div class="icon-wrap">
+                <div class="icon-shape" style=${styleMap(entry.iconStyle)}>
+                  <ha-icon .icon=${entry.icon}></ha-icon>
+                </div>
+              </div>
+            `
+          : nothing}
+        <div class="info">
+          <div class="primary">${entry.name}</div>
+          <div class="secondary">${secondary}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  private collectSeriesEntries(config: PowerSchwammerlGraphCardConfig, decimals: number): GraphSeriesEntry[] {
+    const entries: GraphSeriesEntry[] = [];
+
+    for (let index = 1; index <= GRAPH_SLOT_COUNT; index += 1) {
+      const slot = index as GraphSlot;
+      const enabled = this.slotEnabled(slot, config);
+      const entityId = this.slotEntityId(slot, config);
+      if (!enabled || !entityId) {
+        continue;
+      }
+
+      const name = this.entityName(entityId, index);
+      const currentValue = readNumber(this.hass, entityId);
+      const unit = config.unit ?? readUnit(this.hass, entityId) ?? "";
+      const secondary = this.formatValue(currentValue, unit, decimals);
+      const icon = this.slotIcon(slot, config);
+      const iconStyle = this.iconStyle(this.slotIconColor(slot, config));
+      const trendColor = this.resolveColor(this.slotTrendColor(slot, config), DEFAULT_TREND_COLOR);
+
+      entries.push({
+        slot,
+        entityId,
+        name,
+        secondary,
+        unit,
+        decimals,
+        currentValue,
+        icon,
+        showIcon: this.slotShowIcon(slot, config),
+        iconStyle,
+        trendColor
+      });
     }
 
+    return entries;
+  }
+
+  private slotEntityId(slot: GraphSlot, config: PowerSchwammerlGraphCardConfig): string | undefined {
+    switch (slot) {
+      case 1:
+        return this.readConfigString(config.entity_1);
+      case 2:
+        return this.readConfigString(config.entity_2);
+      case 3:
+        return this.readConfigString(config.entity_3);
+      case 4:
+        return this.readConfigString(config.entity_4);
+      default:
+        return undefined;
+    }
+  }
+
+  private slotEnabled(slot: GraphSlot, config: PowerSchwammerlGraphCardConfig): boolean {
+    switch (slot) {
+      case 1:
+        return config.entity_1_enabled !== false;
+      case 2:
+        return config.entity_2_enabled === true;
+      case 3:
+        return config.entity_3_enabled === true;
+      case 4:
+        return config.entity_4_enabled === true;
+      default:
+        return false;
+    }
+  }
+
+  private slotShowIcon(slot: GraphSlot, config: PowerSchwammerlGraphCardConfig): boolean {
+    switch (slot) {
+      case 1:
+        return config.entity_1_show_icon !== false;
+      case 2:
+        return config.entity_2_show_icon !== false;
+      case 3:
+        return config.entity_3_show_icon !== false;
+      case 4:
+        return config.entity_4_show_icon !== false;
+      default:
+        return true;
+    }
+  }
+
+  private slotIcon(slot: GraphSlot, config: PowerSchwammerlGraphCardConfig): string {
+    switch (slot) {
+      case 1:
+        return config.entity_1_icon ?? "mdi:chart-line";
+      case 2:
+        return config.entity_2_icon ?? "mdi:chart-line-variant";
+      case 3:
+        return config.entity_3_icon ?? "mdi:chart-bell-curve";
+      case 4:
+        return config.entity_4_icon ?? "mdi:chart-timeline-variant";
+      default:
+        return "mdi:chart-line";
+    }
+  }
+
+  private slotIconColor(slot: GraphSlot, config: PowerSchwammerlGraphCardConfig): string | number[] | undefined {
+    switch (slot) {
+      case 1:
+        return config.entity_1_icon_color;
+      case 2:
+        return config.entity_2_icon_color;
+      case 3:
+        return config.entity_3_icon_color;
+      case 4:
+        return config.entity_4_icon_color;
+      default:
+        return undefined;
+    }
+  }
+
+  private slotTrendColor(slot: GraphSlot, config: PowerSchwammerlGraphCardConfig): string | number[] | undefined {
+    switch (slot) {
+      case 1:
+        return config.entity_1_trend_color;
+      case 2:
+        return config.entity_2_trend_color;
+      case 3:
+        return config.entity_3_trend_color;
+      case 4:
+        return config.entity_4_trend_color;
+      default:
+        return undefined;
+    }
+  }
+
+  private entityName(entityId: string, index: number): string {
+    const state = this.hass.states[entityId];
+    const friendly = state?.attributes?.friendly_name;
+    if (typeof friendly === "string" && friendly.trim().length > 0) {
+      return friendly.trim();
+    }
+    return `Entity ${index}`;
+  }
+
+  private formatValue(value: number | null, unit: string, decimals: number): string {
     if (value === null) {
-      return "Last 24 hours";
+      return unit ? `-- ${unit}` : "--";
     }
-
     const formatted = `${value.toFixed(decimals)} ${unit}`.trim();
-    return formatted.length > 0 ? formatted : "Last 24 hours";
+    return formatted.length > 0 ? formatted : "--";
+  }
+
+  private readConfigString(value: unknown): string | undefined {
+    if (typeof value !== "string") {
+      return undefined;
+    }
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  private normalizeLegendLayout(value: unknown): GraphLegendLayout {
+    return value === "column" ? "column" : "row";
+  }
+
+  private normalizeTimeframeHours(value: unknown): GraphTimeframeHours {
+    const parsed =
+      typeof value === "number"
+        ? value
+        : typeof value === "string"
+          ? Number.parseInt(value, 10)
+          : NaN;
+    if (parsed === 6 || parsed === 12 || parsed === 24) {
+      return parsed;
+    }
+    return DEFAULT_TIMEFRAME_HOURS;
+  }
+
+  private trendWindowMs(config?: PowerSchwammerlGraphCardConfig): number {
+    return this.normalizeTimeframeHours(config?.timeframe_hours) * 60 * 60 * 1000;
+  }
+
+  private normalizeLineThickness(value: unknown): number {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      return 1.5;
+    }
+    return Math.max(0.5, Math.min(6, value));
   }
 
   private iconStyle(value?: string | number[]): Record<string, string> {
@@ -319,10 +658,10 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
     return null;
   }
 
-  private trendPoints(currentValue: number | null): TrendPoint[] {
+  private trendPoints(slot: GraphSlot, currentValue: number | null): TrendPoint[] {
     const now = Date.now();
-    const cutoff = now - TREND_WINDOW_MS;
-    const stored = this._trendSeries
+    const cutoff = now - this.trendWindowMs(this._config);
+    const stored = (this._trendSeries[slot] ?? [])
       .filter((point) => point.ts >= cutoff)
       .sort((a, b) => a.ts - b.ts);
     const points = [...stored];
@@ -334,9 +673,9 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
     return points;
   }
 
-  private toTrendCoordinates(points: TrendPoint[]): TrendCoordinate[] {
+  private toTrendCoordinates(points: TrendPoint[], windowMs: number): TrendCoordinate[] {
     const now = Date.now();
-    const start = now - TREND_WINDOW_MS;
+    const start = now - windowMs;
     const xMin = 0;
     const xMax = 100;
 
@@ -353,7 +692,7 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
     const span = Math.max(max - min, EPSILON);
 
     const coordinates = points.map((point) => {
-      const normalizedX = Math.max(0, Math.min(100, ((point.ts - start) / TREND_WINDOW_MS) * 100));
+      const normalizedX = Math.max(0, Math.min(100, ((point.ts - start) / windowMs) * 100));
       const x = xMin + (normalizedX / 100) * (xMax - xMin);
       const normalized = span <= EPSILON ? 0.5 : (point.value - min) / span;
       const y = bottom - normalized * (bottom - top);
@@ -466,6 +805,7 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
 
     if (!this._trendResizeObserver) {
       this._trendResizeObserver = new ResizeObserver(() => {
+        this.updateGraphTopInset();
         this.scheduleTrendCanvasDraw();
       });
     }
@@ -474,6 +814,10 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
     const container = this.renderRoot.querySelector<HTMLElement>(".container");
     if (container) {
       this._trendResizeObserver.observe(container);
+    }
+    const seriesList = this.renderRoot.querySelector<HTMLElement>(".series-list");
+    if (seriesList) {
+      this._trendResizeObserver.observe(seriesList);
     }
   }
 
@@ -489,37 +833,61 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
   }
 
   private drawTrendCanvases(): void {
-    const drawConfig = this._drawConfig;
-    if (!drawConfig) {
+    if (this._drawConfigs.length === 0) {
+      this._linePointsBySlot = {};
+      if (this._hoverState) {
+        this._hoverState = undefined;
+      }
       return;
     }
 
     const areaCanvas = this.renderRoot.querySelector<HTMLCanvasElement>(".card-trend-canvas-area");
     const lineCanvas = this.renderRoot.querySelector<HTMLCanvasElement>(".card-trend-canvas-line");
     if (!areaCanvas || !lineCanvas) {
+      this._linePointsBySlot = {};
+      if (this._hoverState) {
+        this._hoverState = undefined;
+      }
       return;
     }
 
     const area = this.prepareTrendCanvas(areaCanvas);
     const line = this.prepareTrendCanvas(lineCanvas);
     if (!area || !line) {
+      this._linePointsBySlot = {};
+      if (this._hoverState) {
+        this._hoverState = undefined;
+      }
       return;
     }
 
-    const points = this.trendPoints(drawConfig.currentValue);
-    if (points.length < 2) {
-      return;
-    }
+    const fillAreaEnabled = this._config?.fill_area_enabled !== false;
+    const windowMs = this.trendWindowMs(this._config);
+    const linePointsBySlot: Partial<Record<GraphSlot, TrendCanvasPoint[]>> = {};
+    this._drawConfigs.forEach((drawConfig) => {
+      const points = this.trendPoints(drawConfig.slot, drawConfig.currentValue);
+      if (points.length < 2) {
+        return;
+      }
 
-    const coordinates = this.toTrendCoordinates(points);
-    if (coordinates.length < 2) {
-      return;
-    }
+      const coordinates = this.toTrendCoordinates(points, windowMs);
+      if (coordinates.length < 2) {
+        return;
+      }
 
-    const areaPoints = this.toCanvasPoints(coordinates, area.width, area.height);
-    const linePoints = this.toCanvasPoints(coordinates, line.width, line.height);
-    this.drawTrendArea(area.ctx, areaPoints, drawConfig.color, area.height);
-    this.drawTrendLine(line.ctx, linePoints, drawConfig.color);
+      const areaPoints = this.toCanvasPoints(coordinates, area.width, area.height);
+      const linePoints = this.toCanvasPoints(coordinates, line.width, line.height);
+      if (fillAreaEnabled) {
+        this.drawTrendArea(area.ctx, areaPoints, drawConfig.color, area.height);
+      }
+      this.drawTrendLine(line.ctx, linePoints, drawConfig.color, drawConfig.lineWidth);
+      linePointsBySlot[drawConfig.slot] = linePoints;
+    });
+
+    this._linePointsBySlot = linePointsBySlot;
+    if (this._hoverState && !linePointsBySlot[this._hoverState.slot]) {
+      this._hoverState = undefined;
+    }
   }
 
   private prepareTrendCanvas(
@@ -577,13 +945,137 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
     ctx.fill();
   }
 
-  private drawTrendLine(ctx: CanvasRenderingContext2D, points: TrendCanvasPoint[], color: string): void {
+  private drawTrendLine(
+    ctx: CanvasRenderingContext2D,
+    points: TrendCanvasPoint[],
+    color: string,
+    lineWidth: number
+  ): void {
     if (points.length < 2) {
       return;
     }
 
     const resolvedColor = this.resolveCanvasColor(color);
-    this.strokeTrendPolyline(ctx, points, resolvedColor, 1.5);
+    this.strokeTrendPolyline(ctx, points, resolvedColor, lineWidth);
+  }
+
+  private handlePointerMove = (event: PointerEvent): void => {
+    const layer = this.renderRoot.querySelector<HTMLElement>(".card-trend");
+    if (!layer || !this._config || this._config.hover_enabled === false) {
+      this.clearHoverState();
+      return;
+    }
+
+    const rect = layer.getBoundingClientRect();
+    if (rect.width <= 1 || rect.height <= 1) {
+      this.clearHoverState();
+      return;
+    }
+
+    const localX = event.clientX - rect.left;
+    const localY = event.clientY - rect.top;
+    if (localX < 0 || localX > rect.width || localY < 0 || localY > rect.height) {
+      this.clearHoverState();
+      return;
+    }
+
+    const nearest = this.findNearestHoverPoint(localX, localY);
+    if (!nearest) {
+      this.clearHoverState();
+      return;
+    }
+
+    const current = this._hoverState;
+    if (
+      current
+      && current.slot === nearest.slot
+      && Math.abs(current.x - nearest.x) <= 0.2
+      && Math.abs(current.y - nearest.y) <= 0.2
+      && Math.abs(current.value - nearest.value) <= 0.0001
+      && current.color === nearest.color
+    ) {
+      return;
+    }
+
+    this._hoverState = nearest;
+  };
+
+  private handlePointerLeave = (): void => {
+    this.clearHoverState();
+  };
+
+  private clearHoverState(): void {
+    if (this._hoverState) {
+      this._hoverState = undefined;
+    }
+  }
+
+  private findNearestHoverPoint(x: number, y: number): GraphHoverState | null {
+    let best: GraphHoverState | null = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    for (const drawConfig of this._drawConfigs) {
+      const points = this._linePointsBySlot[drawConfig.slot];
+      if (!points || points.length < 2) {
+        continue;
+      }
+
+      const interpolated = this.interpolateCanvasPoint(points, x);
+      if (!interpolated) {
+        continue;
+      }
+
+      const distance = Math.abs(interpolated.y - y);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = {
+          slot: drawConfig.slot,
+          x: interpolated.x,
+          y: interpolated.y,
+          value: interpolated.value,
+          color: drawConfig.color
+        };
+      }
+    }
+
+    return best;
+  }
+
+  private interpolateCanvasPoint(points: TrendCanvasPoint[], x: number): TrendCanvasPoint | null {
+    if (points.length === 0) {
+      return null;
+    }
+
+    const first = points[0];
+    const last = points[points.length - 1];
+    if (x <= first.x) {
+      return { x, y: first.y, value: first.value };
+    }
+    if (x >= last.x) {
+      return { x, y: last.y, value: last.value };
+    }
+
+    for (let index = 1; index < points.length; index += 1) {
+      const prev = points[index - 1];
+      const next = points[index];
+      if (x > next.x) {
+        continue;
+      }
+
+      const span = next.x - prev.x;
+      if (Math.abs(span) <= EPSILON) {
+        return { x, y: next.y, value: next.value };
+      }
+
+      const t = (x - prev.x) / span;
+      return {
+        x,
+        y: prev.y + ((next.y - prev.y) * t),
+        value: prev.value + ((next.value - prev.value) * t)
+      };
+    }
+
+    return { x, y: last.y, value: last.value };
   }
 
   private strokeTrendPolyline(
@@ -672,12 +1164,14 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
       this.maybeRefreshTrendHistory();
     }, TREND_REFRESH_MS);
     void this.updateComplete.then(() => {
+      this.updateGraphTopInset();
       this.syncTrendResizeObserver();
       this.scheduleTrendCanvasDraw();
     });
   }
 
   public disconnectedCallback(): void {
+    this.clearHoverState();
     if (this._trendRefreshTimer !== undefined) {
       window.clearInterval(this._trendRefreshTimer);
       this._trendRefreshTimer = undefined;
@@ -696,11 +1190,44 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
   protected updated(changedProps: Map<string, unknown>): void {
     if (changedProps.has("_config")) {
       this.maybeRefreshTrendHistory(true);
+      this.clearHoverState();
     } else if (changedProps.has("hass")) {
       this.maybeRefreshTrendHistory();
+      this.clearHoverState();
     }
+    if (this._config?.hover_enabled === false) {
+      this.clearHoverState();
+    }
+    this.updateGraphTopInset();
     this.syncTrendResizeObserver();
     this.scheduleTrendCanvasDraw();
+  }
+
+  private updateGraphTopInset(): void {
+    const config = this._config;
+    if (!config || config.clip_graph_to_labels !== true) {
+      if (this._graphTopInset !== 0) {
+        this._graphTopInset = 0;
+      }
+      return;
+    }
+
+    const container = this.renderRoot.querySelector<HTMLElement>(".container");
+    const seriesList = this.renderRoot.querySelector<HTMLElement>(".series-list");
+    if (!container || !seriesList) {
+      if (this._graphTopInset !== 0) {
+        this._graphTopInset = 0;
+      }
+      return;
+    }
+
+    const containerRect = container.getBoundingClientRect();
+    const listRect = seriesList.getBoundingClientRect();
+    const nextInset = Math.max(0, Math.ceil(listRect.bottom - containerRect.top));
+
+    if (Math.abs(nextInset - this._graphTopInset) > 0.5) {
+      this._graphTopInset = nextInset;
+    }
   }
 
   private maybeRefreshTrendHistory(force = false): void {
@@ -722,41 +1249,63 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
       return;
     }
 
-    const entityId = this._config.entity;
-    if (!entityId) {
-      if (this._trendSeries.length > 0) {
-        this._trendSeries = [];
+    const config = this._config;
+    const next: Partial<Record<GraphSlot, TrendPoint[]>> = {};
+    const windowMs = this.trendWindowMs(config);
+
+    const slots = this.enabledSlots(config);
+    if (slots.length === 0) {
+      if (Object.keys(this._trendSeries).length > 0) {
+        this._trendSeries = {};
       }
       return;
     }
 
     this._trendRefreshInFlight = true;
     try {
-      this._trendSeries = await this.fetchTrendHistory(entityId);
+      for (const slot of slots) {
+        const entityId = this.slotEntityId(slot, config);
+        if (!entityId) {
+          continue;
+        }
+        next[slot] = await this.fetchTrendHistory(entityId, windowMs);
+      }
+      this._trendSeries = next;
     } finally {
       this._trendRefreshInFlight = false;
     }
   }
 
-  private async fetchTrendHistory(entityId: string): Promise<TrendPoint[]> {
+  private enabledSlots(config: PowerSchwammerlGraphCardConfig): GraphSlot[] {
+    const slots: GraphSlot[] = [];
+    for (let index = 1; index <= GRAPH_SLOT_COUNT; index += 1) {
+      const slot = index as GraphSlot;
+      if (this.slotEnabled(slot, config) && this.slotEntityId(slot, config)) {
+        slots.push(slot);
+      }
+    }
+    return slots;
+  }
+
+  private async fetchTrendHistory(entityId: string, windowMs: number): Promise<TrendPoint[]> {
     if (!this.hass.callApi) {
       return [];
     }
 
-    const startIso = new Date(Date.now() - TREND_WINDOW_MS).toISOString();
+    const startIso = new Date(Date.now() - windowMs).toISOString();
     const path =
       `history/period/${startIso}?filter_entity_id=${encodeURIComponent(entityId)}`
       + "&minimal_response&no_attributes";
 
     try {
       const raw = await this.hass.callApi("GET", path);
-      return this.parseTrendHistory(raw);
+      return this.parseTrendHistory(raw, windowMs);
     } catch {
       return [];
     }
   }
 
-  private parseTrendHistory(raw: unknown): TrendPoint[] {
+  private parseTrendHistory(raw: unknown, windowMs: number): TrendPoint[] {
     if (!Array.isArray(raw) || raw.length === 0) {
       return [];
     }
@@ -786,7 +1335,7 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
       points.push({ ts, value });
     }
 
-    const cutoff = Date.now() - TREND_WINDOW_MS;
+    const cutoff = Date.now() - windowMs;
     return points
       .filter((point) => point.ts >= cutoff)
       .sort((a, b) => a.ts - b.ts);
@@ -812,6 +1361,9 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
       --icon-symbol-size: var(--mush-icon-symbol-size, 0.667em);
       --icon-color: var(--primary-text-color);
       --shape-color: rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.05);
+      --series-item-min-width: 164px;
+      --series-row-gap: 8px;
+      --series-column-gap: 10px;
     }
 
     ha-card {
@@ -848,6 +1400,19 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
       opacity: 0.96;
     }
 
+    .hover-dot {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--hover-dot-color, var(--primary-color));
+      transform: translate(-50%, -50%);
+      z-index: 2;
+      pointer-events: none;
+    }
+
     .card-trend-canvas-area,
     .card-trend-canvas-line {
       width: 100%;
@@ -862,14 +1427,47 @@ export class PowerSchwammerlGraphCard extends LitElement implements LovelaceCard
       flex-direction: column;
       height: 100%;
       min-height: 0;
+      padding: var(--spacing);
+      box-sizing: border-box;
+    }
+
+    .series-list {
+      display: flex;
+      width: 100%;
+      min-height: 0;
+      align-content: flex-start;
+      gap: var(--series-row-gap) var(--series-column-gap);
+    }
+
+    .series-list.layout-row {
+      flex-direction: row;
+      flex-wrap: wrap;
+    }
+
+    .series-list.layout-column {
+      display: grid;
+      grid-auto-flow: column;
+      grid-template-rows: repeat(2, minmax(0, auto));
+      grid-auto-columns: minmax(var(--series-item-min-width), 1fr);
+      column-gap: var(--series-column-gap);
+      row-gap: var(--series-row-gap);
     }
 
     .state-item {
       display: flex;
       align-items: center;
       gap: var(--spacing);
-      padding: var(--spacing);
       min-width: 0;
+      flex: 1 1 var(--series-item-min-width);
+    }
+
+    .series-list.layout-column .state-item {
+      min-width: var(--series-item-min-width);
+      width: 100%;
+    }
+
+    .state-item.empty {
+      flex: 1 1 100%;
     }
 
     .icon-wrap {
