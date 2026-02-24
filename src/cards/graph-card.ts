@@ -22,7 +22,9 @@ const COLOR_RGB_FALLBACK: Record<string, string> = {
   red: "244, 67, 54",
   pink: "233, 30, 99",
   purple: "156, 39, 176",
+  violet: "156, 39, 176",
   "deep-purple": "103, 58, 183",
+  "deep-violet": "103, 58, 183",
   indigo: "63, 81, 181",
   blue: "33, 150, 243",
   "light-blue": "3, 169, 244",
@@ -48,6 +50,12 @@ const COLOR_RGB_FALLBACK: Record<string, string> = {
 type GraphLegendLayout = "row" | "column";
 type GraphSlot = 1 | 2 | 3 | 4;
 type GraphTimeframeHours = 6 | 12 | 24;
+const SLOT_DEFAULT_TREND_COLOR: Record<GraphSlot, string> = {
+  1: "purple",
+  2: "blue",
+  3: "amber",
+  4: "green"
+};
 
 interface TrendPoint {
   ts: number;
@@ -112,6 +120,7 @@ interface PowerPilzGraphCardConfig extends LovelaceCardConfig {
   trend_color?: string | number[];
 
   entity_1?: string;
+  entity_1_name?: string;
   entity_1_enabled?: boolean;
   entity_1_icon?: string;
   entity_1_show_icon?: boolean;
@@ -119,6 +128,7 @@ interface PowerPilzGraphCardConfig extends LovelaceCardConfig {
   entity_1_trend_color?: string | number[];
 
   entity_2?: string;
+  entity_2_name?: string;
   entity_2_enabled?: boolean;
   entity_2_icon?: string;
   entity_2_show_icon?: boolean;
@@ -126,6 +136,7 @@ interface PowerPilzGraphCardConfig extends LovelaceCardConfig {
   entity_2_trend_color?: string | number[];
 
   entity_3?: string;
+  entity_3_name?: string;
   entity_3_enabled?: boolean;
   entity_3_icon?: string;
   entity_3_show_icon?: boolean;
@@ -133,6 +144,7 @@ interface PowerPilzGraphCardConfig extends LovelaceCardConfig {
   entity_3_trend_color?: string | number[];
 
   entity_4?: string;
+  entity_4_name?: string;
   entity_4_enabled?: boolean;
   entity_4_icon?: string;
   entity_4_show_icon?: boolean;
@@ -235,26 +247,33 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
       hover_enabled: config.hover_enabled ?? true,
       fill_area_enabled: config.fill_area_enabled ?? true,
       entity_1: entity1,
+      entity_1_name: this.readConfigString(config.entity_1_name),
       entity_1_enabled: config.entity_1_enabled ?? true,
       entity_1_show_icon: config.entity_1_show_icon ?? true,
       entity_1_icon: config.entity_1_icon ?? legacyIcon ?? "mdi:chart-line",
       entity_1_icon_color: config.entity_1_icon_color ?? config.icon_color,
-      entity_1_trend_color: config.entity_1_trend_color ?? config.trend_color,
+      entity_1_trend_color: this.normalizeTrendColor(config.entity_1_trend_color, config.trend_color, 1),
 
       entity_2: this.readConfigString(config.entity_2),
+      entity_2_name: this.readConfigString(config.entity_2_name),
       entity_2_enabled: config.entity_2_enabled ?? false,
       entity_2_show_icon: config.entity_2_show_icon ?? true,
       entity_2_icon: config.entity_2_icon ?? "mdi:chart-line-variant",
+      entity_2_trend_color: this.normalizeTrendColor(config.entity_2_trend_color, undefined, 2),
 
       entity_3: this.readConfigString(config.entity_3),
+      entity_3_name: this.readConfigString(config.entity_3_name),
       entity_3_enabled: config.entity_3_enabled ?? false,
       entity_3_show_icon: config.entity_3_show_icon ?? true,
       entity_3_icon: config.entity_3_icon ?? "mdi:chart-bell-curve",
+      entity_3_trend_color: this.normalizeTrendColor(config.entity_3_trend_color, undefined, 3),
 
       entity_4: this.readConfigString(config.entity_4),
+      entity_4_name: this.readConfigString(config.entity_4_name),
       entity_4_enabled: config.entity_4_enabled ?? false,
       entity_4_show_icon: config.entity_4_show_icon ?? true,
       entity_4_icon: config.entity_4_icon ?? "mdi:chart-timeline-variant",
+      entity_4_trend_color: this.normalizeTrendColor(config.entity_4_trend_color, undefined, 4),
 
       decimals
     };
@@ -390,13 +409,14 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
         continue;
       }
 
-      const name = this.entityName(entityId, index);
+      const name = this.entityName(this.slotCustomName(slot, config), entityId, index);
       const currentValue = readNumber(this.hass, entityId);
       const unit = config.unit ?? readUnit(this.hass, entityId) ?? "";
       const secondary = this.formatValue(currentValue, unit, decimals);
       const icon = this.slotIcon(slot, config);
       const iconStyle = this.iconStyle(this.slotIconColor(slot, config));
-      const trendColor = this.resolveColor(this.slotTrendColor(slot, config), DEFAULT_TREND_COLOR);
+      const slotDefaultColor = this.resolveColor(SLOT_DEFAULT_TREND_COLOR[slot], DEFAULT_TREND_COLOR);
+      const trendColor = this.resolveColor(this.slotTrendColor(slot, config), slotDefaultColor);
 
       entries.push({
         slot,
@@ -426,6 +446,21 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
         return this.readConfigString(config.entity_3);
       case 4:
         return this.readConfigString(config.entity_4);
+      default:
+        return undefined;
+    }
+  }
+
+  private slotCustomName(slot: GraphSlot, config: PowerPilzGraphCardConfig): string | undefined {
+    switch (slot) {
+      case 1:
+        return this.readConfigString(config.entity_1_name);
+      case 2:
+        return this.readConfigString(config.entity_2_name);
+      case 3:
+        return this.readConfigString(config.entity_3_name);
+      case 4:
+        return this.readConfigString(config.entity_4_name);
       default:
         return undefined;
     }
@@ -506,7 +541,10 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
     }
   }
 
-  private entityName(entityId: string, index: number): string {
+  private entityName(customName: string | undefined, entityId: string, index: number): string {
+    if (customName) {
+      return customName;
+    }
     const state = this.hass.states[entityId];
     const friendly = state?.attributes?.friendly_name;
     if (typeof friendly === "string" && friendly.trim().length > 0) {
@@ -557,6 +595,21 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
       return 1.5;
     }
     return Math.max(0.5, Math.min(6, value));
+  }
+
+  private normalizeTrendColor(
+    value: string | number[] | undefined,
+    legacy: string | number[] | undefined,
+    slot: GraphSlot
+  ): string | number[] {
+    const candidate = value ?? legacy;
+    if (Array.isArray(candidate)) {
+      return candidate;
+    }
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
+      return candidate;
+    }
+    return SLOT_DEFAULT_TREND_COLOR[slot];
   }
 
   private iconStyle(value?: string | number[]): Record<string, string> {

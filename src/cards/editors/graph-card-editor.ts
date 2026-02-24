@@ -4,6 +4,7 @@ import type { HomeAssistant, LovelaceCardConfig, LovelaceCardEditor } from "../.
 
 type GraphLegendLayout = "row" | "column";
 type GraphTimeframeHours = 6 | 12 | 24;
+type GraphSlot = 1 | 2 | 3 | 4;
 
 interface GraphCardConfig extends LovelaceCardConfig {
   type: "custom:power-pilz-graph-card";
@@ -22,6 +23,7 @@ interface GraphCardConfig extends LovelaceCardConfig {
   trend_color?: string | number[];
 
   entity_1?: string;
+  entity_1_name?: string;
   entity_1_enabled?: boolean;
   entity_1_icon?: string;
   entity_1_show_icon?: boolean;
@@ -29,6 +31,7 @@ interface GraphCardConfig extends LovelaceCardConfig {
   entity_1_trend_color?: string | number[];
 
   entity_2?: string;
+  entity_2_name?: string;
   entity_2_enabled?: boolean;
   entity_2_icon?: string;
   entity_2_show_icon?: boolean;
@@ -36,6 +39,7 @@ interface GraphCardConfig extends LovelaceCardConfig {
   entity_2_trend_color?: string | number[];
 
   entity_3?: string;
+  entity_3_name?: string;
   entity_3_enabled?: boolean;
   entity_3_icon?: string;
   entity_3_show_icon?: boolean;
@@ -43,6 +47,7 @@ interface GraphCardConfig extends LovelaceCardConfig {
   entity_3_trend_color?: string | number[];
 
   entity_4?: string;
+  entity_4_name?: string;
   entity_4_enabled?: boolean;
   entity_4_icon?: string;
   entity_4_show_icon?: boolean;
@@ -73,6 +78,7 @@ const entitySchema = (index: number): HaFormSchema => ({
       name: "",
       schema: [
         { name: `entity_${index}`, selector: { entity: { filter: { domain: "sensor" } } } },
+        { name: `entity_${index}_name`, selector: { text: {} } },
         { name: `entity_${index}_show_icon`, selector: { boolean: {} } },
         { name: `entity_${index}_icon`, selector: { icon: {} }, context: { icon_entity: `entity_${index}` } },
         {
@@ -181,26 +187,33 @@ export class PowerPilzGraphCardEditor extends LitElement implements LovelaceCard
       clip_graph_to_labels: config.clip_graph_to_labels ?? false,
 
       entity_1: this.readString(config.entity_1) ?? this.readString(config.entity),
+      entity_1_name: this.readString(config.entity_1_name),
       entity_1_enabled: config.entity_1_enabled ?? true,
       entity_1_show_icon: config.entity_1_show_icon ?? true,
       entity_1_icon: config.entity_1_icon ?? config.icon,
       entity_1_icon_color: config.entity_1_icon_color ?? config.icon_color,
-      entity_1_trend_color: config.entity_1_trend_color ?? config.trend_color,
+      entity_1_trend_color: this.normalizeTrendColor(config.entity_1_trend_color, config.trend_color, 1),
 
       entity_2: this.readString(config.entity_2),
+      entity_2_name: this.readString(config.entity_2_name),
       entity_2_enabled: config.entity_2_enabled ?? false,
       entity_2_show_icon: config.entity_2_show_icon ?? true,
       entity_2_icon: config.entity_2_icon,
+      entity_2_trend_color: this.normalizeTrendColor(config.entity_2_trend_color, undefined, 2),
 
       entity_3: this.readString(config.entity_3),
+      entity_3_name: this.readString(config.entity_3_name),
       entity_3_enabled: config.entity_3_enabled ?? false,
       entity_3_show_icon: config.entity_3_show_icon ?? true,
       entity_3_icon: config.entity_3_icon,
+      entity_3_trend_color: this.normalizeTrendColor(config.entity_3_trend_color, undefined, 3),
 
       entity_4: this.readString(config.entity_4),
+      entity_4_name: this.readString(config.entity_4_name),
       entity_4_enabled: config.entity_4_enabled ?? false,
       entity_4_show_icon: config.entity_4_show_icon ?? true,
-      entity_4_icon: config.entity_4_icon
+      entity_4_icon: config.entity_4_icon,
+      entity_4_trend_color: this.normalizeTrendColor(config.entity_4_trend_color, undefined, 4)
     };
 
     this._config = next;
@@ -243,14 +256,30 @@ export class PowerPilzGraphCardEditor extends LitElement implements LovelaceCard
     return 24;
   }
 
+  private normalizeTrendColor(
+    value: string | number[] | undefined,
+    legacy: string | number[] | undefined,
+    slot: GraphSlot
+  ): string | number[] {
+    const candidate = value ?? legacy;
+    if (Array.isArray(candidate)) {
+      return candidate;
+    }
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
+      return candidate;
+    }
+    return TREND_DEFAULTS[slot] ?? "purple";
+  }
+
   private computeLabel = (schema: { name?: string }): string => {
     const name = schema.name ?? "";
 
-    const match = name.match(/^entity_(\d+)_(enabled|show_icon|icon|icon_color|trend_color)$/);
+    const match = name.match(/^entity_(\d+)_(enabled|name|show_icon|icon|icon_color|trend_color)$/);
     if (match) {
       const [, index, field] = match;
       const fieldLabel: Record<string, string> = {
         enabled: "Enabled",
+        name: "Name",
         show_icon: "Show icon",
         icon: "Icon",
         icon_color: "Icon color",
