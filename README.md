@@ -25,14 +25,21 @@ The name is modeled after Mushroom. `Pilz` is German for `mushroom`, and the vis
 
 ### HACS
 
-PowerPilz is installable through HACS as a custom dashboard repository.
+Install PowerPilz through HACS by adding this repository as a custom repository:
+
+- Repository URL: `https://github.com/gregor-autischer/PowerPilz`
+- Category: `Dashboard`
+
+Steps:
 
 1. Open HACS in Home Assistant.
 2. Go to `Frontend`.
-3. Open menu (top-right) -> `Custom repositories`.
-4. Add your PowerPilz GitHub repository URL.
-5. Select category `Dashboard`.
-6. Install PowerPilz.
+3. Open the menu (top-right) and click `Custom repositories`.
+4. Paste `https://github.com/gregor-autischer/PowerPilz` into `Repository`.
+5. Select `Dashboard` as the category.
+6. Click `Add`.
+7. Search for `PowerPilz` in HACS Frontend and click `Download`.
+8. Reload Home Assistant when prompted.
 
 If resource auto-registration is disabled or you use YAML dashboards, add:
 
