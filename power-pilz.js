@@ -2998,10 +2998,8 @@ let Me = class extends N {
     `;
   }
   readString(e) {
-    if (typeof e != "string")
-      return;
-    const t = e.trim();
-    return t.length > 0 ? t : void 0;
+    if (typeof e == "string")
+      return e.length > 0 ? e : void 0;
   }
   normalizeTimeframeHours(e) {
     const t = typeof e == "number" ? e : typeof e == "string" ? Number.parseInt(e, 10) : NaN;
@@ -4178,10 +4176,8 @@ let Ee = class extends N {
     `;
   }
   readString(e) {
-    if (typeof e != "string")
-      return;
-    const t = e.trim();
-    return t.length > 0 ? t : void 0;
+    if (typeof e == "string")
+      return e.length > 0 ? e : void 0;
   }
   normalizeTimeframeHours(e) {
     const t = typeof e == "number" ? e : typeof e == "string" ? Number.parseInt(e, 10) : NaN;

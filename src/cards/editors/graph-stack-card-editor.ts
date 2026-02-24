@@ -243,8 +243,7 @@ export class PowerPilzGraphStackCardEditor extends LitElement implements Lovelac
     if (typeof value !== "string") {
       return undefined;
     }
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : undefined;
+    return value.length > 0 ? value : undefined;
   }
 
   private normalizeTimeframeHours(value: unknown): GraphTimeframeHours {
