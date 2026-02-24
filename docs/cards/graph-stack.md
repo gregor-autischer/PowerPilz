@@ -1,16 +1,16 @@
-# Graph stack card
+# 🍄‍🟫 Graph stack card
 
 ![Graph stack card all options](../../images/Graph_Stacked_Card_all_options.png)
 
-## Description
+## 🍄‍🟫 Description
 
 The Graph Stack card renders up to 4 entity lines as cumulative stacked trends. Each next line is the running sum of previous entities. It can also normalize all enabled entities to a 100% total.
 
-## Configuration variables
+## 🍄‍🟫 Configuration variables
 
 All options are available in the Lovelace editor, but you can also use YAML.
 
-### Global options
+### 🍄‍🟫 Global options
 
 | Name | Type | Default | Description |
 | :-- | :-- | :-- | :-- |
@@ -25,7 +25,7 @@ All options are available in the Lovelace editor, but you can also use YAML.
 | `unit` | string | entity unit | Optional unit override |
 | `decimals` | number | `1` | Decimal precision |
 
-### Per-entity options
+### 🍄‍🟫 Per-entity options
 
 The card supports entities `1..4`.
 
@@ -39,7 +39,7 @@ The card supports entities `1..4`.
 | `entity_<n>_icon_color` | Icon color |
 | `entity_<n>_trend_color` | Graph color for that entity |
 
-## Example YAML
+## 🍄‍🟫 Example YAML
 
 ```yaml
 type: custom:power-pilz-graph-stack-card

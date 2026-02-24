@@ -1,16 +1,16 @@
-# Graph card
+# 🍄‍🟫 Graph card
 
 ![Graph card all options](../../images/Graph_Card_all_options.png)
 
-## Description
+## 🍄‍🟫 Description
 
 The Graph card renders up to 4 entity trends in a Mushroom-style card with legend rows/columns, hover inspection and configurable timeframe.
 
-## Configuration variables
+## 🍄‍🟫 Configuration variables
 
 All options are available in the Lovelace editor, but you can also use YAML.
 
-### Global options
+### 🍄‍🟫 Global options
 
 | Name | Type | Default | Description |
 | :-- | :-- | :-- | :-- |
@@ -24,7 +24,7 @@ All options are available in the Lovelace editor, but you can also use YAML.
 | `unit` | string | entity unit | Optional unit override |
 | `decimals` | number | `1` | Decimal precision |
 
-### Per-entity options
+### 🍄‍🟫 Per-entity options
 
 The card supports entities `1..4`.
 
@@ -38,7 +38,7 @@ The card supports entities `1..4`.
 | `entity_<n>_icon_color` | Icon color |
 | `entity_<n>_trend_color` | Graph color for that entity |
 
-## Example YAML
+## 🍄‍🟫 Example YAML
 
 ```yaml
 type: custom:power-pilz-graph-card
