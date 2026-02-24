@@ -2,11 +2,11 @@
 
 ![Energy card all options](../../images/Energy_Card_all_options.png)
 
-## 🍄‍🟫 Description
+## Description
 
 The Energy card is the main PowerPilz flow card. It renders solar, grid, home and battery nodes in a Mushroom-style layout with animated flow lines, optional trends, and configurable sub-nodes.
 
-## 🍄‍🟫 Configuration variables
+## Configuration variables
 
 All options are available in the Lovelace editor, but you can also use YAML.
 
@@ -45,7 +45,7 @@ All options are available in the Lovelace editor, but you can also use YAML.
 | `details_entity` | string | Optional | Entity used by `more-info` action |
 | `tap_action` | action object | `none` | Card tap action |
 
-### 🍄‍🟫 Sub-node options
+### Sub-node options
 
 Energy sub-nodes are configured with repeated fields:
 
@@ -64,7 +64,7 @@ Energy sub-nodes are configured with repeated fields:
 | `grid_sub_<n>_*` | `n=1..2` | Grid 1 sub-node options (same fields as above) |
 | `grid_secondary_sub_<n>_*` | `n=1..2` | Grid 2 sub-node options (same fields as above) |
 
-## 🍄‍🟫 Example YAML
+## Example YAML
 
 ```yaml
 type: custom:power-pilz-energy-card

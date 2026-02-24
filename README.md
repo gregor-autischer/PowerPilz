@@ -2,19 +2,21 @@
 
 [![hacs][hacs-badge]][hacs-url]
 
-![Energy card 1](images/Energy_Card_1.png)
-![Energy card 2](images/Energy_Card_2.png)
-![Wallbox card](images/Wallbox_Card.png)
-![Graph card](images/Graph_Card.png)
-![Graph stacked card](images/Graph_Stacked_Card.png)
+<p align="center">
+  <img src="images/Energy_Card_1.png" alt="Energy card 1" width="220">
+  <img src="images/Energy_Card_2.png" alt="Energy card 2" width="220">
+  <img src="images/Wallbox_Card.png" alt="Wallbox card" width="220">
+  <img src="images/Graph_Card.png" alt="Graph card" width="220">
+  <img src="images/Graph_Stacked_Card.png" alt="Graph stacked card" width="220">
+</p>
 
-## 🍄‍🟫 What is PowerPilz ?
+## What is PowerPilz ?
 
 PowerPilz is a collection of cards for the Home Assistant Dashboard UI, focused on energy and EV charging use cases.
 
 The name is modeled after Mushroom. `Pilz` is German for `mushroom`, and the visual style follows that design language.
 
-### 🍄‍🟫 Features
+### Features
 
 - Editor support for all cards and all important options
 - Mushroom-like spacing, typography and controls
@@ -23,9 +25,9 @@ The name is modeled after Mushroom. `Pilz` is German for `mushroom`, and the vis
 - Graph and stacked graph cards with up to 4 entities
 - HACS-ready project structure
 
-## 🍄‍🟫 Installation
+## Installation
 
-### 🍄‍🟫 HACS
+### HACS
 
 PowerPilz is installable through HACS as a custom dashboard repository.
 
@@ -44,7 +46,7 @@ resources:
     type: module
 ```
 
-### 🍄‍🟫 Manual
+### Manual
 
 1. Download `power-pilz.js` from the latest release.
 2. Put `power-pilz.js` in your Home Assistant `config/www` folder.
@@ -52,7 +54,7 @@ resources:
    - URL: `/local/power-pilz.js`
    - Type: `JavaScript Module`
 
-## 🍄‍🟫 Usage
+## Usage
 
 All PowerPilz cards can be configured with the Home Assistant dashboard UI editor.
 
@@ -62,37 +64,37 @@ All PowerPilz cards can be configured with the Home Assistant dashboard UI edito
 4. Click `+ Add card`.
 5. Search for `Custom: PowerPilz ...` cards.
 
-### 🍄‍🟫 Cards
+### Cards
 
 - ⚡ [Energy card](docs/cards/energy.md)
 - 🔌 [Wallbox card](docs/cards/wallbox.md)
 - 📈 [Graph card](docs/cards/graph.md)
 - 🧱 [Graph stack card](docs/cards/graph-stack.md)
 
-## 🍄‍🟫 Development
+## Development
 
-### 🍄‍🟫 Local build
+### Local build
 
 ```sh
 npm install
 npm run build
 ```
 
-### 🍄‍🟫 Dev server
+### Dev server
 
 ```sh
 npm run dev
 ```
 
-## 🍄‍🟫 Troubleshooting
+## Troubleshooting
 
-### 🍄‍🟫 I don't see the latest changes
+### I don't see the latest changes
 
 1. Hard refresh the browser (or clear browser cache).
 2. Confirm the newest `power-pilz.js` is loaded in dashboard resources.
 3. If using HACS, re-download the latest version.
 
-## 🍄‍🟫 Credits
+## Credits
 
 Design direction is inspired by Mushroom cards.
 

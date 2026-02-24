@@ -2,11 +2,11 @@
 
 ![Wallbox card all options](../../images/Wallbox_Card_all_options.png)
 
-## 🍄‍🟫 Description
+## Description
 
 The Wallbox card is a Mushroom-style EV charging card. It combines charger state, power, mode selection and a play/pause action button in a compact control layout.
 
-## 🍄‍🟫 Configuration variables
+## Configuration variables
 
 All options are available in the Lovelace editor, but you can also use YAML.
 
@@ -30,7 +30,7 @@ All options are available in the Lovelace editor, but you can also use YAML.
 | `start_service_data` | object | Optional | Service data payload for start |
 | `stop_service_data` | object | Optional | Service data payload for stop |
 
-## 🍄‍🟫 Example YAML
+## Example YAML
 
 ```yaml
 type: custom:power-pilz-wallbox-card
