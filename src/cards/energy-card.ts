@@ -32,7 +32,9 @@ const COLOR_RGB_FALLBACK: Record<string, string> = {
   red: "244, 67, 54",
   pink: "233, 30, 99",
   purple: "156, 39, 176",
+  violet: "156, 39, 176",
   "deep-purple": "103, 58, 183",
+  "deep-violet": "103, 58, 183",
   indigo: "63, 81, 181",
   blue: "33, 150, 243",
   "light-blue": "3, 169, 244",
@@ -125,6 +127,7 @@ interface GridBounds {
 interface PowerPilzEnergyCardConfig extends LovelaceCardConfig {
   type: "custom:power-pilz-energy-card";
   name?: string;
+  home_visible?: boolean;
   solar_visible?: boolean;
   grid_visible?: boolean;
   grid_secondary_visible?: boolean;
@@ -224,6 +227,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     return {
       type: "custom:power-pilz-energy-card",
       name: "Energy Flow",
+      home_visible: true,
       solar_visible: true,
       grid_visible: true,
       grid_secondary_visible: false,
@@ -276,6 +280,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     this._config = {
       ...config,
       name: config.name ?? "Energy Flow",
+      home_visible: config.home_visible ?? true,
       solar_visible: config.solar_visible ?? true,
       grid_visible: config.grid_visible ?? true,
       grid_secondary_visible: config.grid_secondary_visible ?? false,
@@ -326,9 +331,9 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     return {
       columns: 6,
       rows: 4,
-      min_columns: 6,
+      min_columns: 3,
       max_columns: 12,
-      min_rows: 3,
+      min_rows: 2,
       max_rows: 8
     };
   }
@@ -352,6 +357,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     const config = this._config;
     const decimals = config.decimals ?? DEFAULT_DECIMALS;
 
+    const homeVisible = config.home_visible !== false;
     const solarVisible = config.solar_visible !== false;
     const gridVisible = config.grid_visible !== false;
     const gridSecondaryVisible = gridVisible && config.grid_secondary_visible === true;
@@ -399,7 +405,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     const solarSubBlocks = solarVisible ? this.collectSubBlocks("solar", config) : [];
     const gridSubBlocks = gridVisible ? this.collectSubBlocks("grid", config) : [];
     const gridSecondarySubBlocks = gridSecondaryVisible ? this.collectSubBlocks("grid_secondary", config) : [];
-    const homeSubBlocks = this.collectSubBlocks("home", config);
+    const homeSubBlocks = homeVisible ? this.collectSubBlocks("home", config) : [];
     const homeSubIndexes = new Set(homeSubBlocks.map((entry) => entry.index));
     const solarSubIndexes = new Set(solarSubBlocks.map((entry) => entry.index));
     const homeHas7And8 = homeSubIndexes.has(7) && homeSubIndexes.has(8);
@@ -456,6 +462,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
         }
       : null;
     const layoutBounds = this.computeGridBounds(
+      homeVisible,
       solarVisible,
       gridVisible,
       gridSecondaryVisible,
@@ -479,7 +486,9 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     const gridSecondaryPlacement = gridSecondaryPlacementBase
       ? this.normalizePlacement(gridSecondaryPlacementBase, layoutBounds)
       : null;
-    const homePlacement = this.normalizePlacement({ col: 5, row: 3, colSpan: 2, rowSpan: 2 }, layoutBounds);
+    const homePlacement = homeVisible
+      ? this.normalizePlacement({ col: 5, row: 3, colSpan: 2, rowSpan: 2 }, layoutBounds)
+      : null;
     const batteryPlacement = batteryPlacementBase ? this.normalizePlacement(batteryPlacementBase, layoutBounds) : null;
     const batterySecondaryPlacement = batterySecondaryPlacementBase
       ? this.normalizePlacement(batterySecondaryPlacementBase, layoutBounds)
@@ -652,21 +661,25 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
                 `
               : nothing}
 
-            <div
-              class="energy-value home ${home === null ? "missing" : ""}"
-              style=${styleMap(this.gridPlacementStyle(homePlacement))}
-            >
-              ${this.renderTrend("home", home, Boolean(config.home_trend), homeTrendColor, null, "")}
-              <div class="energy-content">
-                <ha-icon
-                  class="energy-icon"
-                  .icon=${config.home_icon ?? "mdi:home-lightning-bolt"}
-                  style=${styleMap(homeIconStyle)}
-                ></ha-icon>
-                <div class="energy-number">${this.formatValue(home, homeUnit, decimals)}</div>
-                <div class="energy-label">${config.home_label}</div>
-              </div>
-            </div>
+            ${homeVisible && homePlacement
+              ? html`
+                  <div
+                    class="energy-value home ${home === null ? "missing" : ""}"
+                    style=${styleMap(this.gridPlacementStyle(homePlacement))}
+                  >
+                    ${this.renderTrend("home", home, Boolean(config.home_trend), homeTrendColor, null, "")}
+                    <div class="energy-content">
+                      <ha-icon
+                        class="energy-icon"
+                        .icon=${config.home_icon ?? "mdi:home-lightning-bolt"}
+                        style=${styleMap(homeIconStyle)}
+                      ></ha-icon>
+                      <div class="energy-number">${this.formatValue(home, homeUnit, decimals)}</div>
+                      <div class="energy-label">${config.home_label}</div>
+                    </div>
+                  </div>
+                `
+              : nothing}
 
             ${this._showSubBlocks
               ? this.renderSubNodes("solar", solarSubBlocks, normalizedSolarSubPositions, decimals)
@@ -979,6 +992,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
   }
 
   private computeGridBounds(
+    homeVisible: boolean,
     solarVisible: boolean,
     gridVisible: boolean,
     gridSecondaryVisible: boolean,
@@ -997,10 +1011,11 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     gridSecondarySubPositions: Record<number, { row: number; col: number }>,
     homeSubPositions: Record<number, { row: number; col: number }>
   ): GridBounds {
-    const placements: GridPlacement[] = [
-      { col: 5, row: 3, colSpan: 2, rowSpan: 2 }, // home
-      { col: 3, row: 3, colSpan: 2, rowSpan: 2 } // core
-    ];
+    const placements: GridPlacement[] = [{ col: 3, row: 3, colSpan: 2, rowSpan: 2 }];
+
+    if (homeVisible) {
+      placements.push({ col: 5, row: 3, colSpan: 2, rowSpan: 2 });
+    }
 
     if (solarVisible) {
       placements.push({ col: 3, row: 1, colSpan: 2, rowSpan: 2 });
@@ -1074,7 +1089,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
   }
 
   private buildFlowSegments(
-    homePlacement: GridPlacement,
+    homePlacement: GridPlacement | null,
     corePlacement: GridPlacement,
     solarPlacement: GridPlacement | null,
     gridPlacements: Array<{ placement: GridPlacement; direction: FlowDirection }>,
@@ -1093,7 +1108,6 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     height: number;
   }> {
     const coreCenter = this.placementCenter(corePlacement, bounds);
-    const homeCenter = this.placementCenter(homePlacement, bounds);
     const segments: Array<{
       orientation: "horizontal" | "vertical";
       direction: FlowDirection;
@@ -1135,7 +1149,10 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       });
     };
 
-    horizontal(coreCenter.x, homeCenter.x, coreCenter.y, homeFlow);
+    if (homePlacement) {
+      const homeCenter = this.placementCenter(homePlacement, bounds);
+      horizontal(coreCenter.x, homeCenter.x, coreCenter.y, homeFlow);
+    }
 
     if (solarPlacement) {
       const solarCenter = this.placementCenter(solarPlacement, bounds);

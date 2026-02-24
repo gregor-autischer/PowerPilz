@@ -5,6 +5,7 @@ import type { HomeAssistant, LovelaceCardConfig, LovelaceCardEditor } from "../.
 interface EnergyCardConfig extends LovelaceCardConfig {
   type: "custom:power-pilz-energy-card";
   name?: string;
+  home_visible?: boolean;
   solar_visible?: boolean;
   grid_visible?: boolean;
   grid_secondary_visible?: boolean;
@@ -126,6 +127,7 @@ const SCHEMA: HaFormSchema[] = [
     type: "grid",
     name: "",
     schema: [
+      { name: "home_visible", selector: { boolean: {} } },
       { name: "solar_visible", selector: { boolean: {} } },
       { name: "grid_visible", selector: { boolean: {} } },
       { name: "grid_secondary_visible", selector: { boolean: {} } },
@@ -320,6 +322,7 @@ const SCHEMA: HaFormSchema[] = [
 
 const LABELS: Record<string, string> = {
   name: "Name",
+  home_visible: "Show home node",
   solar_visible: "Show solar node",
   grid_visible: "Show grid node",
   grid_secondary_visible: "Show second grid node",
@@ -396,6 +399,7 @@ export class PowerPilzEnergyCardEditor extends LitElement implements LovelaceCar
   public setConfig(config: EnergyCardConfig): void {
     this._config = {
       ...config,
+      home_visible: config.home_visible ?? true,
       solar_visible: config.solar_visible ?? true,
       grid_visible: config.grid_visible ?? true,
       grid_secondary_visible: config.grid_secondary_visible ?? false,
