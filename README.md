@@ -3,11 +3,7 @@
 [![hacs][hacs-badge]][hacs-url]
 
 <p align="center">
-  <img src="images/Energy_Card_1.png" alt="Energy card 1" width="220">
-  <img src="images/Energy_Card_2.png" alt="Energy card 2" width="220">
-  <img src="images/Wallbox_Card.png" alt="Wallbox card" width="220">
-  <img src="images/Graph_Card.png" alt="Graph card" width="220">
-  <img src="images/Graph_Stacked_Card.png" alt="Graph stacked card" width="220">
+  <img src="images/PowerPilz_main.png" alt="PowerPilz cards overview" width="100%">
 </p>
 
 ## What is PowerPilz ?
