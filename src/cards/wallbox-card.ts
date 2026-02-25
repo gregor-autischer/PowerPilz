@@ -123,6 +123,7 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
   private _modeMenuPortal?: HTMLDivElement;
   private _modeMenuOptionCount = 0;
   private _menuPositionRaf?: number;
+  private _menuGlobalListenersAttached = false;
 
   public setConfig(config: PowerPilzWallboxCardConfig): void {
     const powerEntity = config.power_entity ?? "sensor.dev_wallbox_power";
@@ -528,19 +529,33 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
 
   public connectedCallback(): void {
     super.connectedCallback();
+  }
+
+  public disconnectedCallback(): void {
+    this.closeModeMenuPortal();
+    super.disconnectedCallback();
+  }
+
+  private attachMenuGlobalListeners(): void {
+    if (this._menuGlobalListenersAttached) {
+      return;
+    }
     window.addEventListener("pointerdown", this.handleGlobalPointerDown, true);
     window.addEventListener("keydown", this.handleGlobalKeyDown, true);
     window.addEventListener("resize", this.handleViewportChange, true);
     window.addEventListener("scroll", this.handleViewportChange, true);
+    this._menuGlobalListenersAttached = true;
   }
 
-  public disconnectedCallback(): void {
+  private detachMenuGlobalListeners(): void {
+    if (!this._menuGlobalListenersAttached) {
+      return;
+    }
     window.removeEventListener("pointerdown", this.handleGlobalPointerDown, true);
     window.removeEventListener("keydown", this.handleGlobalKeyDown, true);
     window.removeEventListener("resize", this.handleViewportChange, true);
     window.removeEventListener("scroll", this.handleViewportChange, true);
-    this.closeModeMenuPortal();
-    super.disconnectedCallback();
+    this._menuGlobalListenersAttached = false;
   }
 
   private ensureModeMenuPortalStyles(): void {
@@ -670,6 +685,7 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
     this._modeMenuPortal = portal;
     this._modeMenuOptionCount = options.length;
     this._modeMenuOpen = true;
+    this.attachMenuGlobalListeners();
 
     this.positionModeMenuPortal(anchor);
     window.requestAnimationFrame(() => this.positionModeMenuPortal(anchor));
@@ -688,6 +704,7 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
     if (this._modeMenuOpen) {
       this._modeMenuOpen = false;
     }
+    this.detachMenuGlobalListeners();
   }
 
   private handleViewportChange = (): void => {

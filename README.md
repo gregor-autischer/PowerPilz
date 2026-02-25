@@ -33,13 +33,12 @@ Install PowerPilz through HACS by adding this repository as a custom repository:
 Steps:
 
 1. Open HACS in Home Assistant.
-2. Go to `Frontend`.
-3. Open the menu (top-right) and click `Custom repositories`.
-4. Paste `https://github.com/gregor-autischer/PowerPilz` into `Repository`.
-5. Select `Dashboard` as the category.
-6. Click `Add`.
-7. Search for `PowerPilz` in HACS Frontend and click `Download`.
-8. Reload Home Assistant when prompted.
+2. Open the menu (top-right) and click `Custom repositories`.
+3. Paste `https://github.com/gregor-autischer/PowerPilz` into `Repository`.
+4. Select `Dashboard` as the category.
+5. Click `Add`.
+6. Search for `PowerPilz` in HACS Frontend and click `Download`.
+7. Reload browser when prompted.
 
 If resource auto-registration is disabled or you use YAML dashboards, add:
 

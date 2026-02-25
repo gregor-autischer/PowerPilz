@@ -45,7 +45,7 @@ const Or = (e) => new Kt(typeof e == "string" ? e : e + "", void 0, et), Pe = (e
  * Copyright 2017 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
  */
-const { is: Nr, defineProperty: Br, getOwnPropertyDescriptor: Hr, getOwnPropertyNames: Dr, getOwnPropertySymbols: Fr, getPrototypeOf: Ur } = Object, V = globalThis, Tt = V.trustedTypes, jr = Tt ? Tt.emptyScript : "", Ve = V.reactiveElementPolyfillSupport, he = (e, t) => e, Ce = { toAttribute(e, t) {
+const { is: Nr, defineProperty: Br, getOwnPropertyDescriptor: Hr, getOwnPropertyNames: Dr, getOwnPropertySymbols: Fr, getPrototypeOf: Ur } = Object, G = globalThis, Tt = G.trustedTypes, jr = Tt ? Tt.emptyScript : "", Ge = G.reactiveElementPolyfillSupport, he = (e, t) => e, Ce = { toAttribute(e, t) {
   switch (t) {
     case Boolean:
       e = e ? jr : null;
@@ -74,7 +74,7 @@ const { is: Nr, defineProperty: Br, getOwnPropertyDescriptor: Hr, getOwnProperty
   }
   return r;
 } }, tt = (e, t) => !Nr(e, t), zt = { attribute: !0, type: String, converter: Ce, reflect: !1, useDefault: !1, hasChanged: tt };
-Symbol.metadata ?? (Symbol.metadata = Symbol("metadata")), V.litPropertyMetadata ?? (V.litPropertyMetadata = /* @__PURE__ */ new WeakMap());
+Symbol.metadata ?? (Symbol.metadata = Symbol("metadata")), G.litPropertyMetadata ?? (G.litPropertyMetadata = /* @__PURE__ */ new WeakMap());
 let ne = class extends HTMLElement {
   static addInitializer(t) {
     this._$Ei(), (this.l ?? (this.l = [])).push(t);
@@ -278,14 +278,14 @@ let ne = class extends HTMLElement {
   firstUpdated(t) {
   }
 };
-ne.elementStyles = [], ne.shadowRootOptions = { mode: "open" }, ne[he("elementProperties")] = /* @__PURE__ */ new Map(), ne[he("finalized")] = /* @__PURE__ */ new Map(), Ve == null || Ve({ ReactiveElement: ne }), (V.reactiveElementVersions ?? (V.reactiveElementVersions = [])).push("2.1.2");
+ne.elementStyles = [], ne.shadowRootOptions = { mode: "open" }, ne[he("elementProperties")] = /* @__PURE__ */ new Map(), ne[he("finalized")] = /* @__PURE__ */ new Map(), Ge == null || Ge({ ReactiveElement: ne }), (G.reactiveElementVersions ?? (G.reactiveElementVersions = [])).push("2.1.2");
 /**
  * @license
  * Copyright 2017 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
  */
-const ue = globalThis, Mt = (e) => e, Te = ue.trustedTypes, At = Te ? Te.createPolicy("lit-html", { createHTML: (e) => e }) : void 0, Jt = "$lit$", j = `lit$${Math.random().toFixed(9).slice(2)}$`, Zt = "?" + j, Vr = `<${Zt}>`, Z = document, _e = () => Z.createComment(""), me = (e) => e === null || typeof e != "object" && typeof e != "function", rt = Array.isArray, Gr = (e) => rt(e) || typeof (e == null ? void 0 : e[Symbol.iterator]) == "function", Ge = `[ 	
-\f\r]`, ce = /<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g, Et = /-->/g, Pt = />/g, X = RegExp(`>|${Ge}(?:([^\\s"'>=/]+)(${Ge}*=${Ge}*(?:[^ 	
+const ue = globalThis, Mt = (e) => e, Te = ue.trustedTypes, At = Te ? Te.createPolicy("lit-html", { createHTML: (e) => e }) : void 0, Jt = "$lit$", j = `lit$${Math.random().toFixed(9).slice(2)}$`, Zt = "?" + j, Gr = `<${Zt}>`, Z = document, _e = () => Z.createComment(""), me = (e) => e === null || typeof e != "object" && typeof e != "function", rt = Array.isArray, Vr = (e) => rt(e) || typeof (e == null ? void 0 : e[Symbol.iterator]) == "function", Ve = `[ 	
+\f\r]`, ce = /<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g, Et = /-->/g, Pt = />/g, X = RegExp(`>|${Ve}(?:([^\\s"'>=/]+)(${Ve}*=${Ve}*(?:[^ 	
 \f\r"'\`<>=]|("|')|))|$)`, "g"), Rt = /'/g, kt = /"/g, Qt = /^(?:script|style|textarea|title)$/i, Wr = (e) => (t, ...r) => ({ _$litType$: e, strings: t, values: r }), v = Wr(1), Q = Symbol.for("lit-noChange"), $ = Symbol.for("lit-nothing"), It = /* @__PURE__ */ new WeakMap(), K = Z.createTreeWalker(Z, 129);
 function er(e, t) {
   if (!rt(e) || !e.hasOwnProperty("raw")) throw Error("invalid template strings array");
@@ -299,7 +299,7 @@ const qr = (e, t) => {
     let c, d, h = -1, u = 0;
     for (; u < l.length && (s.lastIndex = u, d = s.exec(l), d !== null); ) u = s.lastIndex, s === ce ? d[1] === "!--" ? s = Et : d[1] !== void 0 ? s = Pt : d[2] !== void 0 ? (Qt.test(d[2]) && (o = RegExp("</" + d[2], "g")), s = X) : d[3] !== void 0 && (s = X) : s === X ? d[0] === ">" ? (s = o ?? ce, h = -1) : d[1] === void 0 ? h = -2 : (h = s.lastIndex - d[2].length, c = d[1], s = d[3] === void 0 ? X : d[3] === '"' ? kt : Rt) : s === kt || s === Rt ? s = X : s === Et || s === Pt ? s = ce : (s = X, o = void 0);
     const y = s === X && e[a + 1].startsWith("/>") ? " " : "";
-    i += s === ce ? l + Vr : h >= 0 ? (n.push(c), l.slice(0, h) + Jt + l.slice(h) + j + y) : l + j + (h === -2 ? a : y);
+    i += s === ce ? l + Gr : h >= 0 ? (n.push(c), l.slice(0, h) + Jt + l.slice(h) + j + y) : l + j + (h === -2 ? a : y);
   }
   return [er(e, i + (e[r] || "<?>") + (t === 2 ? "</svg>" : t === 3 ? "</math>" : "")), n];
 };
@@ -395,7 +395,7 @@ class pe {
     return this._$AB;
   }
   _$AI(t, r = this) {
-    t = ie(this, t, r), me(t) ? t === $ || t == null || t === "" ? (this._$AH !== $ && this._$AR(), this._$AH = $) : t !== this._$AH && t !== Q && this._(t) : t._$litType$ !== void 0 ? this.$(t) : t.nodeType !== void 0 ? this.T(t) : Gr(t) ? this.k(t) : this._(t);
+    t = ie(this, t, r), me(t) ? t === $ || t == null || t === "" ? (this._$AH !== $ && this._$AR(), this._$AH = $) : t !== this._$AH && t !== Q && this._(t) : t._$litType$ !== void 0 ? this.$(t) : t.nodeType !== void 0 ? this.T(t) : Vr(t) ? this.k(t) : this._(t);
   }
   O(t) {
     return this._$AA.parentNode.insertBefore(t, this._$AB);
@@ -1073,7 +1073,7 @@ const H = 0.01, Ye = 1, de = 1440 * 60 * 1e3, Lt = 300 * 1e3, pn = 4, bn = 8, gn
   white: "255, 255, 255",
   disabled: "189, 189, 189"
 };
-let G = class extends L {
+let V = class extends L {
   constructor() {
     super(...arguments), this._trendSeries = {}, this._showSubBlocks = !1, this._subNodeConnectorSegments = [], this._trendRefreshInFlight = !1, this._lastTrendRefresh = 0, this._trendDrawConfig = {}, this.handleCardClick = () => {
       this.executeTapAction();
@@ -2278,7 +2278,7 @@ let G = class extends L {
     return null;
   }
 };
-G.styles = Pe`
+V.styles = Pe`
     :host {
       display: block;
       container-type: inline-size;
@@ -2797,22 +2797,22 @@ G.styles = Pe`
   `;
 se([
   F({ attribute: !1 })
-], G.prototype, "hass", 2);
+], V.prototype, "hass", 2);
 se([
   R()
-], G.prototype, "_config", 2);
+], V.prototype, "_config", 2);
 se([
   R()
-], G.prototype, "_trendSeries", 2);
+], V.prototype, "_trendSeries", 2);
 se([
   R()
-], G.prototype, "_showSubBlocks", 2);
+], V.prototype, "_showSubBlocks", 2);
 se([
   R()
-], G.prototype, "_subNodeConnectorSegments", 2);
-G = se([
+], V.prototype, "_subNodeConnectorSegments", 2);
+V = se([
   ee("power-pilz-energy-card")
-], G);
+], V);
 var $n = Object.defineProperty, Cn = Object.getOwnPropertyDescriptor, ot = (e, t, r, n) => {
   for (var o = n > 1 ? void 0 : n ? Cn(t, r) : t, i = e.length - 1, s; i >= 0; i--)
     (s = e[i]) && (o = (n ? s(t, r, o) : s(o)) || o);
@@ -4202,7 +4202,7 @@ var Hn = Object.defineProperty, Dn = Object.getOwnPropertyDescriptor, le = (e, t
     (s = e[i]) && (o = (n ? s(t, r, o) : s(o)) || o);
   return n && o && Hn(t, r, o), o;
 };
-const Je = 1, jt = 24, Vt = 300 * 1e3, Y = 0.01, Ze = 4, Fn = "rgb(var(--rgb-primary-text-color, 33, 33, 33))", Gt = {
+const Je = 1, jt = 24, Gt = 300 * 1e3, Y = 0.01, Ze = 4, Fn = "rgb(var(--rgb-primary-text-color, 33, 33, 33))", Vt = {
   red: "244, 67, 54",
   pink: "233, 30, 99",
   purple: "156, 39, 176",
@@ -4644,8 +4644,8 @@ let q = class extends L {
       return "var(--rgb-primary-color, 3, 169, 244)";
     if (t === "accent")
       return "var(--rgb-accent-color, 255, 152, 0)";
-    if (t in Gt)
-      return `var(--rgb-${t}, ${Gt[t]})`;
+    if (t in Vt)
+      return `var(--rgb-${t}, ${Vt[t]})`;
     const r = /^#([a-fA-F0-9]{3})$/, n = /^#([a-fA-F0-9]{6})$/;
     if (r.test(t)) {
       const [, o] = t.match(r) ?? [];
@@ -4985,7 +4985,7 @@ let q = class extends L {
   connectedCallback() {
     super.connectedCallback(), this.maybeRefreshTrendHistory(!0), this._trendRefreshTimer = window.setInterval(() => {
       this.maybeRefreshTrendHistory();
-    }, Vt), this.updateComplete.then(() => {
+    }, Gt), this.updateComplete.then(() => {
       this.updateGraphTopInset(), this.syncTrendResizeObserver(), this.scheduleTrendCanvasDraw();
     });
   }
@@ -5013,7 +5013,7 @@ let q = class extends L {
   maybeRefreshTrendHistory(e = !1) {
     e && (this._lastTrendRefresh = 0);
     const t = Date.now();
-    !e && t - this._lastTrendRefresh < Vt || (this._lastTrendRefresh = t, this.refreshTrendHistory());
+    !e && t - this._lastTrendRefresh < Gt || (this._lastTrendRefresh = t, this.refreshTrendHistory());
   }
   async refreshTrendHistory() {
     if (this._trendRefreshInFlight || !this._config || !this.hass || typeof this.hass.callApi != "function")
@@ -5280,7 +5280,7 @@ var Un = Object.defineProperty, jn = Object.getOwnPropertyDescriptor, st = (e, t
     (s = e[i]) && (o = (n ? s(t, r, o) : s(o)) || o);
   return n && o && Un(t, r, o), o;
 };
-const Vn = [
+const Gn = [
   { name: "name", selector: { text: {} } },
   {
     type: "grid",
@@ -5316,7 +5316,7 @@ const Vn = [
     ]
   },
   { name: "decimals", selector: { number: { mode: "box", min: 0, max: 3, step: 1 } } }
-], Gn = {
+], Vn = {
   name: "Name",
   icon: "Icon",
   icon_color: "Icon color",
@@ -5333,7 +5333,7 @@ let Ee = class extends L {
   constructor() {
     super(...arguments), this.computeLabel = (e) => {
       const t = e.name ?? "";
-      return Gn[t] ?? t;
+      return Vn[t] ?? t;
     }, this.valueChanged = (e) => {
       const t = {
         ...e.detail.value,
@@ -5362,7 +5362,7 @@ let Ee = class extends L {
       <ha-form
         .hass=${this.hass}
         .data=${this._config}
-        .schema=${Vn}
+        .schema=${Gn}
         .computeLabel=${this.computeLabel}
         @value-changed=${this.valueChanged}
       ></ha-form>
@@ -5412,7 +5412,7 @@ const qn = 0.01, qt = {
   disabled: "189, 189, 189"
 }, Xt = "power-pilz-wallbox-mode-menu-portal-style", at = class at extends L {
   constructor() {
-    super(...arguments), this._actionBusy = !1, this._modeMenuOpen = !1, this._modeMenuOptionCount = 0, this.handleViewportChange = () => {
+    super(...arguments), this._actionBusy = !1, this._modeMenuOpen = !1, this._modeMenuOptionCount = 0, this._menuGlobalListenersAttached = !1, this.handleViewportChange = () => {
       !this._modeMenuOpen || !this._modeMenuPortal || this._menuPositionRaf === void 0 && (this._menuPositionRaf = window.requestAnimationFrame(() => {
         this._menuPositionRaf = void 0, this.positionModeMenuPortal();
       }));
@@ -5738,10 +5738,16 @@ const qn = 0.01, qt = {
     return null;
   }
   connectedCallback() {
-    super.connectedCallback(), window.addEventListener("pointerdown", this.handleGlobalPointerDown, !0), window.addEventListener("keydown", this.handleGlobalKeyDown, !0), window.addEventListener("resize", this.handleViewportChange, !0), window.addEventListener("scroll", this.handleViewportChange, !0);
+    super.connectedCallback();
   }
   disconnectedCallback() {
-    window.removeEventListener("pointerdown", this.handleGlobalPointerDown, !0), window.removeEventListener("keydown", this.handleGlobalKeyDown, !0), window.removeEventListener("resize", this.handleViewportChange, !0), window.removeEventListener("scroll", this.handleViewportChange, !0), this.closeModeMenuPortal(), super.disconnectedCallback();
+    this.closeModeMenuPortal(), super.disconnectedCallback();
+  }
+  attachMenuGlobalListeners() {
+    this._menuGlobalListenersAttached || (window.addEventListener("pointerdown", this.handleGlobalPointerDown, !0), window.addEventListener("keydown", this.handleGlobalKeyDown, !0), window.addEventListener("resize", this.handleViewportChange, !0), window.addEventListener("scroll", this.handleViewportChange, !0), this._menuGlobalListenersAttached = !0);
+  }
+  detachMenuGlobalListeners() {
+    this._menuGlobalListenersAttached && (window.removeEventListener("pointerdown", this.handleGlobalPointerDown, !0), window.removeEventListener("keydown", this.handleGlobalKeyDown, !0), window.removeEventListener("resize", this.handleViewportChange, !0), window.removeEventListener("scroll", this.handleViewportChange, !0), this._menuGlobalListenersAttached = !1);
   }
   ensureModeMenuPortalStyles() {
     if (document.getElementById(Xt))
@@ -5819,10 +5825,10 @@ const qn = 0.01, qt = {
         const l = ((c = a.currentTarget) == null ? void 0 : c.dataset.option) ?? "";
         l && (this.closeModeMenuPortal(), this.selectModeOption(l));
       }), o.append(s);
-    }), document.body.append(o), this._modeMenuPortal = o, this._modeMenuOptionCount = r.length, this._modeMenuOpen = !0, this.positionModeMenuPortal(t), window.requestAnimationFrame(() => this.positionModeMenuPortal(t));
+    }), document.body.append(o), this._modeMenuPortal = o, this._modeMenuOptionCount = r.length, this._modeMenuOpen = !0, this.attachMenuGlobalListeners(), this.positionModeMenuPortal(t), window.requestAnimationFrame(() => this.positionModeMenuPortal(t));
   }
   closeModeMenuPortal() {
-    this._menuPositionRaf !== void 0 && (window.cancelAnimationFrame(this._menuPositionRaf), this._menuPositionRaf = void 0), this._modeMenuPortal && (this._modeMenuPortal.remove(), this._modeMenuPortal = void 0), this._modeMenuOptionCount = 0, this._modeMenuOpen && (this._modeMenuOpen = !1);
+    this._menuPositionRaf !== void 0 && (window.cancelAnimationFrame(this._menuPositionRaf), this._menuPositionRaf = void 0), this._modeMenuPortal && (this._modeMenuPortal.remove(), this._modeMenuPortal = void 0), this._modeMenuOptionCount = 0, this._modeMenuOpen && (this._modeMenuOpen = !1), this.detachMenuGlobalListeners();
   }
 };
 at.styles = Pe`
