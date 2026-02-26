@@ -15,6 +15,7 @@ import { mushroomIconStyle } from "../utils/color";
 import "./editors/wallbox-card-editor";
 
 const EPSILON = 0.01;
+const MODE_MENU_PORTAL_STYLE_ID = "power-pilz-wallbox-mode-menu-portal-style";
 
 interface ServiceCommand {
   domain: string;
@@ -89,6 +90,14 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
   @state()
   private _actionBusy = false;
 
+  @state()
+  private _modeMenuOpen = false;
+
+  private _modeMenuPortal?: HTMLDivElement;
+  private _modeMenuOptionCount = 0;
+  private _menuPositionRaf?: number;
+  private _menuGlobalListenersAttached = false;
+
   public setConfig(config: PowerPilzWallboxCardConfig): void {
     const powerEntity = config.power_entity ?? "sensor.dev_wallbox_power";
     this._config = {
@@ -152,7 +161,7 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
     const showCommandButton = this.showCommandButton(config);
     const modeDisabled = this._actionBusy || !config.mode_entity || modeOptions.length === 0;
     const selectedMode = modeValue || modeOptions[0] || "Mode";
-    const modeSelectValue = modeOptions.includes(selectedMode) ? selectedMode : (modeOptions[0] ?? selectedMode);
+    const modeChevron = this._modeMenuOpen ? "mdi:chevron-up" : "mdi:chevron-down";
     const iconStyle = this.iconStyle(config.icon_color);
     const trailingCount = Number(showLiveValue) + Number(showCommandButton);
     const inlineTrailing = trailingCount === 1;
@@ -170,6 +179,9 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
           ? "actions"
           : "actions no-command"
         : "actions mode-only";
+    if ((!showModeSelector || modeDisabled) && this._modeMenuOpen) {
+      this.closeModeMenuPortal();
+    }
     return html`
       <ha-card>
         <div class="container">
@@ -222,19 +234,18 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
                   ${showModeSelector
                     ? html`
                         <div class="mode-select-wrap">
-                          <select
-                            class="mode-select-native"
+                          <button
+                            type="button"
+                            class="mode-select"
                             ?disabled=${modeDisabled}
-                            .value=${modeSelectValue}
-                            @change=${this.handleModeSelectChange}
+                            @click=${this.toggleModeMenu}
+                            aria-haspopup="listbox"
+                            aria-expanded=${this._modeMenuOpen ? "true" : "false"}
                             title="Charging mode"
                           >
-                            ${modeOptions.map(
-                              (option) => html`
-                                <option .value=${option}>${option}</option>
-                              `
-                            )}
-                          </select>
+                            <span class="mode-select-label">${selectedMode}</span>
+                            <ha-icon class="mode-select-chevron" .icon=${modeChevron}></ha-icon>
+                          </button>
                         </div>
                       `
                     : html``}
@@ -408,16 +419,241 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
     return mushroomIconStyle(value);
   }
 
-  private handleModeSelectChange = async (event: Event): Promise<void> => {
+  public disconnectedCallback(): void {
+    this.closeModeMenuPortal();
+    super.disconnectedCallback();
+  }
+
+  private attachMenuGlobalListeners(): void {
+    if (this._menuGlobalListenersAttached) {
+      return;
+    }
+    window.addEventListener("pointerdown", this.handleGlobalPointerDown, true);
+    window.addEventListener("keydown", this.handleGlobalKeyDown, true);
+    window.addEventListener("resize", this.handleViewportChange, true);
+    window.addEventListener("scroll", this.handleViewportChange, true);
+    this._menuGlobalListenersAttached = true;
+  }
+
+  private detachMenuGlobalListeners(): void {
+    if (!this._menuGlobalListenersAttached) {
+      return;
+    }
+    window.removeEventListener("pointerdown", this.handleGlobalPointerDown, true);
+    window.removeEventListener("keydown", this.handleGlobalKeyDown, true);
+    window.removeEventListener("resize", this.handleViewportChange, true);
+    window.removeEventListener("scroll", this.handleViewportChange, true);
+    this._menuGlobalListenersAttached = false;
+  }
+
+  private ensureModeMenuPortalStyles(): void {
+    if (document.getElementById(MODE_MENU_PORTAL_STYLE_ID)) {
+      return;
+    }
+    const style = document.createElement("style");
+    style.id = MODE_MENU_PORTAL_STYLE_ID;
+    style.textContent = `
+      .power-pilz-mode-menu-portal {
+        position: fixed;
+        z-index: 10000;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 6px;
+        box-sizing: border-box;
+        border-radius: var(--mush-control-border-radius, 12px);
+        border: var(--ha-card-border-width, 1px) solid var(--ha-card-border-color, var(--divider-color, rgba(0, 0, 0, 0.12)));
+        background: var(--ha-card-background, var(--card-background-color, #fff));
+        box-shadow: var(--ha-card-box-shadow, 0 6px 16px rgba(0, 0, 0, 0.18));
+        overflow-y: auto;
+      }
+      .power-pilz-mode-menu-option {
+        cursor: pointer;
+        border: none;
+        border-radius: calc(var(--mush-control-border-radius, 12px) - 2px);
+        margin: 0;
+        padding: 0 10px;
+        height: 34px;
+        width: 100%;
+        text-align: left;
+        box-sizing: border-box;
+        background: transparent;
+        color: var(--primary-text-color);
+        font-family: var(--paper-font-body1_-_font-family, inherit);
+        font-size: var(--mush-card-primary-font-size, 14px);
+        font-weight: var(--mush-card-primary-font-weight, 500);
+        line-height: var(--mush-card-primary-line-height, 20px);
+        letter-spacing: var(--mush-card-primary-letter-spacing, 0.1px);
+      }
+      .power-pilz-mode-menu-option:hover {
+        background-color: rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.08);
+      }
+      .power-pilz-mode-menu-option.selected {
+        background-color: rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.12);
+      }
+    `;
+    document.head.append(style);
+  }
+
+  private currentModeButton(): HTMLButtonElement | null {
+    return this.renderRoot?.querySelector(".mode-select") as HTMLButtonElement | null;
+  }
+
+  private positionModeMenuPortal(anchor?: HTMLElement): void {
+    const portal = this._modeMenuPortal;
+    if (!portal) {
+      return;
+    }
+
+    const trigger = anchor ?? this.currentModeButton();
+    if (!trigger) {
+      return;
+    }
+
+    const rect = trigger.getBoundingClientRect();
+    const viewportPadding = 8;
+    const verticalGap = 6;
+    const maxHeight = Math.max(96, Math.min(280, window.innerHeight - viewportPadding * 2));
+    const estimatedHeight = Math.min(
+      maxHeight,
+      (this._modeMenuOptionCount * 34)
+      + (Math.max(0, this._modeMenuOptionCount - 1) * 4)
+      + 14
+    );
+    const measuredHeight = portal.offsetHeight > 0
+      ? Math.min(maxHeight, portal.offsetHeight)
+      : estimatedHeight;
+    const width = Math.max(120, Math.round(rect.width));
+
+    const spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
+    const openUp = spaceBelow < measuredHeight + verticalGap && rect.top - viewportPadding > spaceBelow;
+
+    let left = rect.left;
+    left = Math.max(viewportPadding, Math.min(left, window.innerWidth - width - viewportPadding));
+    let top = openUp
+      ? rect.top - verticalGap - measuredHeight
+      : rect.bottom + verticalGap;
+    top = Math.max(viewportPadding, Math.min(top, window.innerHeight - measuredHeight - viewportPadding));
+
+    portal.style.maxHeight = `${maxHeight}px`;
+    portal.style.width = `${width}px`;
+    portal.style.left = `${Math.round(left)}px`;
+    portal.style.top = `${Math.round(top)}px`;
+  }
+
+  private openModeMenuPortal(anchor: HTMLElement, options: string[], selectedMode: string): void {
+    this.closeModeMenuPortal();
+    this.ensureModeMenuPortalStyles();
+
+    const portal = document.createElement("div");
+    portal.className = "power-pilz-mode-menu-portal";
+    portal.setAttribute("role", "listbox");
+
+    options.forEach((option) => {
+      const optionButton = document.createElement("button");
+      optionButton.type = "button";
+      optionButton.className = `power-pilz-mode-menu-option ${option === selectedMode ? "selected" : ""}`;
+      optionButton.dataset.option = option;
+      optionButton.setAttribute("role", "option");
+      optionButton.setAttribute("aria-selected", option === selectedMode ? "true" : "false");
+      optionButton.textContent = option;
+      optionButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const nextOption = (event.currentTarget as HTMLButtonElement | null)?.dataset.option ?? "";
+        if (!nextOption) {
+          return;
+        }
+        this.closeModeMenuPortal();
+        void this.selectModeOption(nextOption);
+      });
+      portal.append(optionButton);
+    });
+
+    document.body.append(portal);
+    this._modeMenuPortal = portal;
+    this._modeMenuOptionCount = options.length;
+    this._modeMenuOpen = true;
+    this.attachMenuGlobalListeners();
+
+    this.positionModeMenuPortal(anchor);
+    window.requestAnimationFrame(() => this.positionModeMenuPortal(anchor));
+  }
+
+  private closeModeMenuPortal(): void {
+    if (this._menuPositionRaf !== undefined) {
+      window.cancelAnimationFrame(this._menuPositionRaf);
+      this._menuPositionRaf = undefined;
+    }
+    if (this._modeMenuPortal) {
+      this._modeMenuPortal.remove();
+      this._modeMenuPortal = undefined;
+    }
+    this._modeMenuOptionCount = 0;
+    if (this._modeMenuOpen) {
+      this._modeMenuOpen = false;
+    }
+    this.detachMenuGlobalListeners();
+  }
+
+  private handleViewportChange = (): void => {
+    if (!this._modeMenuOpen || !this._modeMenuPortal) {
+      return;
+    }
+    if (this._menuPositionRaf !== undefined) {
+      return;
+    }
+    this._menuPositionRaf = window.requestAnimationFrame(() => {
+      this._menuPositionRaf = undefined;
+      this.positionModeMenuPortal();
+    });
+  };
+
+  private handleGlobalPointerDown = (event: Event): void => {
+    if (!this._modeMenuOpen || !this._modeMenuPortal) {
+      return;
+    }
+    const target = event.target as Node | null;
+    if (target && this._modeMenuPortal.contains(target)) {
+      return;
+    }
+    const path = event.composedPath();
+    if (path.includes(this)) {
+      return;
+    }
+    this.closeModeMenuPortal();
+  };
+
+  private handleGlobalKeyDown = (event: KeyboardEvent): void => {
+    if (event.key === "Escape" && this._modeMenuOpen) {
+      this.closeModeMenuPortal();
+    }
+  };
+
+  private toggleModeMenu = (event: Event): void => {
+    event.stopPropagation();
+
     if (!this._config?.mode_entity || this._actionBusy) {
       return;
     }
-    const target = event.currentTarget as HTMLSelectElement | null;
-    const option = target?.value;
-    if (!option) {
+
+    const entity = getEntity(this.hass, this._config.mode_entity);
+    const current = entity?.state ?? "";
+    const options = this.getModeOptions(entity, this._config.mode_options, current);
+    if (options.length === 0) {
       return;
     }
-    await this.selectModeOption(option);
+
+    if (this._modeMenuOpen) {
+      this.closeModeMenuPortal();
+      return;
+    }
+
+    const anchor = event.currentTarget as HTMLElement | null;
+    if (!anchor) {
+      return;
+    }
+
+    this.openModeMenuPortal(anchor, options, current || options[0] || "Mode");
   };
 
   private selectModeOption = async (option: string): Promise<void> => {
@@ -445,6 +681,7 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
     }
 
     event.stopPropagation();
+    this.closeModeMenuPortal();
     const power = readNumber(this.hass, this._config.power_entity);
     const status = readState(this.hass, this._config.status_entity);
     const isCharging = this.isCharging(status, power, this._config.command_entity);
@@ -638,12 +875,14 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
       overflow: visible;
     }
 
-    .mode-select-native {
+    .mode-select {
       cursor: pointer;
-      display: block;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       width: 100%;
       height: 100%;
-      border: 1px solid transparent;
+      border: none;
       border-radius: var(--control-border-radius);
       margin: 0;
       padding: 0 12px;
@@ -658,10 +897,29 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
       text-align: left;
     }
 
-    .mode-select-native:disabled {
+    .mode-select:disabled {
       cursor: not-allowed;
       color: rgb(var(--rgb-disabled, 189, 189, 189));
       background-color: rgba(var(--rgb-disabled, 189, 189, 189), 0.2);
+    }
+
+    .mode-select-label {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .mode-select-chevron {
+      --mdc-icon-size: 18px;
+      color: var(--secondary-text-color);
+      flex: none;
+      margin-left: 10px;
+      pointer-events: none;
+    }
+
+    .mode-select:disabled .mode-select-chevron {
+      color: rgb(var(--rgb-disabled, 189, 189, 189));
     }
 
     .live-value {

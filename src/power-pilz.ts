@@ -14,7 +14,7 @@ declare global {
   }
 }
 
-const VERSION = "0.1.1";
+const VERSION = "0.1.2";
 
 window.customCards = window.customCards || [];
 
