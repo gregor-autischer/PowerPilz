@@ -1,11 +1,12 @@
-name: Release Asset
+name: Production Release
 
 on:
-  release:
-    types: [published]
+  push:
+    branches: ["build"]
+  workflow_dispatch:
 
 jobs:
-  build-and-upload:
+  build-and-release:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -13,6 +14,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -23,10 +26,28 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build
+      - name: Type check
+        run: npm run check
+
+      - name: Build production bundle
         run: npm run build:hacs
 
-      - name: Upload asset
+      - name: Resolve release tag
+        id: version
+        run: echo "tag=v$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure tag is new
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/${{ steps.version.outputs.tag }}" >/dev/null; then
+            echo "Tag ${{ steps.version.outputs.tag }} already exists. Bump package.json version before merging to build."
+            exit 1
+          fi
+
+      - name: Create GitHub release and upload bundle
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
           files: power-pilz.js
