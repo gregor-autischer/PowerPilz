@@ -11,37 +11,10 @@ import type {
   LovelaceLayoutOptions
 } from "../types";
 import { getEntity, readNumber, readState, readUnit } from "../utils/entity";
+import { mushroomIconStyle } from "../utils/color";
 import "./editors/wallbox-card-editor";
 
 const EPSILON = 0.01;
-const COLOR_RGB_FALLBACK: Record<string, string> = {
-  red: "244, 67, 54",
-  pink: "233, 30, 99",
-  purple: "156, 39, 176",
-  violet: "156, 39, 176",
-  "deep-purple": "103, 58, 183",
-  "deep-violet": "103, 58, 183",
-  indigo: "63, 81, 181",
-  blue: "33, 150, 243",
-  "light-blue": "3, 169, 244",
-  cyan: "0, 188, 212",
-  teal: "0, 150, 136",
-  green: "76, 175, 80",
-  "light-green": "139, 195, 74",
-  lime: "205, 220, 57",
-  yellow: "255, 235, 59",
-  amber: "255, 193, 7",
-  orange: "255, 152, 0",
-  "deep-orange": "255, 87, 34",
-  brown: "121, 85, 72",
-  "light-grey": "189, 189, 189",
-  grey: "158, 158, 158",
-  "dark-grey": "97, 97, 97",
-  "blue-grey": "96, 125, 139",
-  black: "0, 0, 0",
-  white: "255, 255, 255",
-  disabled: "189, 189, 189"
-};
 
 interface ServiceCommand {
   domain: string;
@@ -116,9 +89,6 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
   @state()
   private _actionBusy = false;
 
-  @state()
-  private _modeMenuOpen = false;
-
   public setConfig(config: PowerPilzWallboxCardConfig): void {
     const powerEntity = config.power_entity ?? "sensor.dev_wallbox_power";
     this._config = {
@@ -182,7 +152,7 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
     const showCommandButton = this.showCommandButton(config);
     const modeDisabled = this._actionBusy || !config.mode_entity || modeOptions.length === 0;
     const selectedMode = modeValue || modeOptions[0] || "Mode";
-    const modeChevron = this._modeMenuOpen ? "mdi:chevron-up" : "mdi:chevron-down";
+    const modeSelectValue = modeOptions.includes(selectedMode) ? selectedMode : (modeOptions[0] ?? selectedMode);
     const iconStyle = this.iconStyle(config.icon_color);
     const trailingCount = Number(showLiveValue) + Number(showCommandButton);
     const inlineTrailing = trailingCount === 1;
@@ -200,10 +170,6 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
           ? "actions"
           : "actions no-command"
         : "actions mode-only";
-    if ((!showModeSelector || modeDisabled) && this._modeMenuOpen) {
-      this._modeMenuOpen = false;
-    }
-
     return html`
       <ha-card>
         <div class="container">
@@ -256,50 +222,19 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
                   ${showModeSelector
                     ? html`
                         <div class="mode-select-wrap">
-                          ${modeDisabled
-                            ? html`
-                                <button
-                                  type="button"
-                                  class="mode-select"
-                                  ?disabled=${true}
-                                  aria-haspopup="listbox"
-                                  aria-expanded="false"
-                                  title="Charging mode"
-                                >
-                                  <span class="mode-select-label">${selectedMode}</span>
-                                  <ha-icon class="mode-select-chevron" .icon=${modeChevron}></ha-icon>
-                                </button>
+                          <select
+                            class="mode-select-native"
+                            ?disabled=${modeDisabled}
+                            .value=${modeSelectValue}
+                            @change=${this.handleModeSelectChange}
+                            title="Charging mode"
+                          >
+                            ${modeOptions.map(
+                              (option) => html`
+                                <option .value=${option}>${option}</option>
                               `
-                            : html`
-                                <ha-button-menu
-                                  class="mode-button-menu"
-                                  fixed
-                                  menu-corner="START"
-                                  corner="BOTTOM_START"
-                                  @opened=${this.handleModeMenuOpened}
-                                  @closed=${this.handleModeMenuClosed}
-                                  @selected=${this.handleModeMenuSelected}
-                                >
-                                  <button
-                                    type="button"
-                                    class="mode-select"
-                                    slot="trigger"
-                                    aria-haspopup="listbox"
-                                    aria-expanded=${this._modeMenuOpen ? "true" : "false"}
-                                    title="Charging mode"
-                                  >
-                                    <span class="mode-select-label">${selectedMode}</span>
-                                    <ha-icon class="mode-select-chevron" .icon=${modeChevron}></ha-icon>
-                                  </button>
-                                  ${modeOptions.map(
-                                    (option) => html`
-                                      <mwc-list-item .value=${option} ?selected=${option === selectedMode}>
-                                        ${option}
-                                      </mwc-list-item>
-                                    `
-                                  )}
-                                </ha-button-menu>
-                              `}
+                            )}
+                          </select>
                         </div>
                       `
                     : html``}
@@ -470,117 +405,19 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
   }
 
   private iconStyle(value?: string | number[]): Record<string, string> {
-    const rgbCss = this.toRgbCss(value);
-    if (rgbCss) {
-      return {
-        "--icon-color": `rgb(${rgbCss})`,
-        "--shape-color": `rgba(${rgbCss}, 0.2)`
-      };
-    }
-
-    if (typeof value === "string" && value.trim().length > 0 && value !== "none") {
-      const cssColor = value.trim();
-      return {
-        "--icon-color": cssColor,
-        "--shape-color": `color-mix(in srgb, ${cssColor} 20%, transparent)`
-      };
-    }
-
-    return {};
+    return mushroomIconStyle(value);
   }
 
-  private toRgbCss(value?: string | number[]): string | null {
-    if (Array.isArray(value) && value.length >= 3) {
-      const nums = value.slice(0, 3).map((channel) => Number(channel));
-      if (nums.every((channel) => Number.isFinite(channel))) {
-        const [r, g, b] = nums.map((channel) => Math.max(0, Math.min(255, Math.round(channel))));
-        return `${r}, ${g}, ${b}`;
-      }
-      return null;
-    }
-
-    if (typeof value !== "string") {
-      return null;
-    }
-
-    const raw = value.trim().toLowerCase();
-    if (raw === "none") {
-      return null;
-    }
-    if (raw.startsWith("var(--rgb-")) {
-      return raw;
-    }
-    if (raw === "state") {
-      return "var(--rgb-state-entity, var(--rgb-primary-color, 3, 169, 244))";
-    }
-    if (raw === "primary") {
-      return "var(--rgb-primary-color, 3, 169, 244)";
-    }
-    if (raw === "accent") {
-      return "var(--rgb-accent-color, 255, 152, 0)";
-    }
-    if (raw in COLOR_RGB_FALLBACK) {
-      return `var(--rgb-${raw}, ${COLOR_RGB_FALLBACK[raw]})`;
-    }
-
-    const hex = raw;
-    const short = /^#([a-fA-F0-9]{3})$/;
-    const long = /^#([a-fA-F0-9]{6})$/;
-
-    if (short.test(hex)) {
-      const [, raw] = hex.match(short) ?? [];
-      if (!raw) {
-        return null;
-      }
-      const r = parseInt(raw[0] + raw[0], 16);
-      const g = parseInt(raw[1] + raw[1], 16);
-      const b = parseInt(raw[2] + raw[2], 16);
-      return `${r}, ${g}, ${b}`;
-    }
-
-    if (long.test(hex)) {
-      const [, raw] = hex.match(long) ?? [];
-      if (!raw) {
-        return null;
-      }
-      const r = parseInt(raw.slice(0, 2), 16);
-      const g = parseInt(raw.slice(2, 4), 16);
-      const b = parseInt(raw.slice(4, 6), 16);
-      return `${r}, ${g}, ${b}`;
-    }
-
-    return null;
-  }
-
-  private handleModeMenuOpened = (event: Event): void => {
-    event.stopPropagation();
-    this._modeMenuOpen = true;
-  };
-
-  private handleModeMenuClosed = (event: Event): void => {
-    event.stopPropagation();
-    this._modeMenuOpen = false;
-  };
-
-  private handleModeMenuSelected = async (event: CustomEvent<{ index: number }>): Promise<void> => {
-    event.stopPropagation();
-
+  private handleModeSelectChange = async (event: Event): Promise<void> => {
     if (!this._config?.mode_entity || this._actionBusy) {
-      this._modeMenuOpen = false;
       return;
     }
-
-    const entity = getEntity(this.hass, this._config.mode_entity);
-    const current = entity?.state ?? "";
-    const options = this.getModeOptions(entity, this._config.mode_options, current);
-    const index = Number(event.detail?.index);
-    this._modeMenuOpen = false;
-
-    if (!Number.isFinite(index) || index < 0 || index >= options.length) {
+    const target = event.currentTarget as HTMLSelectElement | null;
+    const option = target?.value;
+    if (!option) {
       return;
     }
-
-    await this.selectModeOption(options[index]);
+    await this.selectModeOption(option);
   };
 
   private selectModeOption = async (option: string): Promise<void> => {
@@ -608,7 +445,6 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
     }
 
     event.stopPropagation();
-    this._modeMenuOpen = false;
     const power = readNumber(this.hass, this._config.power_entity);
     const status = readState(this.hass, this._config.status_entity);
     const isCharging = this.isCharging(status, power, this._config.command_entity);
@@ -802,19 +638,12 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
       overflow: visible;
     }
 
-    .mode-button-menu {
+    .mode-select-native {
+      cursor: pointer;
       display: block;
       width: 100%;
-    }
-
-    .mode-select {
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      width: 100%;
       height: 100%;
-      border: none;
+      border: 1px solid transparent;
       border-radius: var(--control-border-radius);
       margin: 0;
       padding: 0 12px;
@@ -829,29 +658,10 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
       text-align: left;
     }
 
-    .mode-select:disabled {
+    .mode-select-native:disabled {
       cursor: not-allowed;
       color: rgb(var(--rgb-disabled, 189, 189, 189));
       background-color: rgba(var(--rgb-disabled, 189, 189, 189), 0.2);
-    }
-
-    .mode-select-label {
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .mode-select-chevron {
-      --mdc-icon-size: 18px;
-      color: var(--secondary-text-color);
-      flex: none;
-      margin-left: 10px;
-      pointer-events: none;
-    }
-
-    .mode-select:disabled .mode-select-chevron {
-      color: rgb(var(--rgb-disabled, 189, 189, 189));
     }
 
     .live-value {

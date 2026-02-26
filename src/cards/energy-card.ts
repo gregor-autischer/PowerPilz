@@ -10,6 +10,9 @@ import type {
   LovelaceLayoutOptions
 } from "../types";
 import { readNumber, readUnit } from "../utils/entity";
+import { fetchHistoryTrendPoints } from "../utils/history";
+import { resolveColor as resolveCssColor, toRgbCss as toRgbCssValue } from "../utils/color";
+import { toTrendCanvasPoints } from "../utils/trend";
 import "./editors/energy-card-editor";
 
 type FlowDirection = "none" | "forward" | "backward";
@@ -28,34 +31,6 @@ const SUB_BLOCKS_MIN_ROWS = 7;
 const SUB_BLOCKS_FALLBACK_MIN_WIDTH = 400;
 const SUB_BLOCKS_FALLBACK_MIN_HEIGHT = 300;
 const DEFAULT_NEUTRAL_RGB = "var(--rgb-primary-text-color, 33, 33, 33)";
-const COLOR_RGB_FALLBACK: Record<string, string> = {
-  red: "244, 67, 54",
-  pink: "233, 30, 99",
-  purple: "156, 39, 176",
-  violet: "156, 39, 176",
-  "deep-purple": "103, 58, 183",
-  "deep-violet": "103, 58, 183",
-  indigo: "63, 81, 181",
-  blue: "33, 150, 243",
-  "light-blue": "3, 169, 244",
-  cyan: "0, 188, 212",
-  teal: "0, 150, 136",
-  green: "76, 175, 80",
-  "light-green": "139, 195, 74",
-  lime: "205, 220, 57",
-  yellow: "255, 235, 59",
-  amber: "255, 193, 7",
-  orange: "255, 152, 0",
-  "deep-orange": "255, 87, 34",
-  brown: "121, 85, 72",
-  "light-grey": "189, 189, 189",
-  grey: "158, 158, 158",
-  "dark-grey": "97, 97, 97",
-  "blue-grey": "96, 125, 139",
-  black: "0, 0, 0",
-  white: "255, 255, 255",
-  disabled: "189, 189, 189"
-};
 
 interface TapActionConfig {
   action?: TapActionType;
@@ -1400,76 +1375,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
   }
 
   private toCanvasPoints(points: TrendCoordinate[], width: number, height: number): TrendCanvasPoint[] {
-    const canvasPoints = points.map((point) => ({
-      x: (point.x / 100) * width,
-      y: (point.y / 100) * height,
-      value: point.value
-    }));
-    return this.downsampleCanvasPoints(canvasPoints, width);
-  }
-
-  private downsampleCanvasPoints(points: TrendCanvasPoint[], width: number): TrendCanvasPoint[] {
-    if (points.length <= 3) {
-      return points;
-    }
-
-    const targetSamples = Math.max(24, Math.min(points.length, Math.round(width)));
-    if (points.length <= targetSamples) {
-      return this.smoothCanvasPoints(points);
-    }
-
-    const sampled: TrendCanvasPoint[] = [];
-    sampled.push(points[0]);
-
-    const span = (points.length - 1) / (targetSamples - 1);
-    for (let sampleIndex = 1; sampleIndex < targetSamples - 1; sampleIndex += 1) {
-      const start = Math.floor(sampleIndex * span);
-      const endExclusive = Math.max(start + 1, Math.floor((sampleIndex + 1) * span));
-      const bucket = points.slice(start, Math.min(points.length, endExclusive));
-      if (bucket.length === 0) {
-        continue;
-      }
-
-      const sum = bucket.reduce(
-        (acc, point) => {
-          acc.x += point.x;
-          acc.y += point.y;
-          acc.value += point.value;
-          return acc;
-        },
-        { x: 0, y: 0, value: 0 }
-      );
-
-      const count = bucket.length;
-      sampled.push({
-        x: sum.x / count,
-        y: sum.y / count,
-        value: sum.value / count
-      });
-    }
-
-    sampled.push(points[points.length - 1]);
-    return this.smoothCanvasPoints(sampled);
-  }
-
-  private smoothCanvasPoints(points: TrendCanvasPoint[]): TrendCanvasPoint[] {
-    if (points.length <= 3) {
-      return points;
-    }
-
-    const smoothed: TrendCanvasPoint[] = [points[0]];
-    for (let i = 1; i < points.length - 1; i += 1) {
-      const prev = points[i - 1];
-      const cur = points[i];
-      const next = points[i + 1];
-      smoothed.push({
-        x: cur.x,
-        y: (prev.y + (cur.y * 2) + next.y) / 4,
-        value: (prev.value + (cur.value * 2) + next.value) / 4
-      });
-    }
-    smoothed.push(points[points.length - 1]);
-    return smoothed;
+    return toTrendCanvasPoints(points, width, height);
   }
 
   private updateSubBlockVisibility(): void {
@@ -2207,57 +2113,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
   }
 
   private async fetchTrendHistory(entityId: string): Promise<TrendPoint[]> {
-    if (!this.hass.callApi) {
-      return [];
-    }
-
-    const startIso = new Date(Date.now() - TREND_WINDOW_MS).toISOString();
-    const path =
-      `history/period/${startIso}?filter_entity_id=${encodeURIComponent(entityId)}`
-      + "&minimal_response&no_attributes";
-
-    try {
-      const raw = await this.hass.callApi("GET", path);
-      return this.parseTrendHistory(raw);
-    } catch {
-      return [];
-    }
-  }
-
-  private parseTrendHistory(raw: unknown): TrendPoint[] {
-    if (!Array.isArray(raw) || raw.length === 0) {
-      return [];
-    }
-
-    const series = Array.isArray(raw[0]) ? raw[0] : raw;
-    if (!Array.isArray(series)) {
-      return [];
-    }
-
-    const points: TrendPoint[] = [];
-    for (const item of series) {
-      if (!item || typeof item !== "object") {
-        continue;
-      }
-      const stateObj = item as Record<string, unknown>;
-      const value = Number(stateObj.state);
-      const changedRaw =
-        typeof stateObj.last_changed === "string"
-          ? stateObj.last_changed
-          : typeof stateObj.last_updated === "string"
-            ? stateObj.last_updated
-            : "";
-      const ts = Date.parse(changedRaw);
-      if (!Number.isFinite(value) || !Number.isFinite(ts)) {
-        continue;
-      }
-      points.push({ ts, value });
-    }
-
-    const cutoff = Date.now() - TREND_WINDOW_MS;
-    return points
-      .filter((point) => point.ts >= cutoff)
-      .sort((a, b) => a.ts - b.ts);
+    return fetchHistoryTrendPoints(this.hass, entityId, TREND_WINDOW_MS);
   }
 
   private handleCardClick = (): void => {
@@ -2452,82 +2308,11 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
   }
 
   private resolveColor(value?: string | number[], fallback = ""): string {
-    const rgbCss = this.toRgbCss(value);
-    if (rgbCss) {
-      return `rgb(${rgbCss})`;
-    }
-
-    if (typeof value === "string" && value.trim().length > 0) {
-      const raw = value.trim();
-      const normalized = raw.toLowerCase();
-      if (normalized !== "none" && normalized !== "default") {
-        return raw;
-      }
-    }
-
-    return fallback;
+    return resolveCssColor(value, fallback);
   }
 
   private toRgbCss(value?: string | number[]): string | null {
-    if (Array.isArray(value) && value.length >= 3) {
-      const nums = value.slice(0, 3).map((channel) => Number(channel));
-      if (nums.every((channel) => Number.isFinite(channel))) {
-        const [r, g, b] = nums.map((channel) => Math.max(0, Math.min(255, Math.round(channel))));
-        return `${r}, ${g}, ${b}`;
-      }
-      return null;
-    }
-
-    if (typeof value !== "string") {
-      return null;
-    }
-
-    const raw = value.trim().toLowerCase();
-    if (raw === "none") {
-      return null;
-    }
-    if (raw.startsWith("var(--rgb-")) {
-      return raw;
-    }
-    if (raw === "state") {
-      return "var(--rgb-state-entity, var(--rgb-primary-color, 3, 169, 244))";
-    }
-    if (raw === "primary") {
-      return "var(--rgb-primary-color, 3, 169, 244)";
-    }
-    if (raw === "accent") {
-      return "var(--rgb-accent-color, 255, 152, 0)";
-    }
-    if (raw in COLOR_RGB_FALLBACK) {
-      return `var(--rgb-${raw}, ${COLOR_RGB_FALLBACK[raw]})`;
-    }
-
-    const shortHex = /^#([a-fA-F0-9]{3})$/;
-    const longHex = /^#([a-fA-F0-9]{6})$/;
-
-    if (shortHex.test(raw)) {
-      const [, hex] = raw.match(shortHex) ?? [];
-      if (!hex) {
-        return null;
-      }
-      const r = parseInt(hex[0] + hex[0], 16);
-      const g = parseInt(hex[1] + hex[1], 16);
-      const b = parseInt(hex[2] + hex[2], 16);
-      return `${r}, ${g}, ${b}`;
-    }
-
-    if (longHex.test(raw)) {
-      const [, hex] = raw.match(longHex) ?? [];
-      if (!hex) {
-        return null;
-      }
-      const r = parseInt(hex.slice(0, 2), 16);
-      const g = parseInt(hex.slice(2, 4), 16);
-      const b = parseInt(hex.slice(4, 6), 16);
-      return `${r}, ${g}, ${b}`;
-    }
-
-    return null;
+    return toRgbCssValue(value);
   }
 
   static styles = css`

@@ -1,8 +1,13 @@
 import type { LovelaceCardConfig } from "../../types";
+import {
+  normalizeLineThickness as normalizeLineThicknessValue,
+  normalizeTimeframeHours as normalizeTimeframeHoursValue,
+  type GraphLegendLayout,
+  type GraphSlot,
+  type GraphTimeframeHours
+} from "../../utils/graph";
 
-export type GraphLegendLayout = "row" | "column";
-export type GraphTimeframeHours = 6 | 12 | 24;
-export type GraphSlot = 1 | 2 | 3 | 4;
+export type { GraphLegendLayout, GraphSlot, GraphTimeframeHours };
 export type GraphColor = string | number[];
 export type HaFormSchema = Record<string, unknown>;
 
@@ -147,23 +152,11 @@ export const normalizeLegendLayout = (value: unknown): GraphLegendLayout =>
   value === "column" ? "column" : "row";
 
 export const normalizeTimeframeHours = (value: unknown): GraphTimeframeHours => {
-  const parsed =
-    typeof value === "number"
-      ? value
-      : typeof value === "string"
-        ? Number.parseInt(value, 10)
-        : NaN;
-  if (parsed === 6 || parsed === 12 || parsed === 24) {
-    return parsed;
-  }
-  return 24;
+  return normalizeTimeframeHoursValue(value);
 };
 
 export const clampLineThickness = (value: unknown): number => {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return 1.5;
-  }
-  return Math.max(0.5, Math.min(6, value));
+  return normalizeLineThicknessValue(value);
 };
 
 export const normalizeTrendColor = (

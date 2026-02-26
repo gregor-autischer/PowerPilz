@@ -10,6 +10,27 @@ import type {
   LovelaceLayoutOptions
 } from "../types";
 import { readNumber, readUnit } from "../utils/entity";
+import { fetchHistoryTrendPoints } from "../utils/history";
+import { mushroomIconStyle, resolveColor as resolveCssColor } from "../utils/color";
+import { toTrendCanvasPoints } from "../utils/trend";
+import {
+  formatGraphValue,
+  normalizeLegendLayout as normalizeLegendLayoutValue,
+  normalizeLineThickness as normalizeLineThicknessValue,
+  normalizeTimeframeHours as normalizeTimeframeHoursValue,
+  readOptionalConfigString,
+  resolveEntityName,
+  slotCustomName as slotCustomNameValue,
+  slotEnabled as slotEnabledValue,
+  slotEntityId as slotEntityIdValue,
+  slotIcon as slotIconValue,
+  slotIconColor as slotIconColorValue,
+  slotShowIcon as slotShowIconValue,
+  slotTrendColor as slotTrendColorValue,
+  type GraphLegendLayout,
+  type GraphSlot,
+  type GraphTimeframeHours
+} from "../utils/graph";
 import "./editors/graph-card-editor";
 
 const DEFAULT_DECIMALS = 1;
@@ -18,38 +39,7 @@ const TREND_REFRESH_MS = 5 * 60 * 1000;
 const EPSILON = 0.01;
 const GRAPH_SLOT_COUNT = 4;
 const DEFAULT_TREND_COLOR = "rgb(var(--rgb-primary-text-color, 33, 33, 33))";
-const COLOR_RGB_FALLBACK: Record<string, string> = {
-  red: "244, 67, 54",
-  pink: "233, 30, 99",
-  purple: "156, 39, 176",
-  violet: "156, 39, 176",
-  "deep-purple": "103, 58, 183",
-  "deep-violet": "103, 58, 183",
-  indigo: "63, 81, 181",
-  blue: "33, 150, 243",
-  "light-blue": "3, 169, 244",
-  cyan: "0, 188, 212",
-  teal: "0, 150, 136",
-  green: "76, 175, 80",
-  "light-green": "139, 195, 74",
-  lime: "205, 220, 57",
-  yellow: "255, 235, 59",
-  amber: "255, 193, 7",
-  orange: "255, 152, 0",
-  "deep-orange": "255, 87, 34",
-  brown: "121, 85, 72",
-  "light-grey": "189, 189, 189",
-  grey: "158, 158, 158",
-  "dark-grey": "97, 97, 97",
-  "blue-grey": "96, 125, 139",
-  black: "0, 0, 0",
-  white: "255, 255, 255",
-  disabled: "189, 189, 189"
-};
 
-type GraphLegendLayout = "row" | "column";
-type GraphSlot = 1 | 2 | 3 | 4;
-type GraphTimeframeHours = 6 | 12 | 24;
 const SLOT_DEFAULT_TREND_COLOR: Record<GraphSlot, string> = {
   1: "purple",
   2: "blue",
@@ -437,153 +427,51 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
   }
 
   private slotEntityId(slot: GraphSlot, config: PowerPilzGraphCardConfig): string | undefined {
-    switch (slot) {
-      case 1:
-        return this.readConfigString(config.entity_1);
-      case 2:
-        return this.readConfigString(config.entity_2);
-      case 3:
-        return this.readConfigString(config.entity_3);
-      case 4:
-        return this.readConfigString(config.entity_4);
-      default:
-        return undefined;
-    }
+    return slotEntityIdValue(slot, config);
   }
 
   private slotCustomName(slot: GraphSlot, config: PowerPilzGraphCardConfig): string | undefined {
-    switch (slot) {
-      case 1:
-        return this.readConfigString(config.entity_1_name);
-      case 2:
-        return this.readConfigString(config.entity_2_name);
-      case 3:
-        return this.readConfigString(config.entity_3_name);
-      case 4:
-        return this.readConfigString(config.entity_4_name);
-      default:
-        return undefined;
-    }
+    return slotCustomNameValue(slot, config);
   }
 
   private slotEnabled(slot: GraphSlot, config: PowerPilzGraphCardConfig): boolean {
-    switch (slot) {
-      case 1:
-        return config.entity_1_enabled !== false;
-      case 2:
-        return config.entity_2_enabled === true;
-      case 3:
-        return config.entity_3_enabled === true;
-      case 4:
-        return config.entity_4_enabled === true;
-      default:
-        return false;
-    }
+    return slotEnabledValue(slot, config);
   }
 
   private slotShowIcon(slot: GraphSlot, config: PowerPilzGraphCardConfig): boolean {
-    switch (slot) {
-      case 1:
-        return config.entity_1_show_icon !== false;
-      case 2:
-        return config.entity_2_show_icon !== false;
-      case 3:
-        return config.entity_3_show_icon !== false;
-      case 4:
-        return config.entity_4_show_icon !== false;
-      default:
-        return true;
-    }
+    return slotShowIconValue(slot, config);
   }
 
   private slotIcon(slot: GraphSlot, config: PowerPilzGraphCardConfig): string {
-    switch (slot) {
-      case 1:
-        return config.entity_1_icon ?? "mdi:chart-line";
-      case 2:
-        return config.entity_2_icon ?? "mdi:chart-line-variant";
-      case 3:
-        return config.entity_3_icon ?? "mdi:chart-bell-curve";
-      case 4:
-        return config.entity_4_icon ?? "mdi:chart-timeline-variant";
-      default:
-        return "mdi:chart-line";
-    }
+    return slotIconValue(slot, config);
   }
 
   private slotIconColor(slot: GraphSlot, config: PowerPilzGraphCardConfig): string | number[] | undefined {
-    switch (slot) {
-      case 1:
-        return config.entity_1_icon_color;
-      case 2:
-        return config.entity_2_icon_color;
-      case 3:
-        return config.entity_3_icon_color;
-      case 4:
-        return config.entity_4_icon_color;
-      default:
-        return undefined;
-    }
+    return slotIconColorValue(slot, config);
   }
 
   private slotTrendColor(slot: GraphSlot, config: PowerPilzGraphCardConfig): string | number[] | undefined {
-    switch (slot) {
-      case 1:
-        return config.entity_1_trend_color;
-      case 2:
-        return config.entity_2_trend_color;
-      case 3:
-        return config.entity_3_trend_color;
-      case 4:
-        return config.entity_4_trend_color;
-      default:
-        return undefined;
-    }
+    return slotTrendColorValue(slot, config);
   }
 
   private entityName(customName: string | undefined, entityId: string, index: number): string {
-    if (customName) {
-      return customName;
-    }
-    const state = this.hass.states[entityId];
-    const friendly = state?.attributes?.friendly_name;
-    if (typeof friendly === "string" && friendly.trim().length > 0) {
-      return friendly.trim();
-    }
-    return `Entity ${index}`;
+    return resolveEntityName(this.hass.states, customName, entityId, index);
   }
 
   private formatValue(value: number | null, unit: string, decimals: number): string {
-    if (value === null) {
-      return unit ? `-- ${unit}` : "--";
-    }
-    const formatted = `${value.toFixed(decimals)} ${unit}`.trim();
-    return formatted.length > 0 ? formatted : "--";
+    return formatGraphValue(value, unit, decimals);
   }
 
   private readConfigString(value: unknown): string | undefined {
-    if (typeof value !== "string") {
-      return undefined;
-    }
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : undefined;
+    return readOptionalConfigString(value);
   }
 
   private normalizeLegendLayout(value: unknown): GraphLegendLayout {
-    return value === "column" ? "column" : "row";
+    return normalizeLegendLayoutValue(value);
   }
 
   private normalizeTimeframeHours(value: unknown): GraphTimeframeHours {
-    const parsed =
-      typeof value === "number"
-        ? value
-        : typeof value === "string"
-          ? Number.parseInt(value, 10)
-          : NaN;
-    if (parsed === 6 || parsed === 12 || parsed === 24) {
-      return parsed;
-    }
-    return DEFAULT_TIMEFRAME_HOURS;
+    return normalizeTimeframeHoursValue(value, DEFAULT_TIMEFRAME_HOURS);
   }
 
   private trendWindowMs(config?: PowerPilzGraphCardConfig): number {
@@ -591,10 +479,7 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
   }
 
   private normalizeLineThickness(value: unknown): number {
-    if (typeof value !== "number" || !Number.isFinite(value)) {
-      return 1.5;
-    }
-    return Math.max(0.5, Math.min(6, value));
+    return normalizeLineThicknessValue(value);
   }
 
   private normalizeTrendColor(
@@ -613,102 +498,11 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
   }
 
   private iconStyle(value?: string | number[]): Record<string, string> {
-    const rgbCss = this.toRgbCss(value);
-    if (rgbCss) {
-      return {
-        "--icon-color": `rgb(${rgbCss})`,
-        "--shape-color": `rgba(${rgbCss}, 0.2)`
-      };
-    }
-
-    if (typeof value === "string" && value.trim().length > 0 && value !== "none") {
-      const cssColor = value.trim();
-      return {
-        "--icon-color": cssColor,
-        "--shape-color": `color-mix(in srgb, ${cssColor} 20%, transparent)`
-      };
-    }
-
-    return {};
+    return mushroomIconStyle(value);
   }
 
   private resolveColor(value?: string | number[], fallback = ""): string {
-    const rgbCss = this.toRgbCss(value);
-    if (rgbCss) {
-      return `rgb(${rgbCss})`;
-    }
-
-    if (typeof value === "string" && value.trim().length > 0) {
-      const raw = value.trim();
-      const normalized = raw.toLowerCase();
-      if (normalized !== "none" && normalized !== "default") {
-        return raw;
-      }
-    }
-
-    return fallback;
-  }
-
-  private toRgbCss(value?: string | number[]): string | null {
-    if (Array.isArray(value) && value.length >= 3) {
-      const nums = value.slice(0, 3).map((channel) => Number(channel));
-      if (nums.every((channel) => Number.isFinite(channel))) {
-        const [r, g, b] = nums.map((channel) => Math.max(0, Math.min(255, Math.round(channel))));
-        return `${r}, ${g}, ${b}`;
-      }
-      return null;
-    }
-
-    if (typeof value !== "string") {
-      return null;
-    }
-
-    const raw = value.trim().toLowerCase();
-    if (raw === "none") {
-      return null;
-    }
-    if (raw.startsWith("var(--rgb-")) {
-      return raw;
-    }
-    if (raw === "state") {
-      return "var(--rgb-state-entity, var(--rgb-primary-color, 3, 169, 244))";
-    }
-    if (raw === "primary") {
-      return "var(--rgb-primary-color, 3, 169, 244)";
-    }
-    if (raw === "accent") {
-      return "var(--rgb-accent-color, 255, 152, 0)";
-    }
-    if (raw in COLOR_RGB_FALLBACK) {
-      return `var(--rgb-${raw}, ${COLOR_RGB_FALLBACK[raw]})`;
-    }
-
-    const shortHex = /^#([a-fA-F0-9]{3})$/;
-    const longHex = /^#([a-fA-F0-9]{6})$/;
-
-    if (shortHex.test(raw)) {
-      const [, hex] = raw.match(shortHex) ?? [];
-      if (!hex) {
-        return null;
-      }
-      const r = parseInt(hex[0] + hex[0], 16);
-      const g = parseInt(hex[1] + hex[1], 16);
-      const b = parseInt(hex[2] + hex[2], 16);
-      return `${r}, ${g}, ${b}`;
-    }
-
-    if (longHex.test(raw)) {
-      const [, hex] = raw.match(longHex) ?? [];
-      if (!hex) {
-        return null;
-      }
-      const r = parseInt(hex.slice(0, 2), 16);
-      const g = parseInt(hex.slice(2, 4), 16);
-      const b = parseInt(hex.slice(4, 6), 16);
-      return `${r}, ${g}, ${b}`;
-    }
-
-    return null;
+    return resolveCssColor(value, fallback);
   }
 
   private trendPoints(slot: GraphSlot, currentValue: number | null): TrendPoint[] {
@@ -779,76 +573,7 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
   }
 
   private toCanvasPoints(points: TrendCoordinate[], width: number, height: number): TrendCanvasPoint[] {
-    const canvasPoints = points.map((point) => ({
-      x: (point.x / 100) * width,
-      y: (point.y / 100) * height,
-      value: point.value
-    }));
-    return this.downsampleCanvasPoints(canvasPoints, width);
-  }
-
-  private downsampleCanvasPoints(points: TrendCanvasPoint[], width: number): TrendCanvasPoint[] {
-    if (points.length <= 3) {
-      return points;
-    }
-
-    const targetSamples = Math.max(24, Math.min(points.length, Math.round(width)));
-    if (points.length <= targetSamples) {
-      return this.smoothCanvasPoints(points);
-    }
-
-    const sampled: TrendCanvasPoint[] = [];
-    sampled.push(points[0]);
-
-    const span = (points.length - 1) / (targetSamples - 1);
-    for (let sampleIndex = 1; sampleIndex < targetSamples - 1; sampleIndex += 1) {
-      const start = Math.floor(sampleIndex * span);
-      const endExclusive = Math.max(start + 1, Math.floor((sampleIndex + 1) * span));
-      const bucket = points.slice(start, Math.min(points.length, endExclusive));
-      if (bucket.length === 0) {
-        continue;
-      }
-
-      const sum = bucket.reduce(
-        (acc, point) => {
-          acc.x += point.x;
-          acc.y += point.y;
-          acc.value += point.value;
-          return acc;
-        },
-        { x: 0, y: 0, value: 0 }
-      );
-
-      const count = bucket.length;
-      sampled.push({
-        x: sum.x / count,
-        y: sum.y / count,
-        value: sum.value / count
-      });
-    }
-
-    sampled.push(points[points.length - 1]);
-    return this.smoothCanvasPoints(sampled);
-  }
-
-  private smoothCanvasPoints(points: TrendCanvasPoint[]): TrendCanvasPoint[] {
-    if (points.length <= 3) {
-      return points;
-    }
-
-    const smoothed: TrendCanvasPoint[] = [points[0]];
-    for (let index = 1; index < points.length - 1; index += 1) {
-      const prev = points[index - 1];
-      const cur = points[index];
-      const next = points[index + 1];
-      smoothed.push({
-        x: cur.x,
-        y: (prev.y + (cur.y * 2) + next.y) / 4,
-        value: (prev.value + (cur.value * 2) + next.value) / 4
-      });
-    }
-    smoothed.push(points[points.length - 1]);
-    return smoothed;
+    return toTrendCanvasPoints(points, width, height);
   }
 
   private syncTrendResizeObserver(): void {
@@ -1342,57 +1067,7 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
   }
 
   private async fetchTrendHistory(entityId: string, windowMs: number): Promise<TrendPoint[]> {
-    if (!this.hass.callApi) {
-      return [];
-    }
-
-    const startIso = new Date(Date.now() - windowMs).toISOString();
-    const path =
-      `history/period/${startIso}?filter_entity_id=${encodeURIComponent(entityId)}`
-      + "&minimal_response&no_attributes";
-
-    try {
-      const raw = await this.hass.callApi("GET", path);
-      return this.parseTrendHistory(raw, windowMs);
-    } catch {
-      return [];
-    }
-  }
-
-  private parseTrendHistory(raw: unknown, windowMs: number): TrendPoint[] {
-    if (!Array.isArray(raw) || raw.length === 0) {
-      return [];
-    }
-
-    const series = Array.isArray(raw[0]) ? raw[0] : raw;
-    if (!Array.isArray(series)) {
-      return [];
-    }
-
-    const points: TrendPoint[] = [];
-    for (const item of series) {
-      if (!item || typeof item !== "object") {
-        continue;
-      }
-      const stateObj = item as Record<string, unknown>;
-      const value = Number(stateObj.state);
-      const changedRaw =
-        typeof stateObj.last_changed === "string"
-          ? stateObj.last_changed
-          : typeof stateObj.last_updated === "string"
-            ? stateObj.last_updated
-            : "";
-      const ts = Date.parse(changedRaw);
-      if (!Number.isFinite(value) || !Number.isFinite(ts)) {
-        continue;
-      }
-      points.push({ ts, value });
-    }
-
-    const cutoff = Date.now() - windowMs;
-    return points
-      .filter((point) => point.ts >= cutoff)
-      .sort((a, b) => a.ts - b.ts);
+    return fetchHistoryTrendPoints(this.hass, entityId, windowMs);
   }
 
   static styles = css`
