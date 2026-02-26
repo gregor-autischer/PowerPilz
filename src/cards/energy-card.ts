@@ -221,6 +221,12 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
   @property({ attribute: false })
   public hass!: HomeAssistant;
 
+  @property({ type: Boolean })
+  public preview = false;
+
+  @property({ type: Boolean })
+  public editMode = false;
+
   @state()
   private _config?: PowerPilzEnergyCardConfig;
 
@@ -239,6 +245,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
   private _trendCanvasRaf?: number;
   private _subNodeConnectorRaf?: number;
   private _trendResizeObserver?: ResizeObserver;
+  private _liveRuntimeActive = false;
   private _trendDrawConfig: Partial<
     Record<NodeKey, { currentValue: number | null; color: string; threshold: number | null; thresholdColor: string }>
   > = {};
@@ -370,7 +377,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       ? "none"
       : this.toBidirectionalFlow((battery ?? 0) + (batterySecondary ?? 0));
     const tapAction = this.resolveTapAction(config);
-    const interactive = tapAction.action !== "none";
+    const interactive = !this.isEditorPreview() && tapAction.action !== "none";
 
     const solarIconStyle = this.iconColorStyle(config.solar_icon_color);
     const gridIconStyle = this.iconColorStyle(config.grid_icon_color);
@@ -1982,11 +1989,86 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
 
   public connectedCallback(): void {
     super.connectedCallback();
-    this.maybeRefreshTrendHistory(true);
+    this.startLiveRuntime(true);
+    if (!this.shouldRunLiveRuntime()) {
+      void this.updateComplete.then(() => {
+        this.updateSubBlockVisibility();
+        this.scheduleSubNodeConnectorDraw();
+        this.scheduleTrendCanvasDraw();
+      });
+    }
+  }
+
+  public disconnectedCallback(): void {
+    this.stopLiveRuntime();
+    super.disconnectedCallback();
+  }
+
+  protected updated(changedProps: Map<string, unknown>): void {
+    if (changedProps.has("preview") || changedProps.has("editMode")) {
+      if (this.shouldRunLiveRuntime()) {
+        this.startLiveRuntime(true);
+      } else {
+        this.stopLiveRuntime();
+      }
+    }
+
+    if (this.shouldRunLiveRuntime()) {
+      if (changedProps.has("_config")) {
+        this.maybeRefreshTrendHistory(true);
+      } else if (changedProps.has("hass")) {
+        this.maybeRefreshTrendHistory();
+      }
+      this.syncTrendResizeObserver();
+    } else if (this._trendResizeObserver) {
+      this._trendResizeObserver.disconnect();
+    }
+
+    this.updateSubBlockVisibility();
+    this.scheduleSubNodeConnectorDraw();
+    this.scheduleTrendCanvasDraw();
+  }
+
+  private maybeRefreshTrendHistory(force = false): void {
+    if (!this.shouldRunLiveRuntime()) {
+      return;
+    }
+
+    if (force) {
+      this._lastTrendRefresh = 0;
+    }
+
+    const now = Date.now();
+    if (!force && now - this._lastTrendRefresh < TREND_REFRESH_MS) {
+      return;
+    }
+
+    this._lastTrendRefresh = now;
+    void this.refreshTrendHistory();
+  }
+
+  private isEditorPreview(): boolean {
+    return this.preview || this.editMode || Boolean(this.closest("hui-card-preview"));
+  }
+
+  private shouldRunLiveRuntime(): boolean {
+    return !this.isEditorPreview();
+  }
+
+  private startLiveRuntime(forceRefresh = false): void {
+    if (!this.shouldRunLiveRuntime() || this._liveRuntimeActive) {
+      return;
+    }
+
+    this._liveRuntimeActive = true;
+    this.maybeRefreshTrendHistory(forceRefresh);
     this._trendRefreshTimer = window.setInterval(() => {
       this.maybeRefreshTrendHistory();
     }, TREND_REFRESH_MS);
     void this.updateComplete.then(() => {
+      if (!this._liveRuntimeActive) {
+        return;
+      }
       this.syncTrendResizeObserver();
       this.updateSubBlockVisibility();
       this.scheduleSubNodeConnectorDraw();
@@ -1994,7 +2076,8 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     });
   }
 
-  public disconnectedCallback(): void {
+  private stopLiveRuntime(): void {
+    this._liveRuntimeActive = false;
     if (this._trendRefreshTimer !== undefined) {
       window.clearInterval(this._trendRefreshTimer);
       this._trendRefreshTimer = undefined;
@@ -2011,33 +2094,6 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       this._trendResizeObserver.disconnect();
       this._trendResizeObserver = undefined;
     }
-    super.disconnectedCallback();
-  }
-
-  protected updated(changedProps: Map<string, unknown>): void {
-    if (changedProps.has("_config")) {
-      this.maybeRefreshTrendHistory(true);
-    } else if (changedProps.has("hass")) {
-      this.maybeRefreshTrendHistory();
-    }
-    this.syncTrendResizeObserver();
-    this.updateSubBlockVisibility();
-    this.scheduleSubNodeConnectorDraw();
-    this.scheduleTrendCanvasDraw();
-  }
-
-  private maybeRefreshTrendHistory(force = false): void {
-    if (force) {
-      this._lastTrendRefresh = 0;
-    }
-
-    const now = Date.now();
-    if (!force && now - this._lastTrendRefresh < TREND_REFRESH_MS) {
-      return;
-    }
-
-    this._lastTrendRefresh = now;
-    void this.refreshTrendHistory();
   }
 
   private async refreshTrendHistory(): Promise<void> {
@@ -2129,6 +2185,10 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
   };
 
   private executeTapAction(): void {
+    if (this.isEditorPreview()) {
+      return;
+    }
+
     if (!this._config) {
       return;
     }

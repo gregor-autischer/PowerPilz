@@ -196,6 +196,12 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
   @property({ attribute: false })
   public hass!: HomeAssistant;
 
+  @property({ type: Boolean })
+  public preview = false;
+
+  @property({ type: Boolean })
+  public editMode = false;
+
   @state()
   private _config?: PowerPilzGraphCardConfig;
 
@@ -215,6 +221,7 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
   private _lastTrendRefresh = 0;
   private _trendCanvasRaf?: number;
   private _trendResizeObserver?: ResizeObserver;
+  private _liveRuntimeActive = false;
   private _canvasColorContext?: CanvasRenderingContext2D | null;
 
   public setConfig(config: PowerPilzGraphCardConfig): void {
@@ -739,6 +746,11 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
   }
 
   private handlePointerMove = (event: PointerEvent): void => {
+    if (this.isEditorPreview()) {
+      this.clearHoverState();
+      return;
+    }
+
     const layer = this.renderRoot.querySelector<HTMLElement>(".card-trend");
     if (!layer || !this._config || this._config.hover_enabled === false) {
       this.clearHoverState();
@@ -938,47 +950,46 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
 
   public connectedCallback(): void {
     super.connectedCallback();
-    this.maybeRefreshTrendHistory(true);
-    this._trendRefreshTimer = window.setInterval(() => {
-      this.maybeRefreshTrendHistory();
-    }, TREND_REFRESH_MS);
-    void this.updateComplete.then(() => {
-      this.updateGraphTopInset();
-      this.syncTrendResizeObserver();
-      this.scheduleTrendCanvasDraw();
-    });
+    this.startLiveRuntime(true);
+    if (!this.shouldRunLiveRuntime()) {
+      void this.updateComplete.then(() => {
+        this.updateGraphTopInset();
+        this.scheduleTrendCanvasDraw();
+      });
+    }
   }
 
   public disconnectedCallback(): void {
     this.clearHoverState();
-    if (this._trendRefreshTimer !== undefined) {
-      window.clearInterval(this._trendRefreshTimer);
-      this._trendRefreshTimer = undefined;
-    }
-    if (this._trendCanvasRaf !== undefined) {
-      window.cancelAnimationFrame(this._trendCanvasRaf);
-      this._trendCanvasRaf = undefined;
-    }
-    if (this._trendResizeObserver) {
-      this._trendResizeObserver.disconnect();
-      this._trendResizeObserver = undefined;
-    }
+    this.stopLiveRuntime();
     super.disconnectedCallback();
   }
 
   protected updated(changedProps: Map<string, unknown>): void {
-    if (changedProps.has("_config")) {
-      this.maybeRefreshTrendHistory(true);
-      this.clearHoverState();
-    } else if (changedProps.has("hass")) {
-      this.maybeRefreshTrendHistory();
-      this.clearHoverState();
+    if (changedProps.has("preview") || changedProps.has("editMode")) {
+      if (this.shouldRunLiveRuntime()) {
+        this.startLiveRuntime(true);
+      } else {
+        this.stopLiveRuntime();
+      }
+    }
+
+    if (this.shouldRunLiveRuntime()) {
+      if (changedProps.has("_config")) {
+        this.maybeRefreshTrendHistory(true);
+        this.clearHoverState();
+      } else if (changedProps.has("hass")) {
+        this.maybeRefreshTrendHistory();
+        this.clearHoverState();
+      }
+      this.syncTrendResizeObserver();
+    } else if (this._trendResizeObserver) {
+      this._trendResizeObserver.disconnect();
     }
     if (this._config?.hover_enabled === false) {
       this.clearHoverState();
     }
     this.updateGraphTopInset();
-    this.syncTrendResizeObserver();
     this.scheduleTrendCanvasDraw();
   }
 
@@ -1010,6 +1021,10 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
   }
 
   private maybeRefreshTrendHistory(force = false): void {
+    if (!this.shouldRunLiveRuntime()) {
+      return;
+    }
+
     if (force) {
       this._lastTrendRefresh = 0;
     }
@@ -1021,6 +1036,50 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
 
     this._lastTrendRefresh = now;
     void this.refreshTrendHistory();
+  }
+
+  private isEditorPreview(): boolean {
+    return this.preview || this.editMode || Boolean(this.closest("hui-card-preview"));
+  }
+
+  private shouldRunLiveRuntime(): boolean {
+    return !this.isEditorPreview();
+  }
+
+  private startLiveRuntime(forceRefresh = false): void {
+    if (!this.shouldRunLiveRuntime() || this._liveRuntimeActive) {
+      return;
+    }
+
+    this._liveRuntimeActive = true;
+    this.maybeRefreshTrendHistory(forceRefresh);
+    this._trendRefreshTimer = window.setInterval(() => {
+      this.maybeRefreshTrendHistory();
+    }, TREND_REFRESH_MS);
+    void this.updateComplete.then(() => {
+      if (!this._liveRuntimeActive) {
+        return;
+      }
+      this.updateGraphTopInset();
+      this.syncTrendResizeObserver();
+      this.scheduleTrendCanvasDraw();
+    });
+  }
+
+  private stopLiveRuntime(): void {
+    this._liveRuntimeActive = false;
+    if (this._trendRefreshTimer !== undefined) {
+      window.clearInterval(this._trendRefreshTimer);
+      this._trendRefreshTimer = undefined;
+    }
+    if (this._trendCanvasRaf !== undefined) {
+      window.cancelAnimationFrame(this._trendCanvasRaf);
+      this._trendCanvasRaf = undefined;
+    }
+    if (this._trendResizeObserver) {
+      this._trendResizeObserver.disconnect();
+      this._trendResizeObserver = undefined;
+    }
   }
 
   private async refreshTrendHistory(): Promise<void> {

@@ -81,6 +81,12 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
   @property({ attribute: false })
   public hass!: HomeAssistant;
 
+  @property({ type: Boolean })
+  public preview = false;
+
+  @property({ type: Boolean })
+  public editMode = false;
+
   @property({ reflect: true, type: String })
   public layout: string | undefined;
 
@@ -158,7 +164,7 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
     const showModeSelector = this.showModeSelector(config, modeOptions);
     const showLiveValue = this.showLiveValue(config);
     const showCommandButton = this.showCommandButton(config);
-    const modeDisabled = this._actionBusy || !config.mode_entity || modeOptions.length === 0;
+    const modeDisabled = this.isEditorPreview() || this._actionBusy || !config.mode_entity || modeOptions.length === 0;
     const selectedMode = modeValue || modeOptions[0] || "Mode";
     const modeChevron = this._modeMenuOpen ? "mdi:chevron-up" : "mdi:chevron-down";
     const iconStyle = this.iconStyle(config.icon_color);
@@ -213,7 +219,7 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
                           <button
                             type="button"
                             class="action-button"
-                            ?disabled=${this._actionBusy || !command}
+                            ?disabled=${this.isEditorPreview() || this._actionBusy || !command}
                             @click=${this.handleActionClick}
                             title=${actionLabel}
                             aria-label=${actionLabel}
@@ -264,7 +270,7 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
                         <button
                           type="button"
                           class="action-button"
-                          ?disabled=${this._actionBusy || !command}
+                          ?disabled=${this.isEditorPreview() || this._actionBusy || !command}
                           @click=${this.handleActionClick}
                           title=${actionLabel}
                           aria-label=${actionLabel}
@@ -421,6 +427,10 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
   public disconnectedCallback(): void {
     this.closeModeMenuPortal();
     super.disconnectedCallback();
+  }
+
+  private isEditorPreview(): boolean {
+    return this.preview || this.editMode || Boolean(this.closest("hui-card-preview"));
   }
 
   private ensureModeMenuPortalStyles(): void {
@@ -586,7 +596,7 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
   private toggleModeMenu = (event: Event): void => {
     event.stopPropagation();
 
-    if (!this._config?.mode_entity || this._actionBusy) {
+    if (this.isEditorPreview() || !this._config?.mode_entity || this._actionBusy) {
       return;
     }
 
@@ -630,7 +640,7 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
   };
 
   private handleActionClick = async (event: Event): Promise<void> => {
-    if (!this._config || this._actionBusy) {
+    if (this.isEditorPreview() || !this._config || this._actionBusy) {
       return;
     }
 
