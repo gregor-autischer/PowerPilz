@@ -1,6 +1,7 @@
 # 🍄‍🟫 PowerPilz
 
 [![hacs][hacs-badge]][hacs-url]
+[![version][version-badge]][version-url]
 
 <p align="center">
   <img src="images/PowerPilz_main.png" alt="PowerPilz cards overview" width="100%">
@@ -39,6 +40,11 @@ Steps:
 5. Click `Add`.
 6. Search for `PowerPilz` in HACS Frontend and click `Download`.
 7. Reload browser when prompted.
+
+Notes:
+
+- Use the same repository URL above. No special `build` URL is required in HACS.
+- The `build` branch is only used internally to generate tagged releases and release assets.
 
 If resource auto-registration is disabled or you use YAML dashboards, add:
 
@@ -88,6 +94,21 @@ npm run build
 npm run dev
 ```
 
+### Production release workflow
+
+Releases are built automatically when changes are merged into branch `build` (GitHub Action: `Production Release`).
+
+Before merging to `build`, you must bump the version in both files:
+
+1. `package.json`
+2. `src/power-pilz.ts` (`const VERSION = "..."`)
+
+Notes:
+
+- The workflow creates tag/release `v<package.json version>` and uploads `power-pilz.js`.
+- If that tag already exists, the workflow fails until you bump the version.
+- After updating in HACS, reload browser when prompted.
+
 ## Troubleshooting
 
 ### I don't see the latest changes
@@ -104,3 +125,5 @@ Design direction is inspired by Mushroom cards.
 
 [hacs-url]: https://github.com/hacs/integration
 [hacs-badge]: https://img.shields.io/badge/hacs-custom-orange.svg?style=flat-square
+[version-url]: https://github.com/gregor-autischer/PowerPilz/releases
+[version-badge]: https://img.shields.io/github/v/release/gregor-autischer/PowerPilz?sort=semver&style=flat-square&label=version

@@ -5457,7 +5457,7 @@ class po extends Y {
 }
 customElements.get("power-pilz-wallbox-card") || customElements.define("power-pilz-wallbox-card", Y);
 customElements.get("power-pilz-wallbox-card-v2") || customElements.define("power-pilz-wallbox-card-v2", po);
-const bo = "0.1.0";
+const bo = "0.1.1";
 window.customCards = window.customCards || [];
 const fo = [
   {
