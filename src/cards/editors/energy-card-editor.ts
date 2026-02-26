@@ -450,12 +450,19 @@ export class PowerPilzEnergyCardEditor extends LitElement implements LovelaceCar
     return LABELS[name] ?? name;
   };
 
-  private valueChanged = (event: CustomEvent<{ value: EnergyCardConfig }>): void => {
+  private valueChanged = (event: CustomEvent<{ value: unknown }>): void => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement) || target.tagName !== "HA-FORM") {
+      return;
+    }
+    const value = event.detail.value;
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return;
+    }
     const nextConfig: EnergyCardConfig = {
-      ...event.detail.value,
+      ...(value as EnergyCardConfig),
       type: "custom:power-pilz-energy-card"
     };
-    this._config = nextConfig;
     this.dispatchEvent(
       new CustomEvent("config-changed", {
         detail: { config: nextConfig },

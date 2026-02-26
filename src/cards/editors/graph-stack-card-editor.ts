@@ -110,12 +110,19 @@ export class PowerPilzGraphStackCardEditor extends LitElement implements Lovelac
     });
   };
 
-  private valueChanged = (event: CustomEvent<{ value: GraphStackCardConfig }>): void => {
+  private valueChanged = (event: CustomEvent<{ value: unknown }>): void => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement) || target.tagName !== "HA-FORM") {
+      return;
+    }
+    const value = event.detail.value;
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return;
+    }
     const nextConfig: GraphStackCardConfig = {
-      ...event.detail.value,
+      ...(value as GraphStackCardConfig),
       type: "custom:power-pilz-graph-stack-card"
     };
-    this._config = nextConfig;
     this.dispatchEvent(
       new CustomEvent("config-changed", {
         detail: { config: nextConfig },

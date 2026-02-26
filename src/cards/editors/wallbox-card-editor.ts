@@ -110,12 +110,19 @@ export class PowerPilzWallboxCardEditor extends LitElement implements LovelaceCa
     return LABELS[name] ?? name;
   };
 
-  private valueChanged = (event: CustomEvent<{ value: WallboxCardConfig }>): void => {
+  private valueChanged = (event: CustomEvent<{ value: unknown }>): void => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement) || target.tagName !== "HA-FORM") {
+      return;
+    }
+    const value = event.detail.value;
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return;
+    }
     const nextConfig: WallboxCardConfig = {
-      ...event.detail.value,
+      ...(value as WallboxCardConfig),
       type: "custom:power-pilz-wallbox-card"
     };
-    this._config = nextConfig;
     this.dispatchEvent(
       new CustomEvent("config-changed", {
         detail: { config: nextConfig },

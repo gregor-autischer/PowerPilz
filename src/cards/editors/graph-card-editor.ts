@@ -106,12 +106,19 @@ export class PowerPilzGraphCardEditor extends LitElement implements LovelaceCard
     return computeGraphEditorLabel(schema);
   };
 
-  private valueChanged = (event: CustomEvent<{ value: GraphCardConfig }>): void => {
+  private valueChanged = (event: CustomEvent<{ value: unknown }>): void => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement) || target.tagName !== "HA-FORM") {
+      return;
+    }
+    const value = event.detail.value;
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return;
+    }
     const nextConfig: GraphCardConfig = {
-      ...event.detail.value,
+      ...(value as GraphCardConfig),
       type: "custom:power-pilz-graph-card"
     };
-    this._config = nextConfig;
     this.dispatchEvent(
       new CustomEvent("config-changed", {
         detail: { config: nextConfig },
