@@ -72,7 +72,6 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
       power_entity: powerEntity,
       status_entity: pick("sensor.dev_wallbox_status", "sensor.wallbox_status"),
       mode_entity: modeEntity,
-      mode_options: ["Eco", "Fast", "Solar"],
       command_entity: commandEntity,
       decimals: 1
     };
@@ -154,7 +153,7 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
     const status = readState(this.hass, config.status_entity);
     const modeEntity = getEntity(this.hass, config.mode_entity);
     const modeValue = modeEntity?.state ?? "";
-    const modeOptions = this.getModeOptions(modeEntity, config.mode_options, modeValue);
+    const modeOptions = this.getModeOptions(modeEntity);
     const isCharging = this.isCharging(status, power, config.command_entity);
     const command = this.resolveActionCommand(isCharging);
     const actionLabel = isCharging ? "Stop" : "Start";
@@ -287,14 +286,7 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
     `;
   }
 
-  private getModeOptions(entity?: HassEntity, configured?: string[], current?: string): string[] {
-    const configuredOptions = Array.isArray(configured)
-      ? configured.filter((option): option is string => typeof option === "string" && option.trim().length > 0)
-      : [];
-    if (configuredOptions.length > 0) {
-      return Array.from(new Set(configuredOptions));
-    }
-
+  private getModeOptions(entity?: HassEntity): string[] {
     const entityOptions = entity?.attributes.options;
     if (Array.isArray(entityOptions)) {
       const values = entityOptions.filter(
@@ -304,10 +296,6 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
         return Array.from(new Set(values));
       }
     }
-
-    if (typeof current === "string" && current.trim().length > 0) {
-      return [current];
-    }
     return [];
   }
 
@@ -315,10 +303,7 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
     if (config.show_mode_selector === false) {
       return false;
     }
-    if (Array.isArray(modeOptions)) {
-      return Boolean(config.mode_entity) || modeOptions.length > 0;
-    }
-    return Boolean(config.mode_entity) || (config.mode_options?.length ?? 0) > 0;
+    return Boolean(config.mode_entity) && Array.isArray(modeOptions) && modeOptions.length > 0;
   }
 
   private showCommandButton(config: PowerPilzWallboxCardConfig): boolean {
@@ -602,7 +587,7 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
 
     const entity = getEntity(this.hass, this._config.mode_entity);
     const current = entity?.state ?? "";
-    const options = this.getModeOptions(entity, this._config.mode_options, current);
+    const options = this.getModeOptions(entity);
     if (options.length === 0) {
       return;
     }
