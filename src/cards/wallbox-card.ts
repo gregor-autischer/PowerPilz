@@ -94,9 +94,8 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
   private _modeMenuOpen = false;
 
   private _modeMenuPortal?: HTMLDivElement;
+  private _modeMenuBackdrop?: HTMLDivElement;
   private _modeMenuOptionCount = 0;
-  private _menuPositionRaf?: number;
-  private _menuGlobalListenersAttached = false;
 
   public setConfig(config: PowerPilzWallboxCardConfig): void {
     const powerEntity = config.power_entity ?? "sensor.dev_wallbox_power";
@@ -424,28 +423,6 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
     super.disconnectedCallback();
   }
 
-  private attachMenuGlobalListeners(): void {
-    if (this._menuGlobalListenersAttached) {
-      return;
-    }
-    window.addEventListener("pointerdown", this.handleGlobalPointerDown, true);
-    window.addEventListener("keydown", this.handleGlobalKeyDown, true);
-    window.addEventListener("resize", this.handleViewportChange, true);
-    window.addEventListener("scroll", this.handleViewportChange, true);
-    this._menuGlobalListenersAttached = true;
-  }
-
-  private detachMenuGlobalListeners(): void {
-    if (!this._menuGlobalListenersAttached) {
-      return;
-    }
-    window.removeEventListener("pointerdown", this.handleGlobalPointerDown, true);
-    window.removeEventListener("keydown", this.handleGlobalKeyDown, true);
-    window.removeEventListener("resize", this.handleViewportChange, true);
-    window.removeEventListener("scroll", this.handleViewportChange, true);
-    this._menuGlobalListenersAttached = false;
-  }
-
   private ensureModeMenuPortalStyles(): void {
     if (document.getElementById(MODE_MENU_PORTAL_STYLE_ID)) {
       return;
@@ -466,6 +443,12 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
         background: var(--ha-card-background, var(--card-background-color, #fff));
         box-shadow: var(--ha-card-box-shadow, 0 6px 16px rgba(0, 0, 0, 0.18));
         overflow-y: auto;
+      }
+      .power-pilz-mode-menu-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        background: transparent;
       }
       .power-pilz-mode-menu-option {
         cursor: pointer;
@@ -545,6 +528,12 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
     this.closeModeMenuPortal();
     this.ensureModeMenuPortalStyles();
 
+    const backdrop = document.createElement("div");
+    backdrop.className = "power-pilz-mode-menu-backdrop";
+    backdrop.addEventListener("click", () => {
+      this.closeModeMenuPortal();
+    });
+
     const portal = document.createElement("div");
     portal.className = "power-pilz-mode-menu-portal";
     portal.setAttribute("role", "listbox");
@@ -569,63 +558,28 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
       portal.append(optionButton);
     });
 
+    document.body.append(backdrop);
     document.body.append(portal);
+    this._modeMenuBackdrop = backdrop;
     this._modeMenuPortal = portal;
     this._modeMenuOptionCount = options.length;
     this._modeMenuOpen = true;
-    this.attachMenuGlobalListeners();
 
     this.positionModeMenuPortal(anchor);
-    window.requestAnimationFrame(() => this.positionModeMenuPortal(anchor));
   }
 
   private closeModeMenuPortal(): void {
-    if (this._menuPositionRaf !== undefined) {
-      window.cancelAnimationFrame(this._menuPositionRaf);
-      this._menuPositionRaf = undefined;
-    }
     if (this._modeMenuPortal) {
       this._modeMenuPortal.remove();
       this._modeMenuPortal = undefined;
     }
+    if (this._modeMenuBackdrop) {
+      this._modeMenuBackdrop.remove();
+      this._modeMenuBackdrop = undefined;
+    }
     this._modeMenuOptionCount = 0;
     if (this._modeMenuOpen) {
       this._modeMenuOpen = false;
-    }
-    this.detachMenuGlobalListeners();
-  }
-
-  private handleViewportChange = (): void => {
-    if (!this._modeMenuOpen || !this._modeMenuPortal) {
-      return;
-    }
-    if (this._menuPositionRaf !== undefined) {
-      return;
-    }
-    this._menuPositionRaf = window.requestAnimationFrame(() => {
-      this._menuPositionRaf = undefined;
-      this.positionModeMenuPortal();
-    });
-  };
-
-  private handleGlobalPointerDown = (event: Event): void => {
-    if (!this._modeMenuOpen || !this._modeMenuPortal) {
-      return;
-    }
-    const target = event.target as Node | null;
-    if (target && this._modeMenuPortal.contains(target)) {
-      return;
-    }
-    const path = event.composedPath();
-    if (path.includes(this)) {
-      return;
-    }
-    this.closeModeMenuPortal();
-  };
-
-  private handleGlobalKeyDown = (event: KeyboardEvent): void => {
-    if (event.key === "Escape" && this._modeMenuOpen) {
-      this.closeModeMenuPortal();
     }
   };
 
