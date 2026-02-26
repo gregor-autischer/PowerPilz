@@ -1,6 +1,6 @@
 # 🍄‍🟫 Energy card
 
-![Energy card all options](../../images/Energy_Card_all_options.png)
+![Energy card all options](https://raw.githubusercontent.com/gregor-autischer/PowerPilz/main/images/Energy_Card_all_options.png)
 
 ## Description
 

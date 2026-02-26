@@ -1,6 +1,7 @@
 import { LitElement, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { HomeAssistant, LovelaceCardConfig, LovelaceCardEditor } from "../../types";
+import { POWER_PILZ_VERSION } from "../../version";
 import {
   clampLineThickness,
   computeGraphEditorLabel,
@@ -94,6 +95,9 @@ export class PowerPilzGraphStackCardEditor extends LitElement implements Lovelac
     }
 
     return html`
+      <div style="margin: 0 0 8px; color: var(--secondary-text-color); font-size: 12px;">
+        PowerPilz v${POWER_PILZ_VERSION}
+      </div>
       <ha-form
         .hass=${this.hass}
         .data=${this._config}

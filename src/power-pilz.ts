@@ -2,6 +2,7 @@ import "./cards/energy-card";
 import "./cards/graph-card";
 import "./cards/graph-stack-card";
 import "./cards/wallbox-card";
+import { POWER_PILZ_VERSION } from "./version";
 
 declare global {
   interface Window {
@@ -13,8 +14,6 @@ declare global {
     }>;
   }
 }
-
-const VERSION = "0.1.7";
 
 window.customCards = window.customCards || [];
 
@@ -52,7 +51,7 @@ for (const card of cards) {
 }
 
 console.info(
-  `%cPOWER PILZ%c v${VERSION}`,
+  `%cPOWER PILZ%c v${POWER_PILZ_VERSION}`,
   "background: #1f7a45; color: white; padding: 4px 8px; border-radius: 8px 0 0 8px; font-weight: 700;",
   "background: #3e4b53; color: white; padding: 4px 8px; border-radius: 0 8px 8px 0;"
 );

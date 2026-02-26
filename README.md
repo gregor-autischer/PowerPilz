@@ -4,7 +4,7 @@
 [![version][version-badge]][version-url]
 
 <p align="center">
-  <img src="images/PowerPilz_main.png" alt="PowerPilz cards overview" width="100%">
+  <img src="https://raw.githubusercontent.com/gregor-autischer/PowerPilz/main/images/PowerPilz_main.png" alt="PowerPilz cards overview" width="100%">
 </p>
 
 ## What is PowerPilz ?

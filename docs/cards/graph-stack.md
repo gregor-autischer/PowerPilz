@@ -1,6 +1,6 @@
 # 🍄‍🟫 Graph stack card
 
-![Graph stack card all options](../../images/Graph_Stacked_Card_all_options.png)
+![Graph stack card all options](https://raw.githubusercontent.com/gregor-autischer/PowerPilz/main/images/Graph_Stacked_Card_all_options.png)
 
 ## Description
 

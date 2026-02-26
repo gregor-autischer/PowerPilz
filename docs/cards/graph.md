@@ -1,6 +1,6 @@
 # 🍄‍🟫 Graph card
 
-![Graph card all options](../../images/Graph_Card_all_options.png)
+![Graph card all options](https://raw.githubusercontent.com/gregor-autischer/PowerPilz/main/images/Graph_Card_all_options.png)
 
 ## Description
 

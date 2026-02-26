@@ -1,6 +1,6 @@
 # 🍄‍🟫 Wallbox card
 
-![Wallbox card all options](../../images/Wallbox_Card_all_options.png)
+![Wallbox card all options](https://raw.githubusercontent.com/gregor-autischer/PowerPilz/main/images/Wallbox_Card_all_options.png)
 
 ## Description
 
@@ -24,7 +24,6 @@ All options are available in the Lovelace editor, but you can also use YAML.
 | `show_live_value` | boolean | `true` | Show/hide status + power text |
 | `show_command_button` | boolean | `true` | Show/hide play/pause button |
 | `decimals` | number | `1` | Decimal precision for power value |
-| `mode_options` | string[] | Optional | Fallback options if mode entity has no options |
 | `start_service` | string | Optional | Override start service (`domain.service`) |
 | `stop_service` | string | Optional | Override stop service (`domain.service`) |
 | `start_service_data` | object | Optional | Service data payload for start |
