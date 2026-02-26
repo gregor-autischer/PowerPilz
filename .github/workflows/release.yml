@@ -34,7 +34,7 @@ jobs:
 
       - name: Resolve release tag
         id: version
-        run: echo "tag=v$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
+        run: echo "tag=v$(node -p 'require(\"./package.json\").version')" >> "$GITHUB_OUTPUT"
 
       - name: Ensure tag is new
         run: |
