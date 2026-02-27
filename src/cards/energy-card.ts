@@ -73,6 +73,7 @@ interface EnergySubBlockEntry {
   iconStyle: Record<string, string>;
   label: string;
   value: number | null;
+  unit: string;
 }
 
 interface SubNodeConnectorSegment {
@@ -356,13 +357,13 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     const batterySecondary = batterySecondaryVisible ? readNumber(this.hass, config.battery_secondary_entity) : null;
     const batterySecondaryPercentage = readNumber(this.hass, config.battery_secondary_percentage_entity);
 
-    const fallbackUnit = config.unit ?? readUnit(this.hass, config.home_entity) ?? "kW";
-    const solarUnit = config.unit ?? readUnit(this.hass, config.solar_entity) ?? fallbackUnit;
-    const homeUnit = config.unit ?? readUnit(this.hass, config.home_entity) ?? fallbackUnit;
-    const gridUnit = config.unit ?? readUnit(this.hass, config.grid_entity) ?? fallbackUnit;
-    const gridSecondaryUnit = config.unit ?? readUnit(this.hass, config.grid_secondary_entity) ?? gridUnit;
-    const batteryUnit = config.unit ?? readUnit(this.hass, config.battery_entity) ?? fallbackUnit;
-    const batterySecondaryUnit = config.unit ?? readUnit(this.hass, config.battery_secondary_entity) ?? batteryUnit;
+    const fallbackUnit = config.unit ?? "kW";
+    const solarUnit = readUnit(this.hass, config.solar_entity) ?? fallbackUnit;
+    const homeUnit = readUnit(this.hass, config.home_entity) ?? fallbackUnit;
+    const gridUnit = readUnit(this.hass, config.grid_entity) ?? fallbackUnit;
+    const gridSecondaryUnit = readUnit(this.hass, config.grid_secondary_entity) ?? fallbackUnit;
+    const batteryUnit = readUnit(this.hass, config.battery_entity) ?? fallbackUnit;
+    const batterySecondaryUnit = readUnit(this.hass, config.battery_secondary_entity) ?? fallbackUnit;
 
     const solarFlow = this.toUnidirectionalFlow(solar);
     const homeFlow = this.toUnidirectionalFlow(home);
@@ -831,7 +832,8 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
         icon: this.readConfigString(config[`${node}_sub_${index}_icon`]) ?? defaultIcon,
         iconStyle: this.iconColorStyle(config[`${node}_sub_${index}_icon_color`] as string | number[] | undefined),
         label: this.readConfigString(config[`${node}_sub_${index}_label`]) ?? `${defaultLabelPrefix} ${index}`,
-        value: readNumber(this.hass, entityId)
+        value: readNumber(this.hass, entityId),
+        unit: readUnit(this.hass, entityId) ?? config.unit ?? "kW"
       });
     }
 
@@ -866,7 +868,8 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
         icon: legacyIcon,
         iconStyle: this.iconColorStyle(legacyColor),
         label: legacyLabel,
-        value: readNumber(this.hass, legacyEntity)
+        value: readNumber(this.hass, legacyEntity),
+        unit: readUnit(this.hass, legacyEntity) ?? config.unit ?? "kW"
       }
     ];
   }
@@ -1222,7 +1225,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
             >
               <div class="energy-sub-content">
                 <ha-icon class="energy-sub-icon" .icon=${entry.icon} style=${styleMap(entry.iconStyle)}></ha-icon>
-                <div class="energy-sub-number">${this.formatValue(entry.value, "kWh", decimals)}</div>
+                <div class="energy-sub-number">${this.formatValue(entry.value, entry.unit, decimals)}</div>
                 <div class="energy-sub-label">${entry.label}</div>
               </div>
             </div>
