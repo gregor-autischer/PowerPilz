@@ -28,6 +28,7 @@ const HOME_SUB_BLOCK_SLOT_COUNT = 8;
 const GRID_SUB_BLOCK_SLOT_COUNT = 2;
 const SUB_BLOCKS_MIN_COLUMNS = 12;
 const SUB_BLOCKS_MIN_ROWS = 7;
+const SUB_BLOCKS_MIN_ROWS_REDUCED = 6;
 const SUB_BLOCKS_FALLBACK_MIN_WIDTH = 400;
 const SUB_BLOCKS_FALLBACK_MIN_HEIGHT = 300;
 const DEFAULT_NEUTRAL_RGB = "var(--rgb-primary-text-color, 33, 33, 33)";
@@ -1399,11 +1400,12 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
 
     const columns = this.findLayoutSpan("column");
     const rows = this.findLayoutSpan("row");
+    const minRows = this.subBlocksMinRows();
     const shouldShow =
       columns !== null
       && rows !== null
       && columns >= SUB_BLOCKS_MIN_COLUMNS
-      && rows >= SUB_BLOCKS_MIN_ROWS;
+      && rows >= minRows;
     const fallbackRect = grid.getBoundingClientRect();
     const fallbackShouldShow =
       fallbackRect.width >= SUB_BLOCKS_FALLBACK_MIN_WIDTH
@@ -1413,6 +1415,21 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     if (resolvedShouldShow !== this._showSubBlocks) {
       this._showSubBlocks = resolvedShouldShow;
     }
+  }
+
+  private subBlocksMinRows(): number {
+    if (!this._config) {
+      return SUB_BLOCKS_MIN_ROWS;
+    }
+
+    const solarVisible = this._config.solar_visible !== false;
+    const batteryVisible = this._config.battery_visible !== false;
+    const batterySecondaryVisible = this._config.battery_secondary_visible === true;
+    const anyBatteryVisible = batteryVisible || batterySecondaryVisible;
+
+    return (!solarVisible || !anyBatteryVisible)
+      ? SUB_BLOCKS_MIN_ROWS_REDUCED
+      : SUB_BLOCKS_MIN_ROWS;
   }
 
   private findLayoutSpan(axis: "row" | "column"): number | null {

@@ -3,8 +3,8 @@
  * Copyright 2019 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
  */
-const Me = globalThis, nt = Me.ShadowRoot && (Me.ShadyCSS === void 0 || Me.ShadyCSS.nativeShadow) && "adoptedStyleSheets" in Document.prototype && "replace" in CSSStyleSheet.prototype, ot = Symbol(), Ot = /* @__PURE__ */ new WeakMap();
-let ir = class {
+const Me = globalThis, nt = Me.ShadowRoot && (Me.ShadyCSS === void 0 || Me.ShadyCSS.nativeShadow) && "adoptedStyleSheets" in Document.prototype && "replace" in CSSStyleSheet.prototype, ot = Symbol(), Lt = /* @__PURE__ */ new WeakMap();
+let sr = class {
   constructor(t, r, n) {
     if (this._$cssResult$ = !0, n !== ot) throw Error("CSSResult is not constructable. Use `unsafeCSS` or `css` instead.");
     this.cssText = t, this.t = r;
@@ -14,7 +14,7 @@ let ir = class {
     const r = this.t;
     if (nt && t === void 0) {
       const n = r !== void 0 && r.length === 1;
-      n && (t = Ot.get(r)), t === void 0 && ((this.o = t = new CSSStyleSheet()).replaceSync(this.cssText), n && Ot.set(r, t));
+      n && (t = Lt.get(r)), t === void 0 && ((this.o = t = new CSSStyleSheet()).replaceSync(this.cssText), n && Lt.set(r, t));
     }
     return t;
   }
@@ -22,14 +22,14 @@ let ir = class {
     return this.cssText;
   }
 };
-const an = (e) => new ir(typeof e == "string" ? e : e + "", void 0, ot), Oe = (e, ...t) => {
+const ln = (e) => new sr(typeof e == "string" ? e : e + "", void 0, ot), Le = (e, ...t) => {
   const r = e.length === 1 ? e[0] : t.reduce((n, o, i) => n + ((s) => {
     if (s._$cssResult$ === !0) return s.cssText;
     if (typeof s == "number") return s;
     throw Error("Value passed to 'css' function must be a 'css' function result: " + s + ". Use 'unsafeCSS' to pass non-literal values, but take care to ensure page security.");
   })(o) + e[i + 1], e[0]);
-  return new ir(r, e, ot);
-}, ln = (e, t) => {
+  return new sr(r, e, ot);
+}, cn = (e, t) => {
   if (nt) e.adoptedStyleSheets = t.map((r) => r instanceof CSSStyleSheet ? r : r.styleSheet);
   else for (const r of t) {
     const n = document.createElement("style"), o = Me.litNonce;
@@ -38,17 +38,17 @@ const an = (e) => new ir(typeof e == "string" ? e : e + "", void 0, ot), Oe = (e
 }, It = nt ? (e) => e : (e) => e instanceof CSSStyleSheet ? ((t) => {
   let r = "";
   for (const n of t.cssRules) r += n.cssText;
-  return an(r);
+  return ln(r);
 })(e) : e;
 /**
  * @license
  * Copyright 2017 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
  */
-const { is: cn, defineProperty: dn, getOwnPropertyDescriptor: hn, getOwnPropertyNames: un, getOwnPropertySymbols: _n, getPrototypeOf: mn } = Object, Y = globalThis, Bt = Y.trustedTypes, pn = Bt ? Bt.emptyScript : "", Xe = Y.reactiveElementPolyfillSupport, _e = (e, t) => e, Re = { toAttribute(e, t) {
+const { is: dn, defineProperty: hn, getOwnPropertyDescriptor: un, getOwnPropertyNames: _n, getOwnPropertySymbols: mn, getPrototypeOf: pn } = Object, Y = globalThis, Bt = Y.trustedTypes, yn = Bt ? Bt.emptyScript : "", Xe = Y.reactiveElementPolyfillSupport, _e = (e, t) => e, Re = { toAttribute(e, t) {
   switch (t) {
     case Boolean:
-      e = e ? pn : null;
+      e = e ? yn : null;
       break;
     case Object:
     case Array:
@@ -73,7 +73,7 @@ const { is: cn, defineProperty: dn, getOwnPropertyDescriptor: hn, getOwnProperty
       }
   }
   return r;
-} }, it = (e, t) => !cn(e, t), Nt = { attribute: !0, type: String, converter: Re, reflect: !1, useDefault: !1, hasChanged: it };
+} }, it = (e, t) => !dn(e, t), Nt = { attribute: !0, type: String, converter: Re, reflect: !1, useDefault: !1, hasChanged: it };
 Symbol.metadata ?? (Symbol.metadata = Symbol("metadata")), Y.litPropertyMetadata ?? (Y.litPropertyMetadata = /* @__PURE__ */ new WeakMap());
 let ce = class extends HTMLElement {
   static addInitializer(t) {
@@ -85,11 +85,11 @@ let ce = class extends HTMLElement {
   static createProperty(t, r = Nt) {
     if (r.state && (r.attribute = !1), this._$Ei(), this.prototype.hasOwnProperty(t) && ((r = Object.create(r)).wrapped = !0), this.elementProperties.set(t, r), !r.noAccessor) {
       const n = Symbol(), o = this.getPropertyDescriptor(t, n, r);
-      o !== void 0 && dn(this.prototype, t, o);
+      o !== void 0 && hn(this.prototype, t, o);
     }
   }
   static getPropertyDescriptor(t, r, n) {
-    const { get: o, set: i } = hn(this.prototype, t) ?? { get() {
+    const { get: o, set: i } = un(this.prototype, t) ?? { get() {
       return this[r];
     }, set(s) {
       this[r] = s;
@@ -104,13 +104,13 @@ let ce = class extends HTMLElement {
   }
   static _$Ei() {
     if (this.hasOwnProperty(_e("elementProperties"))) return;
-    const t = mn(this);
+    const t = pn(this);
     t.finalize(), t.l !== void 0 && (this.l = [...t.l]), this.elementProperties = new Map(t.elementProperties);
   }
   static finalize() {
     if (this.hasOwnProperty(_e("finalized"))) return;
     if (this.finalized = !0, this._$Ei(), this.hasOwnProperty(_e("properties"))) {
-      const r = this.properties, n = [...un(r), ..._n(r)];
+      const r = this.properties, n = [..._n(r), ...mn(r)];
       for (const o of n) this.createProperty(o, r[o]);
     }
     const t = this[Symbol.metadata];
@@ -159,7 +159,7 @@ let ce = class extends HTMLElement {
   }
   createRenderRoot() {
     const t = this.shadowRoot ?? this.attachShadow(this.constructor.shadowRootOptions);
-    return ln(t, this.constructor.elementStyles), t;
+    return cn(t, this.constructor.elementStyles), t;
   }
   connectedCallback() {
     var t;
@@ -284,42 +284,42 @@ ce.elementStyles = [], ce.shadowRootOptions = { mode: "open" }, ce[_e("elementPr
  * Copyright 2017 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
  */
-const me = globalThis, Ht = (e) => e, Ee = me.trustedTypes, Dt = Ee ? Ee.createPolicy("lit-html", { createHTML: (e) => e }) : void 0, sr = "$lit$", X = `lit$${Math.random().toFixed(9).slice(2)}$`, ar = "?" + X, yn = `<${ar}>`, ne = document, pe = () => ne.createComment(""), ye = (e) => e === null || typeof e != "object" && typeof e != "function", st = Array.isArray, vn = (e) => st(e) || typeof (e == null ? void 0 : e[Symbol.iterator]) == "function", Ye = `[ 	
+const me = globalThis, Ht = (e) => e, Ee = me.trustedTypes, Dt = Ee ? Ee.createPolicy("lit-html", { createHTML: (e) => e }) : void 0, ar = "$lit$", X = `lit$${Math.random().toFixed(9).slice(2)}$`, lr = "?" + X, vn = `<${lr}>`, ne = document, pe = () => ne.createComment(""), ye = (e) => e === null || typeof e != "object" && typeof e != "function", st = Array.isArray, fn = (e) => st(e) || typeof (e == null ? void 0 : e[Symbol.iterator]) == "function", Ye = `[ 	
 \f\r]`, ue = /<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g, Ft = /-->/g, Ut = />/g, Q = RegExp(`>|${Ye}(?:([^\\s"'>=/]+)(${Ye}*=${Ye}*(?:[^ 	
-\f\r"'\`<>=]|("|')|))|$)`, "g"), jt = /'/g, Vt = /"/g, lr = /^(?:script|style|textarea|title)$/i, fn = (e) => (t, ...r) => ({ _$litType$: e, strings: t, values: r }), g = fn(1), oe = Symbol.for("lit-noChange"), C = Symbol.for("lit-nothing"), Gt = /* @__PURE__ */ new WeakMap(), te = ne.createTreeWalker(ne, 129);
-function cr(e, t) {
+\f\r"'\`<>=]|("|')|))|$)`, "g"), jt = /'/g, Vt = /"/g, cr = /^(?:script|style|textarea|title)$/i, bn = (e) => (t, ...r) => ({ _$litType$: e, strings: t, values: r }), g = bn(1), oe = Symbol.for("lit-noChange"), C = Symbol.for("lit-nothing"), Gt = /* @__PURE__ */ new WeakMap(), te = ne.createTreeWalker(ne, 129);
+function dr(e, t) {
   if (!st(e) || !e.hasOwnProperty("raw")) throw Error("invalid template strings array");
   return Dt !== void 0 ? Dt.createHTML(t) : t;
 }
-const bn = (e, t) => {
+const gn = (e, t) => {
   const r = e.length - 1, n = [];
   let o, i = t === 2 ? "<svg>" : t === 3 ? "<math>" : "", s = ue;
   for (let a = 0; a < r; a++) {
     const l = e[a];
     let c, d, h = -1, _ = 0;
-    for (; _ < l.length && (s.lastIndex = _, d = s.exec(l), d !== null); ) _ = s.lastIndex, s === ue ? d[1] === "!--" ? s = Ft : d[1] !== void 0 ? s = Ut : d[2] !== void 0 ? (lr.test(d[2]) && (o = RegExp("</" + d[2], "g")), s = Q) : d[3] !== void 0 && (s = Q) : s === Q ? d[0] === ">" ? (s = o ?? ue, h = -1) : d[1] === void 0 ? h = -2 : (h = s.lastIndex - d[2].length, c = d[1], s = d[3] === void 0 ? Q : d[3] === '"' ? Vt : jt) : s === Vt || s === jt ? s = Q : s === Ft || s === Ut ? s = ue : (s = Q, o = void 0);
+    for (; _ < l.length && (s.lastIndex = _, d = s.exec(l), d !== null); ) _ = s.lastIndex, s === ue ? d[1] === "!--" ? s = Ft : d[1] !== void 0 ? s = Ut : d[2] !== void 0 ? (cr.test(d[2]) && (o = RegExp("</" + d[2], "g")), s = Q) : d[3] !== void 0 && (s = Q) : s === Q ? d[0] === ">" ? (s = o ?? ue, h = -1) : d[1] === void 0 ? h = -2 : (h = s.lastIndex - d[2].length, c = d[1], s = d[3] === void 0 ? Q : d[3] === '"' ? Vt : jt) : s === Vt || s === jt ? s = Q : s === Ft || s === Ut ? s = ue : (s = Q, o = void 0);
     const p = s === Q && e[a + 1].startsWith("/>") ? " " : "";
-    i += s === ue ? l + yn : h >= 0 ? (n.push(c), l.slice(0, h) + sr + l.slice(h) + X + p) : l + X + (h === -2 ? a : p);
+    i += s === ue ? l + vn : h >= 0 ? (n.push(c), l.slice(0, h) + ar + l.slice(h) + X + p) : l + X + (h === -2 ? a : p);
   }
-  return [cr(e, i + (e[r] || "<?>") + (t === 2 ? "</svg>" : t === 3 ? "</math>" : "")), n];
+  return [dr(e, i + (e[r] || "<?>") + (t === 2 ? "</svg>" : t === 3 ? "</math>" : "")), n];
 };
 class ve {
   constructor({ strings: t, _$litType$: r }, n) {
     let o;
     this.parts = [];
     let i = 0, s = 0;
-    const a = t.length - 1, l = this.parts, [c, d] = bn(t, r);
+    const a = t.length - 1, l = this.parts, [c, d] = gn(t, r);
     if (this.el = ve.createElement(c, n), te.currentNode = this.el.content, r === 2 || r === 3) {
       const h = this.el.content.firstChild;
       h.replaceWith(...h.childNodes);
     }
     for (; (o = te.nextNode()) !== null && l.length < a; ) {
       if (o.nodeType === 1) {
-        if (o.hasAttributes()) for (const h of o.getAttributeNames()) if (h.endsWith(sr)) {
+        if (o.hasAttributes()) for (const h of o.getAttributeNames()) if (h.endsWith(ar)) {
           const _ = d[s++], p = o.getAttribute(h).split(X), u = /([.?@])?(.*)/.exec(_);
-          l.push({ type: 1, index: i, name: u[2], strings: p, ctor: u[1] === "." ? wn : u[1] === "?" ? xn : u[1] === "@" ? Sn : Ie }), o.removeAttribute(h);
+          l.push({ type: 1, index: i, name: u[2], strings: p, ctor: u[1] === "." ? xn : u[1] === "?" ? Sn : u[1] === "@" ? Cn : Ie }), o.removeAttribute(h);
         } else h.startsWith(X) && (l.push({ type: 6, index: i }), o.removeAttribute(h));
-        if (lr.test(o.tagName)) {
+        if (cr.test(o.tagName)) {
           const h = o.textContent.split(X), _ = h.length - 1;
           if (_ > 0) {
             o.textContent = Ee ? Ee.emptyScript : "";
@@ -327,7 +327,7 @@ class ve {
             o.append(h[_], pe());
           }
         }
-      } else if (o.nodeType === 8) if (o.data === ar) l.push({ type: 2, index: i });
+      } else if (o.nodeType === 8) if (o.data === lr) l.push({ type: 2, index: i });
       else {
         let h = -1;
         for (; (h = o.data.indexOf(X, h + 1)) !== -1; ) l.push({ type: 7, index: i }), h += X.length - 1;
@@ -347,7 +347,7 @@ function he(e, t, r = e, n) {
   const i = ye(t) ? void 0 : t._$litDirective$;
   return (o == null ? void 0 : o.constructor) !== i && ((a = o == null ? void 0 : o._$AO) == null || a.call(o, !1), i === void 0 ? o = void 0 : (o = new i(e), o._$AT(e, r, n)), n !== void 0 ? (r._$Co ?? (r._$Co = []))[n] = o : r._$Cl = o), o !== void 0 && (t = he(e, o._$AS(e, t.values), o, n)), t;
 }
-class gn {
+class wn {
   constructor(t, r) {
     this._$AV = [], this._$AN = void 0, this._$AD = t, this._$AM = r;
   }
@@ -364,7 +364,7 @@ class gn {
     for (; l !== void 0; ) {
       if (s === l.index) {
         let c;
-        l.type === 2 ? c = new fe(i, i.nextSibling, this, t) : l.type === 1 ? c = new l.ctor(i, l.name, l.strings, this, t) : l.type === 6 && (c = new Cn(i, this, t)), this._$AV.push(c), l = n[++a];
+        l.type === 2 ? c = new fe(i, i.nextSibling, this, t) : l.type === 1 ? c = new l.ctor(i, l.name, l.strings, this, t) : l.type === 6 && (c = new $n(i, this, t)), this._$AV.push(c), l = n[++a];
       }
       s !== (l == null ? void 0 : l.index) && (i = te.nextNode(), s++);
     }
@@ -395,7 +395,7 @@ class fe {
     return this._$AB;
   }
   _$AI(t, r = this) {
-    t = he(this, t, r), ye(t) ? t === C || t == null || t === "" ? (this._$AH !== C && this._$AR(), this._$AH = C) : t !== this._$AH && t !== oe && this._(t) : t._$litType$ !== void 0 ? this.$(t) : t.nodeType !== void 0 ? this.T(t) : vn(t) ? this.k(t) : this._(t);
+    t = he(this, t, r), ye(t) ? t === C || t == null || t === "" ? (this._$AH !== C && this._$AR(), this._$AH = C) : t !== this._$AH && t !== oe && this._(t) : t._$litType$ !== void 0 ? this.$(t) : t.nodeType !== void 0 ? this.T(t) : fn(t) ? this.k(t) : this._(t);
   }
   O(t) {
     return this._$AA.parentNode.insertBefore(t, this._$AB);
@@ -408,10 +408,10 @@ class fe {
   }
   $(t) {
     var i;
-    const { values: r, _$litType$: n } = t, o = typeof n == "number" ? this._$AC(t) : (n.el === void 0 && (n.el = ve.createElement(cr(n.h, n.h[0]), this.options)), n);
+    const { values: r, _$litType$: n } = t, o = typeof n == "number" ? this._$AC(t) : (n.el === void 0 && (n.el = ve.createElement(dr(n.h, n.h[0]), this.options)), n);
     if (((i = this._$AH) == null ? void 0 : i._$AD) === o) this._$AH.p(r);
     else {
-      const s = new gn(o, this), a = s.u(this.options);
+      const s = new wn(o, this), a = s.u(this.options);
       s.p(r), this.T(a), this._$AH = s;
     }
   }
@@ -463,7 +463,7 @@ class Ie {
     t === C ? this.element.removeAttribute(this.name) : this.element.setAttribute(this.name, t ?? "");
   }
 }
-class wn extends Ie {
+class xn extends Ie {
   constructor() {
     super(...arguments), this.type = 3;
   }
@@ -471,7 +471,7 @@ class wn extends Ie {
     this.element[this.name] = t === C ? void 0 : t;
   }
 }
-class xn extends Ie {
+class Sn extends Ie {
   constructor() {
     super(...arguments), this.type = 4;
   }
@@ -479,7 +479,7 @@ class xn extends Ie {
     this.element.toggleAttribute(this.name, !!t && t !== C);
   }
 }
-class Sn extends Ie {
+class Cn extends Ie {
   constructor(t, r, n, o, i) {
     super(t, r, n, o, i), this.type = 5;
   }
@@ -493,7 +493,7 @@ class Sn extends Ie {
     typeof this._$AH == "function" ? this._$AH.call(((r = this.options) == null ? void 0 : r.host) ?? this.element, t) : this._$AH.handleEvent(t);
   }
 }
-class Cn {
+class $n {
   constructor(t, r, n) {
     this.element = t, this.type = 6, this._$AN = void 0, this._$AM = r, this.options = n;
   }
@@ -506,7 +506,7 @@ class Cn {
 }
 const Ke = me.litHtmlPolyfillSupport;
 Ke == null || Ke(ve, fe), (me.litHtmlVersions ?? (me.litHtmlVersions = [])).push("3.3.2");
-const $n = (e, t, r) => {
+const zn = (e, t, r) => {
   const n = (r == null ? void 0 : r.renderBefore) ?? t;
   let o = n._$litPart$;
   if (o === void 0) {
@@ -532,7 +532,7 @@ let B = class extends ce {
   }
   update(t) {
     const r = this.render();
-    this.hasUpdated || (this.renderOptions.isConnected = this.isConnected), super.update(t), this._$Do = $n(r, this.renderRoot, this.renderOptions);
+    this.hasUpdated || (this.renderOptions.isConnected = this.isConnected), super.update(t), this._$Do = zn(r, this.renderRoot, this.renderOptions);
   }
   connectedCallback() {
     var t;
@@ -546,8 +546,8 @@ let B = class extends ce {
     return oe;
   }
 };
-var or;
-B._$litElement$ = !0, B.finalized = !0, (or = re.litElementHydrateSupport) == null || or.call(re, { LitElement: B });
+var ir;
+B._$litElement$ = !0, B.finalized = !0, (ir = re.litElementHydrateSupport) == null || ir.call(re, { LitElement: B });
 const Je = re.litElementPolyfillSupport;
 Je == null || Je({ LitElement: B });
 (re.litElementVersions ?? (re.litElementVersions = [])).push("4.2.2");
@@ -566,7 +566,7 @@ const ie = (e) => (t, r) => {
  * Copyright 2017 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
  */
-const zn = { attribute: !0, type: String, converter: Re, reflect: !1, hasChanged: it }, Tn = (e = zn, t, r) => {
+const Tn = { attribute: !0, type: String, converter: Re, reflect: !1, hasChanged: it }, Mn = (e = Tn, t, r) => {
   const { kind: n, metadata: o } = r;
   let i = globalThis.litPropertyMetadata.get(o);
   if (i === void 0 && globalThis.litPropertyMetadata.set(o, i = /* @__PURE__ */ new Map()), n === "setter" && ((e = Object.create(e)).wrapped = !0), i.set(r.name, e), n === "accessor") {
@@ -587,8 +587,8 @@ const zn = { attribute: !0, type: String, converter: Re, reflect: !1, hasChanged
   }
   throw Error("Unsupported decorator location: " + n);
 };
-function L(e) {
-  return (t, r) => typeof r == "object" ? Tn(e, t, r) : ((n, o, i) => {
+function O(e) {
+  return (t, r) => typeof r == "object" ? Mn(e, t, r) : ((n, o, i) => {
     const s = o.hasOwnProperty(i);
     return o.constructor.createProperty(i, n), s ? Object.getOwnPropertyDescriptor(o, i) : void 0;
   })(e, t, r);
@@ -599,15 +599,15 @@ function L(e) {
  * SPDX-License-Identifier: BSD-3-Clause
  */
 function P(e) {
-  return L({ ...e, state: !0, attribute: !1 });
+  return O({ ...e, state: !0, attribute: !1 });
 }
 /**
  * @license
  * Copyright 2017 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
  */
-const Mn = { ATTRIBUTE: 1 }, Rn = (e) => (...t) => ({ _$litDirective$: e, values: t });
-let En = class {
+const Rn = { ATTRIBUTE: 1 }, En = (e) => (...t) => ({ _$litDirective$: e, values: t });
+let An = class {
   constructor(t) {
   }
   get _$AU() {
@@ -628,10 +628,10 @@ let En = class {
  * Copyright 2018 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
  */
-const dr = "important", An = " !" + dr, z = Rn(class extends En {
+const hr = "important", Pn = " !" + hr, z = En(class extends An {
   constructor(e) {
     var t;
-    if (super(e), e.type !== Mn.ATTRIBUTE || e.name !== "style" || ((t = e.strings) == null ? void 0 : t.length) > 2) throw Error("The `styleMap` directive must be used in the `style` attribute and must be the only part in the attribute.");
+    if (super(e), e.type !== Rn.ATTRIBUTE || e.name !== "style" || ((t = e.strings) == null ? void 0 : t.length) > 2) throw Error("The `styleMap` directive must be used in the `style` attribute and must be the only part in the attribute.");
   }
   render(e) {
     return Object.keys(e).reduce((t, r) => {
@@ -647,8 +647,8 @@ const dr = "important", An = " !" + dr, z = Rn(class extends En {
       const o = t[n];
       if (o != null) {
         this.ft.add(n);
-        const i = typeof o == "string" && o.endsWith(An);
-        n.includes("-") || i ? r.setProperty(n, i ? o.slice(0, -11) : o, i ? dr : "") : r[n] = o;
+        const i = typeof o == "string" && o.endsWith(Pn);
+        n.includes("-") || i ? r.setProperty(n, i ? o.slice(0, -11) : o, i ? hr : "") : r[n] = o;
       }
     }
     return oe;
@@ -671,7 +671,7 @@ const dr = "important", An = " !" + dr, z = Rn(class extends En {
 }, Ze = (e, t) => {
   const r = de(e, t);
   return r == null ? void 0 : r.state;
-}, Pn = (e, t, r = Date.now()) => {
+}, kn = (e, t, r = Date.now()) => {
   if (!Array.isArray(e) || e.length === 0)
     return [];
   const n = Array.isArray(e[0]) ? e[0] : e;
@@ -692,7 +692,7 @@ const dr = "important", An = " !" + dr, z = Rn(class extends En {
   const o = `history/period/${new Date(Date.now() - r).toISOString()}?filter_entity_id=${encodeURIComponent(t)}&minimal_response&no_attributes`;
   try {
     const i = await e.callApi("GET", o);
-    return Pn(i, r);
+    return kn(i, r);
   } catch {
     return [];
   }
@@ -794,8 +794,8 @@ const dr = "important", An = " !" + dr, z = Rn(class extends En {
     y: o.y / 100 * r,
     value: o.value
   }));
-  return kn(n, t);
-}, kn = (e, t) => {
+  return On(n, t);
+}, On = (e, t) => {
   if (e.length <= 3)
     return e;
   const r = Math.max(24, Math.min(e.length, Math.round(t)));
@@ -833,12 +833,12 @@ const dr = "important", An = " !" + dr, z = Rn(class extends En {
   }
   return t.push(e[e.length - 1]), t;
 }, be = "0.1.9";
-var Ln = Object.defineProperty, On = Object.getOwnPropertyDescriptor, ut = (e, t, r, n) => {
-  for (var o = n > 1 ? void 0 : n ? On(t, r) : t, i = e.length - 1, s; i >= 0; i--)
+var Ln = Object.defineProperty, In = Object.getOwnPropertyDescriptor, ut = (e, t, r, n) => {
+  for (var o = n > 1 ? void 0 : n ? In(t, r) : t, i = e.length - 1, s; i >= 0; i--)
     (s = e[i]) && (o = (n ? s(t, r, o) : s(o)) || o);
   return n && o && Ln(t, r, o), o;
 };
-const In = 4, Bn = 8, Xt = 2, Nn = (e, t) => {
+const Bn = 4, Nn = 8, Xt = 2, Hn = (e, t) => {
   const r = `${e}_sub_${t}`;
   return [
     { name: `${r}_enabled`, selector: { boolean: {} } },
@@ -872,9 +872,9 @@ const In = 4, Bn = 8, Xt = 2, Nn = (e, t) => {
     title: `Block ${i + 1}`,
     icon: "mdi:view-grid-outline",
     expanded: !1,
-    schema: Nn(e, i + 1)
+    schema: Hn(e, i + 1)
   }))
-}), Hn = [
+}), Dn = [
   { name: "name", selector: { text: {} } },
   {
     type: "grid",
@@ -1059,10 +1059,10 @@ const In = 4, Bn = 8, Xt = 2, Nn = (e, t) => {
       }
     ]
   },
-  Ce("solar", "Solar sub blocks", "mdi:solar-power-variant", In),
+  Ce("solar", "Solar sub blocks", "mdi:solar-power-variant", Bn),
   Ce("grid", "Grid 1 sub blocks", "mdi:transmission-tower", Xt),
   Ce("grid_secondary", "Grid 2 sub blocks", "mdi:transmission-tower", Xt),
-  Ce("home", "Home sub blocks", "mdi:flash", Bn),
+  Ce("home", "Home sub blocks", "mdi:flash", Nn),
   {
     type: "grid",
     name: "",
@@ -1071,7 +1071,7 @@ const In = 4, Bn = 8, Xt = 2, Nn = (e, t) => {
       { name: "decimals", selector: { number: { mode: "box", min: 0, max: 3, step: 1 } } }
     ]
   }
-], Dn = {
+], Fn = {
   name: "Name",
   home_visible: "Show home node",
   solar_visible: "Show solar node",
@@ -1152,7 +1152,7 @@ let Ae = class extends B {
           icon_color: "Color"
         }[i] ?? i}`;
       }
-      return Dn[t] ?? t;
+      return Fn[t] ?? t;
     }, this.valueChanged = (e) => {
       const t = e.target;
       if (!(t instanceof HTMLElement) || t.tagName !== "HA-FORM")
@@ -1194,7 +1194,7 @@ let Ae = class extends B {
       <ha-form
         .hass=${this.hass}
         .data=${this._config}
-        .schema=${Hn}
+        .schema=${Dn}
         .computeLabel=${this.computeLabel}
         @value-changed=${this.valueChanged}
       ></ha-form>
@@ -1202,7 +1202,7 @@ let Ae = class extends B {
   }
 };
 ut([
-  L({ attribute: !1 })
+  O({ attribute: !1 })
 ], Ae.prototype, "hass", 2);
 ut([
   P()
@@ -1210,12 +1210,12 @@ ut([
 Ae = ut([
   ie("power-pilz-energy-card-editor")
 ], Ae);
-var Fn = Object.defineProperty, Un = Object.getOwnPropertyDescriptor, K = (e, t, r, n) => {
-  for (var o = n > 1 ? void 0 : n ? Un(t, r) : t, i = e.length - 1, s; i >= 0; i--)
+var Un = Object.defineProperty, jn = Object.getOwnPropertyDescriptor, K = (e, t, r, n) => {
+  for (var o = n > 1 ? void 0 : n ? jn(t, r) : t, i = e.length - 1, s; i >= 0; i--)
     (s = e[i]) && (o = (n ? s(t, r, o) : s(o)) || o);
-  return n && o && Fn(t, r, o), o;
+  return n && o && Un(t, r, o), o;
 };
-const D = 0.01, Qe = 1, $e = 1440 * 60 * 1e3, Yt = 300 * 1e3, jn = 4, Vn = 8, Gn = 2, Wn = 12, qn = 7, Xn = 400, Yn = 300, Kn = "var(--rgb-primary-text-color, 33, 33, 33)";
+const D = 0.01, Qe = 1, $e = 1440 * 60 * 1e3, Yt = 300 * 1e3, Vn = 4, Gn = 8, Wn = 2, qn = 12, Kt = 7, Xn = 6, Yn = 400, Kn = 300, Jn = "var(--rgb-primary-text-color, 33, 33, 33)";
 let V = class extends B {
   constructor() {
     super(...arguments), this.preview = !1, this.editMode = !1, this._trendSeries = {}, this._showSubBlocks = !1, this._subNodeConnectorSegments = [], this._trendRefreshInFlight = !1, this._lastTrendRefresh = 0, this._liveRuntimeActive = !1, this._trendDrawConfig = {}, this.handleCardClick = () => {
@@ -1318,9 +1318,9 @@ let V = class extends B {
       return g`<ha-card>Invalid configuration</ha-card>`;
     if (!this.hass)
       return g``;
-    const e = this._config, t = e.decimals ?? Qe, r = e.home_visible !== !1, n = e.solar_visible !== !1, o = e.grid_visible !== !1, i = o && e.grid_secondary_visible === !0, s = e.battery_visible !== !1, a = s && e.battery_secondary_visible === !0, l = this.normalizeBatteryDualAlignment(e.battery_dual_alignment), c = I(this.hass, e.home_entity), d = n ? I(this.hass, e.solar_entity) : null, h = o ? I(this.hass, e.grid_entity) : null, _ = i ? I(this.hass, e.grid_secondary_entity) : null, p = s ? I(this.hass, e.battery_entity) : null, u = I(this.hass, e.battery_percentage_entity), f = a ? I(this.hass, e.battery_secondary_entity) : null, b = I(this.hass, e.battery_secondary_percentage_entity), m = e.unit ?? "kW", w = F(this.hass, e.solar_entity) ?? m, $ = F(this.hass, e.home_entity) ?? m, T = F(this.hass, e.grid_entity) ?? m, x = F(this.hass, e.grid_secondary_entity) ?? m, y = F(this.hass, e.battery_entity) ?? m, v = F(this.hass, e.battery_secondary_entity) ?? m, S = this.toUnidirectionalFlow(d), M = this.toUnidirectionalFlow(c), R = this.toBidirectionalFlow(h), E = this.toBidirectionalFlow(_), k = h === null && _ === null ? "none" : this.toBidirectionalFlow((h ?? 0) + (_ ?? 0)), N = this.toBidirectionalFlow(p), H = this.toBidirectionalFlow(f), Mr = p === null && f === null ? "none" : this.toBidirectionalFlow((p ?? 0) + (f ?? 0)), Rr = this.resolveTapAction(e), Be = !this.isEditorPreview() && Rr.action !== "none", Er = this.iconColorStyle(e.solar_icon_color), Ar = this.iconColorStyle(e.grid_icon_color), Pr = this.iconColorStyle(e.grid_secondary_icon_color), kr = this.iconColorStyle(e.home_icon_color), Lr = this.iconShapeStyle(e.core_icon_color), Ne = n ? this.collectSubBlocks("solar", e) : [], bt = o ? this.collectSubBlocks("grid", e) : [], gt = i ? this.collectSubBlocks("grid_secondary", e) : [], He = r ? this.collectSubBlocks("home", e) : [], De = new Set(He.map((A) => A.index)), ae = new Set(Ne.map((A) => A.index)), Or = De.has(7) && De.has(8), Ir = [5, 6, 7, 8].some((A) => De.has(A)), Br = ae.has(1) && ae.has(2) && !ae.has(3) && !ae.has(4), Nr = ae.has(3) && ae.has(4), wt = i && (Br && Or || Nr && Ir), Hr = i && !wt, Fe = He.some((A) => A.index >= 7), xt = this.homeSubPositions(Fe), St = this.gridSubPositions(i), Ct = this.gridSecondarySubPositions(), $t = this.solarSubPositions(
+    const e = this._config, t = e.decimals ?? Qe, r = e.home_visible !== !1, n = e.solar_visible !== !1, o = e.grid_visible !== !1, i = o && e.grid_secondary_visible === !0, s = e.battery_visible !== !1, a = s && e.battery_secondary_visible === !0, l = this.normalizeBatteryDualAlignment(e.battery_dual_alignment), c = I(this.hass, e.home_entity), d = n ? I(this.hass, e.solar_entity) : null, h = o ? I(this.hass, e.grid_entity) : null, _ = i ? I(this.hass, e.grid_secondary_entity) : null, p = s ? I(this.hass, e.battery_entity) : null, u = I(this.hass, e.battery_percentage_entity), f = a ? I(this.hass, e.battery_secondary_entity) : null, b = I(this.hass, e.battery_secondary_percentage_entity), m = e.unit ?? "kW", w = F(this.hass, e.solar_entity) ?? m, $ = F(this.hass, e.home_entity) ?? m, T = F(this.hass, e.grid_entity) ?? m, x = F(this.hass, e.grid_secondary_entity) ?? m, y = F(this.hass, e.battery_entity) ?? m, v = F(this.hass, e.battery_secondary_entity) ?? m, S = this.toUnidirectionalFlow(d), M = this.toUnidirectionalFlow(c), R = this.toBidirectionalFlow(h), E = this.toBidirectionalFlow(_), k = h === null && _ === null ? "none" : this.toBidirectionalFlow((h ?? 0) + (_ ?? 0)), N = this.toBidirectionalFlow(p), H = this.toBidirectionalFlow(f), Rr = p === null && f === null ? "none" : this.toBidirectionalFlow((p ?? 0) + (f ?? 0)), Er = this.resolveTapAction(e), Be = !this.isEditorPreview() && Er.action !== "none", Ar = this.iconColorStyle(e.solar_icon_color), Pr = this.iconColorStyle(e.grid_icon_color), kr = this.iconColorStyle(e.grid_secondary_icon_color), Or = this.iconColorStyle(e.home_icon_color), Lr = this.iconShapeStyle(e.core_icon_color), Ne = n ? this.collectSubBlocks("solar", e) : [], bt = o ? this.collectSubBlocks("grid", e) : [], gt = i ? this.collectSubBlocks("grid_secondary", e) : [], He = r ? this.collectSubBlocks("home", e) : [], De = new Set(He.map((A) => A.index)), ae = new Set(Ne.map((A) => A.index)), Ir = De.has(7) && De.has(8), Br = [5, 6, 7, 8].some((A) => De.has(A)), Nr = ae.has(1) && ae.has(2) && !ae.has(3) && !ae.has(4), Hr = ae.has(3) && ae.has(4), wt = i && (Nr && Ir || Hr && Br), Dr = i && !wt, Fe = He.some((A) => A.index >= 7), xt = this.homeSubPositions(Fe), St = this.gridSubPositions(i), Ct = this.gridSecondarySubPositions(), $t = this.solarSubPositions(
       Fe,
-      Hr,
+      Dr,
       wt
     ), zt = He.filter((A) => A.index <= (Fe ? 8 : 6)), Ue = o ? { col: 1, row: i ? 2 : 3, colSpan: 2, rowSpan: 2 } : null, je = i ? { col: 1, row: 4, colSpan: 2, rowSpan: 2 } : null, Ve = s ? {
       col: a && l === "center" ? 2 : 3,
@@ -1332,7 +1332,7 @@ let V = class extends B {
       row: 5,
       colSpan: 2,
       rowSpan: 2
-    } : null, O = this.computeGridBounds(
+    } : null, L = this.computeGridBounds(
       r,
       n,
       o,
@@ -1351,13 +1351,13 @@ let V = class extends B {
       St,
       Ct,
       xt
-    ), We = n ? this.normalizePlacement({ col: 3, row: 1, colSpan: 2, rowSpan: 2 }, O) : null, ge = Ue ? this.normalizePlacement(Ue, O) : null, we = je ? this.normalizePlacement(je, O) : null, qe = r ? this.normalizePlacement({ col: 5, row: 3, colSpan: 2, rowSpan: 2 }, O) : null, xe = Ve ? this.normalizePlacement(Ve, O) : null, Se = Ge ? this.normalizePlacement(Ge, O) : null, Tt = this.normalizePlacement({ col: 3, row: 3, colSpan: 2, rowSpan: 2 }, O), Dr = this.normalizePositions($t, O), Fr = this.normalizePositions(St, O), Ur = this.normalizePositions(Ct, O), jr = this.normalizePositions(xt, O), Mt = this.normalizeBatteryThreshold(e.battery_low_threshold), Rt = !!e.battery_low_alert, Et = this.normalizeBatteryThreshold(e.battery_secondary_low_threshold), At = !!e.battery_secondary_low_alert, Pt = Rt && u !== null && u <= Mt, Vr = this.iconColorStyle(Pt ? "red" : e.battery_icon_color), Gr = this.batteryIcon(u, p, e.battery_icon), kt = At && b !== null && b <= Et, Wr = this.iconColorStyle(
+    ), We = n ? this.normalizePlacement({ col: 3, row: 1, colSpan: 2, rowSpan: 2 }, L) : null, ge = Ue ? this.normalizePlacement(Ue, L) : null, we = je ? this.normalizePlacement(je, L) : null, qe = r ? this.normalizePlacement({ col: 5, row: 3, colSpan: 2, rowSpan: 2 }, L) : null, xe = Ve ? this.normalizePlacement(Ve, L) : null, Se = Ge ? this.normalizePlacement(Ge, L) : null, Tt = this.normalizePlacement({ col: 3, row: 3, colSpan: 2, rowSpan: 2 }, L), Fr = this.normalizePositions($t, L), Ur = this.normalizePositions(St, L), jr = this.normalizePositions(Ct, L), Vr = this.normalizePositions(xt, L), Mt = this.normalizeBatteryThreshold(e.battery_low_threshold), Rt = !!e.battery_low_alert, Et = this.normalizeBatteryThreshold(e.battery_secondary_low_threshold), At = !!e.battery_secondary_low_alert, Pt = Rt && u !== null && u <= Mt, Gr = this.iconColorStyle(Pt ? "red" : e.battery_icon_color), Wr = this.batteryIcon(u, p, e.battery_icon), kt = At && b !== null && b <= Et, qr = this.iconColorStyle(
       kt ? "red" : e.battery_secondary_icon_color
-    ), qr = this.batteryIcon(
+    ), Xr = this.batteryIcon(
       b,
       f,
       e.battery_secondary_icon
-    ), Xr = { "--flow-color-rgb": this.toRgbCss(e.flow_color) ?? Kn }, le = this.resolveColor("purple"), Yr = this.resolveColor(e.solar_trend_color, le), Kr = this.resolveColor(e.grid_trend_color, le), Jr = this.resolveColor(e.grid_secondary_trend_color, le), Zr = this.resolveColor(e.home_trend_color, le), Qr = this.resolveColor(e.battery_trend_color, le), en = this.resolveColor(e.battery_secondary_trend_color, le), Lt = this.resolveColor("red"), tn = Rt && (e.battery_percentage_entity || u !== null) ? Mt : null, rn = u ?? p, nn = At && (e.battery_secondary_percentage_entity || b !== null) ? Et : null, on = b ?? f, sn = this.buildFlowSegments(
+    ), Yr = { "--flow-color-rgb": this.toRgbCss(e.flow_color) ?? Jn }, le = this.resolveColor("purple"), Kr = this.resolveColor(e.solar_trend_color, le), Jr = this.resolveColor(e.grid_trend_color, le), Zr = this.resolveColor(e.grid_secondary_trend_color, le), Qr = this.resolveColor(e.home_trend_color, le), en = this.resolveColor(e.battery_trend_color, le), tn = this.resolveColor(e.battery_secondary_trend_color, le), Ot = this.resolveColor("red"), rn = Rt && (e.battery_percentage_entity || u !== null) ? Mt : null, nn = u ?? p, on = At && (e.battery_secondary_percentage_entity || b !== null) ? Et : null, sn = b ?? f, an = this.buildFlowSegments(
       qe,
       Tt,
       We,
@@ -1370,10 +1370,10 @@ let V = class extends B {
         ...xe ? [{ placement: xe, direction: N }] : [],
         ...Se ? [{ placement: Se, direction: H }] : []
       ],
-      Mr,
+      Rr,
       S,
       M,
-      O
+      L
     );
     return g`
       <ha-card
@@ -1387,13 +1387,13 @@ let V = class extends B {
           <div
             class="energy-grid"
             style=${z({
-      ...Xr,
-      "--grid-columns": `${O.cols}`,
-      "--grid-rows": `${O.rows}`,
-      "--grid-aspect": `${O.cols} / ${O.rows}`
+      ...Yr,
+      "--grid-columns": `${L.cols}`,
+      "--grid-rows": `${L.rows}`,
+      "--grid-aspect": `${L.cols} / ${L.rows}`
     })}
           >
-            ${sn.map(
+            ${an.map(
       (A) => this.renderFlowLine(A.orientation, A.direction, {
         ...A.orientation === "horizontal" ? {
           left: `${A.left}%`,
@@ -1413,12 +1413,12 @@ let V = class extends B {
                     class="energy-value solar ${d === null ? "missing" : ""}"
                     style=${z(this.gridPlacementStyle(We))}
                   >
-                    ${this.renderTrend("solar", d, !!e.solar_trend, Yr, null, "")}
+                    ${this.renderTrend("solar", d, !!e.solar_trend, Kr, null, "")}
                     <div class="energy-content">
                       <ha-icon
                         class="energy-icon"
                         .icon=${e.solar_icon ?? "mdi:weather-sunny"}
-                        style=${z(Er)}
+                        style=${z(Ar)}
                       ></ha-icon>
                       <div class="energy-number">${this.formatValue(d, w, t)}</div>
                       <div class="energy-label">${e.solar_label}</div>
@@ -1431,12 +1431,12 @@ let V = class extends B {
                     class="energy-value grid ${h === null ? "missing" : ""}"
                     style=${z(this.gridPlacementStyle(ge))}
                   >
-                    ${this.renderTrend("grid", h, !!e.grid_trend, Kr, null, "")}
+                    ${this.renderTrend("grid", h, !!e.grid_trend, Jr, null, "")}
                     <div class="energy-content">
                       <ha-icon
                         class="energy-icon"
                         .icon=${e.grid_icon ?? "mdi:transmission-tower"}
-                        style=${z(Ar)}
+                        style=${z(Pr)}
                       ></ha-icon>
                       <div class="energy-number">${this.formatValue(h, T, t)}</div>
                       <div class="energy-label">${e.grid_label}</div>
@@ -1453,7 +1453,7 @@ let V = class extends B {
       "grid_secondary",
       _,
       !!e.grid_secondary_trend,
-      Jr,
+      Zr,
       null,
       ""
     )}
@@ -1461,7 +1461,7 @@ let V = class extends B {
                       <ha-icon
                         class="energy-icon"
                         .icon=${e.grid_secondary_icon ?? "mdi:transmission-tower"}
-                        style=${z(Pr)}
+                        style=${z(kr)}
                       ></ha-icon>
                       <div class="energy-number">${this.formatValue(_, x, t)}</div>
                       <div class="energy-label">${e.grid_secondary_label}</div>
@@ -1474,12 +1474,12 @@ let V = class extends B {
                     class="energy-value home ${c === null ? "missing" : ""}"
                     style=${z(this.gridPlacementStyle(qe))}
                   >
-                    ${this.renderTrend("home", c, !!e.home_trend, Zr, null, "")}
+                    ${this.renderTrend("home", c, !!e.home_trend, Qr, null, "")}
                     <div class="energy-content">
                       <ha-icon
                         class="energy-icon"
                         .icon=${e.home_icon ?? "mdi:home-lightning-bolt"}
-                        style=${z(kr)}
+                        style=${z(Or)}
                       ></ha-icon>
                       <div class="energy-number">${this.formatValue(c, $, t)}</div>
                       <div class="energy-label">${e.home_label}</div>
@@ -1487,10 +1487,10 @@ let V = class extends B {
                   </div>
                 ` : C}
 
-            ${this._showSubBlocks ? this.renderSubNodes("solar", Ne, Dr, t) : C}
-            ${this._showSubBlocks ? this.renderSubNodes("grid", bt, Fr, t) : C}
-            ${this._showSubBlocks ? this.renderSubNodes("grid_secondary", gt, Ur, t) : C}
-            ${this._showSubBlocks ? this.renderSubNodes("home", zt, jr, t) : C}
+            ${this._showSubBlocks ? this.renderSubNodes("solar", Ne, Fr, t) : C}
+            ${this._showSubBlocks ? this.renderSubNodes("grid", bt, Ur, t) : C}
+            ${this._showSubBlocks ? this.renderSubNodes("grid_secondary", gt, jr, t) : C}
+            ${this._showSubBlocks ? this.renderSubNodes("home", zt, Vr, t) : C}
 
             ${s && xe ? g`
                   <div
@@ -1499,15 +1499,15 @@ let V = class extends B {
                   >
                     ${this.renderTrend(
       "battery",
-      rn,
+      nn,
       !!e.battery_trend,
-      Qr,
-      tn,
-      Lt
+      en,
+      rn,
+      Ot
     )}
                     <div class="energy-content">
                       <div class="battery-top-row">
-                        <ha-icon class="energy-icon" .icon=${Gr} style=${z(Vr)}></ha-icon>
+                        <ha-icon class="energy-icon" .icon=${Wr} style=${z(Gr)}></ha-icon>
                         ${u !== null ? g`
                               <div class="battery-percentage ${Pt ? "alert" : ""}">
                                 ${this.formatBatteryPercentage(u)}
@@ -1527,18 +1527,18 @@ let V = class extends B {
                   >
                     ${this.renderTrend(
       "battery_secondary",
-      on,
+      sn,
       !!e.battery_secondary_trend,
-      en,
-      nn,
-      Lt
+      tn,
+      on,
+      Ot
     )}
                     <div class="energy-content">
                       <div class="battery-top-row">
                         <ha-icon
                           class="energy-icon"
-                          .icon=${qr}
-                          style=${z(Wr)}
+                          .icon=${Xr}
+                          style=${z(qr)}
                         ></ha-icon>
                         ${b !== null ? g`
                               <div class="battery-percentage ${kt ? "alert" : ""}">
@@ -1588,7 +1588,7 @@ let V = class extends B {
   collectSubBlocks(e, t) {
     if (!this.hass)
       return [];
-    const r = [], n = e === "solar" ? "mdi:solar-power-variant" : e === "home" ? "mdi:flash" : "mdi:transmission-tower", o = e === "solar" ? "Solar" : e === "home" ? "Home" : e === "grid" ? "Grid" : "Grid 2", i = e === "solar" ? jn : e === "home" ? Vn : Gn;
+    const r = [], n = e === "solar" ? "mdi:solar-power-variant" : e === "home" ? "mdi:flash" : "mdi:transmission-tower", o = e === "solar" ? "Solar" : e === "home" ? "Home" : e === "grid" ? "Grid" : "Grid 2", i = e === "solar" ? Vn : e === "home" ? Gn : Wn;
     for (let h = 1; h <= i; h += 1) {
       const _ = t[`${e}_sub_${h}_enabled`] === !0, p = this.readConfigString(t[`${e}_sub_${h}_entity`]);
       !_ || !p || r.push({
@@ -1904,8 +1904,14 @@ let V = class extends B {
       this._showSubBlocks && (this._showSubBlocks = !1);
       return;
     }
-    const t = this.findLayoutSpan("column"), r = this.findLayoutSpan("row"), n = t !== null && r !== null && t >= Wn && r >= qn, o = e.getBoundingClientRect(), i = o.width >= Xn && o.height >= Yn, s = t !== null && r !== null ? n : i;
-    s !== this._showSubBlocks && (this._showSubBlocks = s);
+    const t = this.findLayoutSpan("column"), r = this.findLayoutSpan("row"), n = this.subBlocksMinRows(), o = t !== null && r !== null && t >= qn && r >= n, i = e.getBoundingClientRect(), s = i.width >= Yn && i.height >= Kn, a = t !== null && r !== null ? o : s;
+    a !== this._showSubBlocks && (this._showSubBlocks = a);
+  }
+  subBlocksMinRows() {
+    if (!this._config)
+      return Kt;
+    const e = this._config.solar_visible !== !1, t = this._config.battery_visible !== !1, r = this._config.battery_secondary_visible === !0;
+    return !e || !(t || r) ? Xn : Kt;
   }
   findLayoutSpan(e) {
     let t = this;
@@ -2325,7 +2331,7 @@ let V = class extends B {
     return lt(e);
   }
 };
-V.styles = Oe`
+V.styles = Le`
     :host {
       display: block;
       container-type: inline-size;
@@ -2843,13 +2849,13 @@ V.styles = Oe`
     }
   `;
 K([
-  L({ attribute: !1 })
+  O({ attribute: !1 })
 ], V.prototype, "hass", 2);
 K([
-  L({ type: Boolean })
+  O({ type: Boolean })
 ], V.prototype, "preview", 2);
 K([
-  L({ type: Boolean })
+  O({ type: Boolean })
 ], V.prototype, "editMode", 2);
 K([
   P()
@@ -2871,7 +2877,7 @@ const j = (e) => {
     return;
   const t = e.trim();
   return t.length > 0 ? t : void 0;
-}, hr = (e, t) => {
+}, ur = (e, t) => {
   switch (e) {
     case 1:
       return j(t.entity_1);
@@ -2884,7 +2890,7 @@ const j = (e) => {
     default:
       return;
   }
-}, ur = (e, t) => {
+}, _r = (e, t) => {
   switch (e) {
     case 1:
       return j(t.entity_1_name);
@@ -2897,7 +2903,7 @@ const j = (e) => {
     default:
       return;
   }
-}, _r = (e, t) => {
+}, mr = (e, t) => {
   switch (e) {
     case 1:
       return t.entity_1_enabled !== !1;
@@ -2910,7 +2916,7 @@ const j = (e) => {
     default:
       return !1;
   }
-}, mr = (e, t) => {
+}, pr = (e, t) => {
   switch (e) {
     case 1:
       return t.entity_1_show_icon !== !1;
@@ -2923,7 +2929,7 @@ const j = (e) => {
     default:
       return !0;
   }
-}, pr = (e, t) => {
+}, yr = (e, t) => {
   switch (e) {
     case 1:
       return t.entity_1_icon ?? "mdi:chart-line";
@@ -2936,7 +2942,7 @@ const j = (e) => {
     default:
       return "mdi:chart-line";
   }
-}, yr = (e, t) => {
+}, vr = (e, t) => {
   switch (e) {
     case 1:
       return t.entity_1_icon_color;
@@ -2949,7 +2955,7 @@ const j = (e) => {
     default:
       return;
   }
-}, vr = (e, t) => {
+}, fr = (e, t) => {
   switch (e) {
     case 1:
       return t.entity_1_trend_color;
@@ -2962,26 +2968,26 @@ const j = (e) => {
     default:
       return;
   }
-}, fr = (e) => e === "column" ? "column" : "row", _t = (e, t = 24) => {
+}, br = (e) => e === "column" ? "column" : "row", _t = (e, t = 24) => {
   const r = typeof e == "number" ? e : typeof e == "string" ? Number.parseInt(e, 10) : NaN;
   return r === 6 || r === 12 || r === 24 ? r : t;
-}, mt = (e) => typeof e != "number" || !Number.isFinite(e) ? 1.5 : Math.max(0.5, Math.min(6, e)), br = (e, t, r, n) => {
+}, mt = (e) => typeof e != "number" || !Number.isFinite(e) ? 1.5 : Math.max(0.5, Math.min(6, e)), gr = (e, t, r, n) => {
   var s;
   if (t)
     return t;
   const o = e[r], i = (s = o == null ? void 0 : o.attributes) == null ? void 0 : s.friendly_name;
   return typeof i == "string" && i.trim().length > 0 ? i.trim() : `Entity ${n}`;
-}, gr = (e, t, r) => {
+}, wr = (e, t, r) => {
   if (e === null)
     return t ? `-- ${t}` : "--";
   const n = `${e.toFixed(r)} ${t}`.trim();
   return n.length > 0 ? n : "--";
-}, Jn = 4, wr = {
+}, Zn = 4, xr = {
   1: "purple",
   2: "blue",
   3: "amber",
   4: "green"
-}, Zn = {
+}, Qn = {
   legend_layout: "Label layout",
   timeframe_hours: "Time range",
   hover_enabled: "Enable hover",
@@ -2990,7 +2996,7 @@ const j = (e) => {
   line_thickness: "Line thickness",
   unit: "Unit override",
   decimals: "Decimals"
-}, Qn = (e) => ({
+}, eo = (e) => ({
   type: "expandable",
   name: "",
   title: `Entity ${e}`,
@@ -3016,14 +3022,14 @@ const j = (e) => {
             ui_color: {
               include_state: !0,
               include_none: !1,
-              default_color: wr[e] ?? "purple"
+              default_color: xr[e] ?? "purple"
             }
           }
         }
       ]
     }
   ]
-}), xr = (e = !1) => {
+}), Sr = (e = !1) => {
   const t = [
     { name: "hover_enabled", selector: { boolean: {} } },
     { name: "fill_area_enabled", selector: { boolean: {} } }
@@ -3065,7 +3071,7 @@ const j = (e) => {
       name: "",
       schema: t
     },
-    ...Array.from({ length: Jn }, (r, n) => Qn(n + 1)),
+    ...Array.from({ length: Zn }, (r, n) => eo(n + 1)),
     {
       type: "grid",
       name: "",
@@ -3078,10 +3084,10 @@ const j = (e) => {
 }, q = (e) => {
   if (typeof e == "string")
     return e.length > 0 ? e : void 0;
-}, Sr = (e) => e === "column" ? "column" : "row", Cr = (e) => _t(e), $r = (e) => mt(e), ze = (e, t, r) => {
+}, Cr = (e) => e === "column" ? "column" : "row", $r = (e) => _t(e), zr = (e) => mt(e), ze = (e, t, r) => {
   const n = e ?? t;
-  return Array.isArray(n) || typeof n == "string" && n.trim().length > 0 ? n : wr[r] ?? "purple";
-}, zr = (e) => ({
+  return Array.isArray(n) || typeof n == "string" && n.trim().length > 0 ? n : xr[r] ?? "purple";
+}, Tr = (e) => ({
   entity_1: q(e.entity_1) ?? q(e.entity),
   entity_1_name: q(e.entity_1_name),
   entity_1_enabled: e.entity_1_enabled ?? !0,
@@ -3107,7 +3113,7 @@ const j = (e) => {
   entity_4_show_icon: e.entity_4_show_icon ?? !0,
   entity_4_icon: e.entity_4_icon,
   entity_4_trend_color: ze(e.entity_4_trend_color, void 0, 4)
-}), Tr = (e, t = {}) => {
+}), Mr = (e, t = {}) => {
   const r = e.name ?? "", n = r.match(/^entity_(\d+)_(enabled|name|show_icon|icon|icon_color|trend_color)$/);
   if (n) {
     const [, i, s] = n;
@@ -3121,17 +3127,17 @@ const j = (e) => {
     }[s] ?? s}`;
   }
   const o = r.match(/^entity_(\d+)$/);
-  return o ? `Entity ${o[1]}` : t[r] ?? Zn[r] ?? r;
+  return o ? `Entity ${o[1]}` : t[r] ?? Qn[r] ?? r;
 };
-var eo = Object.defineProperty, to = Object.getOwnPropertyDescriptor, pt = (e, t, r, n) => {
-  for (var o = n > 1 ? void 0 : n ? to(t, r) : t, i = e.length - 1, s; i >= 0; i--)
+var to = Object.defineProperty, ro = Object.getOwnPropertyDescriptor, pt = (e, t, r, n) => {
+  for (var o = n > 1 ? void 0 : n ? ro(t, r) : t, i = e.length - 1, s; i >= 0; i--)
     (s = e[i]) && (o = (n ? s(t, r, o) : s(o)) || o);
-  return n && o && eo(t, r, o), o;
+  return n && o && to(t, r, o), o;
 };
-const ro = xr(!1);
+const no = Sr(!1);
 let Pe = class extends B {
   constructor() {
-    super(...arguments), this.computeLabel = (e) => Tr(e), this.valueChanged = (e) => {
+    super(...arguments), this.computeLabel = (e) => Mr(e), this.valueChanged = (e) => {
       const t = e.target;
       if (!(t instanceof HTMLElement) || t.tagName !== "HA-FORM")
         return;
@@ -3155,13 +3161,13 @@ let Pe = class extends B {
     const t = {
       ...e,
       type: "custom:power-pilz-graph-card",
-      legend_layout: Sr(e.legend_layout),
-      timeframe_hours: Cr(e.timeframe_hours),
+      legend_layout: Cr(e.legend_layout),
+      timeframe_hours: $r(e.timeframe_hours),
       hover_enabled: e.hover_enabled ?? !0,
       fill_area_enabled: e.fill_area_enabled ?? !0,
-      line_thickness: $r(e.line_thickness),
+      line_thickness: zr(e.line_thickness),
       clip_graph_to_labels: e.clip_graph_to_labels ?? !1,
-      ...zr(e)
+      ...Tr(e)
     };
     this._config = t;
   }
@@ -3173,7 +3179,7 @@ let Pe = class extends B {
       <ha-form
         .hass=${this.hass}
         .data=${this._config}
-        .schema=${ro}
+        .schema=${no}
         .computeLabel=${this.computeLabel}
         @value-changed=${this.valueChanged}
       ></ha-form>
@@ -3181,7 +3187,7 @@ let Pe = class extends B {
   }
 };
 pt([
-  L({ attribute: !1 })
+  O({ attribute: !1 })
 ], Pe.prototype, "hass", 2);
 pt([
   P()
@@ -3189,12 +3195,12 @@ pt([
 Pe = pt([
   ie("power-pilz-graph-card-editor")
 ], Pe);
-var no = Object.defineProperty, oo = Object.getOwnPropertyDescriptor, J = (e, t, r, n) => {
-  for (var o = n > 1 ? void 0 : n ? oo(t, r) : t, i = e.length - 1, s; i >= 0; i--)
+var oo = Object.defineProperty, io = Object.getOwnPropertyDescriptor, J = (e, t, r, n) => {
+  for (var o = n > 1 ? void 0 : n ? io(t, r) : t, i = e.length - 1, s; i >= 0; i--)
     (s = e[i]) && (o = (n ? s(t, r, o) : s(o)) || o);
-  return n && o && no(t, r, o), o;
+  return n && o && oo(t, r, o), o;
 };
-const et = 1, Kt = 24, Jt = 300 * 1e3, Te = 0.01, Zt = 4, io = "rgb(var(--rgb-primary-text-color, 33, 33, 33))", Qt = {
+const et = 1, Jt = 24, Zt = 300 * 1e3, Te = 0.01, Qt = 4, so = "rgb(var(--rgb-primary-text-color, 33, 33, 33))", er = {
   1: "purple",
   2: "blue",
   3: "amber",
@@ -3241,7 +3247,7 @@ let G = class extends B {
     return {
       type: "custom:power-pilz-graph-card",
       legend_layout: "row",
-      timeframe_hours: Kt,
+      timeframe_hours: Jt,
       hover_enabled: !0,
       fill_area_enabled: !0,
       entity_1: i,
@@ -3394,11 +3400,11 @@ let G = class extends B {
   }
   collectSeriesEntries(e, t) {
     const r = [];
-    for (let n = 1; n <= Zt; n += 1) {
+    for (let n = 1; n <= Qt; n += 1) {
       const o = n, i = this.slotEnabled(o, e), s = this.slotEntityId(o, e);
       if (!i || !s)
         continue;
-      const a = this.entityName(this.slotCustomName(o, e), s, n), l = I(this.hass, s), c = e.unit ?? F(this.hass, s) ?? "", d = this.formatValue(l, c, t), h = this.slotIcon(o, e), _ = this.iconStyle(this.slotIconColor(o, e)), p = this.resolveColor(Qt[o], io), u = this.resolveColor(this.slotTrendColor(o, e), p);
+      const a = this.entityName(this.slotCustomName(o, e), s, n), l = I(this.hass, s), c = e.unit ?? F(this.hass, s) ?? "", d = this.formatValue(l, c, t), h = this.slotIcon(o, e), _ = this.iconStyle(this.slotIconColor(o, e)), p = this.resolveColor(er[o], so), u = this.resolveColor(this.slotTrendColor(o, e), p);
       r.push({
         slot: o,
         entityId: s,
@@ -3416,40 +3422,40 @@ let G = class extends B {
     return r;
   }
   slotEntityId(e, t) {
-    return hr(e, t);
-  }
-  slotCustomName(e, t) {
     return ur(e, t);
   }
-  slotEnabled(e, t) {
+  slotCustomName(e, t) {
     return _r(e, t);
   }
-  slotShowIcon(e, t) {
+  slotEnabled(e, t) {
     return mr(e, t);
   }
-  slotIcon(e, t) {
+  slotShowIcon(e, t) {
     return pr(e, t);
   }
-  slotIconColor(e, t) {
+  slotIcon(e, t) {
     return yr(e, t);
   }
-  slotTrendColor(e, t) {
+  slotIconColor(e, t) {
     return vr(e, t);
   }
+  slotTrendColor(e, t) {
+    return fr(e, t);
+  }
   entityName(e, t, r) {
-    return br(this.hass.states, e, t, r);
+    return gr(this.hass.states, e, t, r);
   }
   formatValue(e, t, r) {
-    return gr(e, t, r);
+    return wr(e, t, r);
   }
   readConfigString(e) {
     return j(e);
   }
   normalizeLegendLayout(e) {
-    return fr(e);
+    return br(e);
   }
   normalizeTimeframeHours(e) {
-    return _t(e, Kt);
+    return _t(e, Jt);
   }
   trendWindowMs(e) {
     return this.normalizeTimeframeHours(e == null ? void 0 : e.timeframe_hours) * 60 * 60 * 1e3;
@@ -3459,7 +3465,7 @@ let G = class extends B {
   }
   normalizeTrendColor(e, t, r) {
     const n = e ?? t;
-    return Array.isArray(n) || typeof n == "string" && n.trim().length > 0 ? n : Qt[r];
+    return Array.isArray(n) || typeof n == "string" && n.trim().length > 0 ? n : er[r];
   }
   iconStyle(e) {
     return dt(e);
@@ -3679,7 +3685,7 @@ let G = class extends B {
       return;
     e && (this._lastTrendRefresh = 0);
     const t = Date.now();
-    !e && t - this._lastTrendRefresh < Jt || (this._lastTrendRefresh = t, this.refreshTrendHistory());
+    !e && t - this._lastTrendRefresh < Zt || (this._lastTrendRefresh = t, this.refreshTrendHistory());
   }
   isEditorPreview() {
     return this.preview || this.editMode || !!this.closest("hui-card-preview");
@@ -3690,7 +3696,7 @@ let G = class extends B {
   startLiveRuntime(e = !1) {
     !this.shouldRunLiveRuntime() || this._liveRuntimeActive || (this._liveRuntimeActive = !0, this.maybeRefreshTrendHistory(e), this._trendRefreshTimer = window.setInterval(() => {
       this.maybeRefreshTrendHistory();
-    }, Jt), this.updateComplete.then(() => {
+    }, Zt), this.updateComplete.then(() => {
       this._liveRuntimeActive && (this.updateGraphTopInset(), this.syncTrendResizeObserver(), this.scheduleTrendCanvasDraw());
     }));
   }
@@ -3718,7 +3724,7 @@ let G = class extends B {
   }
   enabledSlots(e) {
     const t = [];
-    for (let r = 1; r <= Zt; r += 1) {
+    for (let r = 1; r <= Qt; r += 1) {
       const n = r;
       this.slotEnabled(n, e) && this.slotEntityId(n, e) && t.push(n);
     }
@@ -3728,7 +3734,7 @@ let G = class extends B {
     return at(this.hass, e, t);
   }
 };
-G.styles = Oe`
+G.styles = Le`
     :host {
       display: block;
       container-type: inline-size;
@@ -3916,13 +3922,13 @@ G.styles = Oe`
     }
   `;
 J([
-  L({ attribute: !1 })
+  O({ attribute: !1 })
 ], G.prototype, "hass", 2);
 J([
-  L({ type: Boolean })
+  O({ type: Boolean })
 ], G.prototype, "preview", 2);
 J([
-  L({ type: Boolean })
+  O({ type: Boolean })
 ], G.prototype, "editMode", 2);
 J([
   P()
@@ -3939,15 +3945,15 @@ J([
 G = J([
   ie("power-pilz-graph-card")
 ], G);
-var so = Object.defineProperty, ao = Object.getOwnPropertyDescriptor, yt = (e, t, r, n) => {
-  for (var o = n > 1 ? void 0 : n ? ao(t, r) : t, i = e.length - 1, s; i >= 0; i--)
+var ao = Object.defineProperty, lo = Object.getOwnPropertyDescriptor, yt = (e, t, r, n) => {
+  for (var o = n > 1 ? void 0 : n ? lo(t, r) : t, i = e.length - 1, s; i >= 0; i--)
     (s = e[i]) && (o = (n ? s(t, r, o) : s(o)) || o);
-  return n && o && so(t, r, o), o;
+  return n && o && ao(t, r, o), o;
 };
-const lo = xr(!0);
+const co = Sr(!0);
 let ke = class extends B {
   constructor() {
-    super(...arguments), this.computeLabel = (e) => Tr(e, {
+    super(...arguments), this.computeLabel = (e) => Mr(e, {
       normalize_stack_to_percent: "Normalize stack to 100%"
     }), this.valueChanged = (e) => {
       const t = e.target;
@@ -3973,14 +3979,14 @@ let ke = class extends B {
     const t = {
       ...e,
       type: "custom:power-pilz-graph-stack-card",
-      legend_layout: Sr(e.legend_layout),
-      timeframe_hours: Cr(e.timeframe_hours),
+      legend_layout: Cr(e.legend_layout),
+      timeframe_hours: $r(e.timeframe_hours),
       hover_enabled: e.hover_enabled ?? !0,
       fill_area_enabled: e.fill_area_enabled ?? !0,
       normalize_stack_to_percent: e.normalize_stack_to_percent ?? !1,
-      line_thickness: $r(e.line_thickness),
+      line_thickness: zr(e.line_thickness),
       clip_graph_to_labels: e.clip_graph_to_labels ?? !1,
-      ...zr(e)
+      ...Tr(e)
     };
     this._config = t;
   }
@@ -3992,7 +3998,7 @@ let ke = class extends B {
       <ha-form
         .hass=${this.hass}
         .data=${this._config}
-        .schema=${lo}
+        .schema=${co}
         .computeLabel=${this.computeLabel}
         @value-changed=${this.valueChanged}
       ></ha-form>
@@ -4000,7 +4006,7 @@ let ke = class extends B {
   }
 };
 yt([
-  L({ attribute: !1 })
+  O({ attribute: !1 })
 ], ke.prototype, "hass", 2);
 yt([
   P()
@@ -4008,12 +4014,12 @@ yt([
 ke = yt([
   ie("power-pilz-graph-stack-card-editor")
 ], ke);
-var co = Object.defineProperty, ho = Object.getOwnPropertyDescriptor, Z = (e, t, r, n) => {
-  for (var o = n > 1 ? void 0 : n ? ho(t, r) : t, i = e.length - 1, s; i >= 0; i--)
+var ho = Object.defineProperty, uo = Object.getOwnPropertyDescriptor, Z = (e, t, r, n) => {
+  for (var o = n > 1 ? void 0 : n ? uo(t, r) : t, i = e.length - 1, s; i >= 0; i--)
     (s = e[i]) && (o = (n ? s(t, r, o) : s(o)) || o);
-  return n && o && co(t, r, o), o;
+  return n && o && ho(t, r, o), o;
 };
-const tt = 1, er = 24, tr = 300 * 1e3, ee = 0.01, rt = 4, uo = "rgb(var(--rgb-primary-text-color, 33, 33, 33))", rr = {
+const tt = 1, tr = 24, rr = 300 * 1e3, ee = 0.01, rt = 4, _o = "rgb(var(--rgb-primary-text-color, 33, 33, 33))", nr = {
   1: "purple",
   2: "blue",
   3: "amber",
@@ -4060,7 +4066,7 @@ let W = class extends B {
     return {
       type: "custom:power-pilz-graph-stack-card",
       legend_layout: "row",
-      timeframe_hours: er,
+      timeframe_hours: tr,
       hover_enabled: !0,
       fill_area_enabled: !0,
       normalize_stack_to_percent: !1,
@@ -4219,7 +4225,7 @@ let W = class extends B {
       const o = n, i = this.slotEnabled(o, e), s = this.slotEntityId(o, e);
       if (!i || !s)
         continue;
-      const a = this.entityName(this.slotCustomName(o, e), s, n), l = I(this.hass, s), c = e.unit ?? F(this.hass, s) ?? "", d = this.formatValue(l, c, t), h = this.slotIcon(o, e), _ = this.iconStyle(this.slotIconColor(o, e)), p = this.resolveColor(rr[o], uo), u = this.resolveColor(this.slotTrendColor(o, e), p);
+      const a = this.entityName(this.slotCustomName(o, e), s, n), l = I(this.hass, s), c = e.unit ?? F(this.hass, s) ?? "", d = this.formatValue(l, c, t), h = this.slotIcon(o, e), _ = this.iconStyle(this.slotIconColor(o, e)), p = this.resolveColor(nr[o], _o), u = this.resolveColor(this.slotTrendColor(o, e), p);
       r.push({
         slot: o,
         entityId: s,
@@ -4250,40 +4256,40 @@ let W = class extends B {
     });
   }
   slotEntityId(e, t) {
-    return hr(e, t);
-  }
-  slotCustomName(e, t) {
     return ur(e, t);
   }
-  slotEnabled(e, t) {
+  slotCustomName(e, t) {
     return _r(e, t);
   }
-  slotShowIcon(e, t) {
+  slotEnabled(e, t) {
     return mr(e, t);
   }
-  slotIcon(e, t) {
+  slotShowIcon(e, t) {
     return pr(e, t);
   }
-  slotIconColor(e, t) {
+  slotIcon(e, t) {
     return yr(e, t);
   }
-  slotTrendColor(e, t) {
+  slotIconColor(e, t) {
     return vr(e, t);
   }
+  slotTrendColor(e, t) {
+    return fr(e, t);
+  }
   entityName(e, t, r) {
-    return br(this.hass.states, e, t, r);
+    return gr(this.hass.states, e, t, r);
   }
   formatValue(e, t, r) {
-    return gr(e, t, r);
+    return wr(e, t, r);
   }
   readConfigString(e) {
     return j(e);
   }
   normalizeLegendLayout(e) {
-    return fr(e);
+    return br(e);
   }
   normalizeTimeframeHours(e) {
-    return _t(e, er);
+    return _t(e, tr);
   }
   trendWindowMs(e) {
     return this.normalizeTimeframeHours(e == null ? void 0 : e.timeframe_hours) * 60 * 60 * 1e3;
@@ -4293,7 +4299,7 @@ let W = class extends B {
   }
   normalizeTrendColor(e, t, r) {
     const n = e ?? t;
-    return Array.isArray(n) || typeof n == "string" && n.trim().length > 0 ? n : rr[r];
+    return Array.isArray(n) || typeof n == "string" && n.trim().length > 0 ? n : nr[r];
   }
   iconStyle(e) {
     return dt(e);
@@ -4607,7 +4613,7 @@ let W = class extends B {
       return;
     e && (this._lastTrendRefresh = 0);
     const t = Date.now();
-    !e && t - this._lastTrendRefresh < tr || (this._lastTrendRefresh = t, this.refreshTrendHistory());
+    !e && t - this._lastTrendRefresh < rr || (this._lastTrendRefresh = t, this.refreshTrendHistory());
   }
   isEditorPreview() {
     return this.preview || this.editMode || !!this.closest("hui-card-preview");
@@ -4618,7 +4624,7 @@ let W = class extends B {
   startLiveRuntime(e = !1) {
     !this.shouldRunLiveRuntime() || this._liveRuntimeActive || (this._liveRuntimeActive = !0, this.maybeRefreshTrendHistory(e), this._trendRefreshTimer = window.setInterval(() => {
       this.maybeRefreshTrendHistory();
-    }, tr), this.updateComplete.then(() => {
+    }, rr), this.updateComplete.then(() => {
       this._liveRuntimeActive && (this.updateGraphTopInset(), this.syncTrendResizeObserver(), this.scheduleTrendCanvasDraw());
     }));
   }
@@ -4656,7 +4662,7 @@ let W = class extends B {
     return at(this.hass, e, t);
   }
 };
-W.styles = Oe`
+W.styles = Le`
     :host {
       display: block;
       container-type: inline-size;
@@ -4844,13 +4850,13 @@ W.styles = Oe`
     }
   `;
 Z([
-  L({ attribute: !1 })
+  O({ attribute: !1 })
 ], W.prototype, "hass", 2);
 Z([
-  L({ type: Boolean })
+  O({ type: Boolean })
 ], W.prototype, "preview", 2);
 Z([
-  L({ type: Boolean })
+  O({ type: Boolean })
 ], W.prototype, "editMode", 2);
 Z([
   P()
@@ -4867,12 +4873,12 @@ Z([
 W = Z([
   ie("power-pilz-graph-stack-card")
 ], W);
-var _o = Object.defineProperty, mo = Object.getOwnPropertyDescriptor, vt = (e, t, r, n) => {
-  for (var o = n > 1 ? void 0 : n ? mo(t, r) : t, i = e.length - 1, s; i >= 0; i--)
+var mo = Object.defineProperty, po = Object.getOwnPropertyDescriptor, vt = (e, t, r, n) => {
+  for (var o = n > 1 ? void 0 : n ? po(t, r) : t, i = e.length - 1, s; i >= 0; i--)
     (s = e[i]) && (o = (n ? s(t, r, o) : s(o)) || o);
-  return n && o && _o(t, r, o), o;
+  return n && o && mo(t, r, o), o;
 };
-const po = [
+const yo = [
   { name: "name", selector: { text: {} } },
   {
     type: "grid",
@@ -4908,7 +4914,7 @@ const po = [
     ]
   },
   { name: "decimals", selector: { number: { mode: "box", min: 0, max: 3, step: 1 } } }
-], yo = {
+], vo = {
   name: "Name",
   icon: "Icon",
   icon_color: "Icon color",
@@ -4921,11 +4927,11 @@ const po = [
   show_command_button: "Show play/pause button",
   decimals: "Decimals"
 };
-let Le = class extends B {
+let Oe = class extends B {
   constructor() {
     super(...arguments), this.computeLabel = (e) => {
       const t = e.name ?? "";
-      return yo[t] ?? t;
+      return vo[t] ?? t;
     }, this.valueChanged = (e) => {
       const t = e.target;
       if (!(t instanceof HTMLElement) || t.tagName !== "HA-FORM")
@@ -4963,7 +4969,7 @@ let Le = class extends B {
       <ha-form
         .hass=${this.hass}
         .data=${this._config}
-        .schema=${po}
+        .schema=${yo}
         .computeLabel=${this.computeLabel}
         @value-changed=${this.valueChanged}
       ></ha-form>
@@ -4971,20 +4977,20 @@ let Le = class extends B {
   }
 };
 vt([
-  L({ attribute: !1 })
-], Le.prototype, "hass", 2);
+  O({ attribute: !1 })
+], Oe.prototype, "hass", 2);
 vt([
   P()
-], Le.prototype, "_config", 2);
-Le = vt([
+], Oe.prototype, "_config", 2);
+Oe = vt([
   ie("power-pilz-wallbox-card-editor")
-], Le);
-var vo = Object.defineProperty, se = (e, t, r, n) => {
+], Oe);
+var fo = Object.defineProperty, se = (e, t, r, n) => {
   for (var o = void 0, i = e.length - 1, s; i >= 0; i--)
     (s = e[i]) && (o = s(t, r, o) || o);
-  return o && vo(t, r, o), o;
+  return o && fo(t, r, o), o;
 };
-const fo = 0.01, nr = "power-pilz-wallbox-mode-menu-portal-style", ft = class ft extends B {
+const bo = 0.01, or = "power-pilz-wallbox-mode-menu-portal-style", ft = class ft extends B {
   constructor() {
     super(...arguments), this.preview = !1, this.editMode = !1, this._actionBusy = !1, this._modeMenuOpen = !1, this._modeMenuOptionCount = 0, this.toggleModeMenu = (t) => {
       var s;
@@ -5210,7 +5216,7 @@ const fo = 0.01, nr = "power-pilz-wallbox-mode-menu-portal-style", ft = class ft
       if (i === "off")
         return !1;
     }
-    return r !== null && r > fo;
+    return r !== null && r > bo;
   }
   parseServiceAction(t) {
     if (!t)
@@ -5248,10 +5254,10 @@ const fo = 0.01, nr = "power-pilz-wallbox-mode-menu-portal-style", ft = class ft
     return this.preview || this.editMode || !!this.closest("hui-card-preview");
   }
   ensureModeMenuPortalStyles() {
-    if (document.getElementById(nr))
+    if (document.getElementById(or))
       return;
     const t = document.createElement("style");
-    t.id = nr, t.textContent = `
+    t.id = or, t.textContent = `
       .power-pilz-mode-menu-portal {
         position: fixed;
         z-index: 10000;
@@ -5339,7 +5345,7 @@ const fo = 0.01, nr = "power-pilz-wallbox-mode-menu-portal-style", ft = class ft
     this._modeMenuPortal && (this._modeMenuPortal.remove(), this._modeMenuPortal = void 0), this._modeMenuBackdrop && (this._modeMenuBackdrop.remove(), this._modeMenuBackdrop = void 0), this._modeMenuOptionCount = 0, this._modeMenuOpen && (this._modeMenuOpen = !1);
   }
 };
-ft.styles = Oe`
+ft.styles = Le`
     :host {
       display: block;
       container-type: inline-size;
@@ -5673,16 +5679,16 @@ ft.styles = Oe`
   `;
 let U = ft;
 se([
-  L({ attribute: !1 })
+  O({ attribute: !1 })
 ], U.prototype, "hass");
 se([
-  L({ type: Boolean })
+  O({ type: Boolean })
 ], U.prototype, "preview");
 se([
-  L({ type: Boolean })
+  O({ type: Boolean })
 ], U.prototype, "editMode");
 se([
-  L({ reflect: !0, type: String })
+  O({ reflect: !0, type: String })
 ], U.prototype, "layout");
 se([
   P()
@@ -5693,12 +5699,12 @@ se([
 se([
   P()
 ], U.prototype, "_modeMenuOpen");
-class bo extends U {
+class go extends U {
 }
 customElements.get("power-pilz-wallbox-card") || customElements.define("power-pilz-wallbox-card", U);
-customElements.get("power-pilz-wallbox-card-v2") || customElements.define("power-pilz-wallbox-card-v2", bo);
+customElements.get("power-pilz-wallbox-card-v2") || customElements.define("power-pilz-wallbox-card-v2", go);
 window.customCards = window.customCards || [];
-const go = [
+const wo = [
   {
     type: "power-pilz-energy-card",
     name: "PowerPilz Energy Card",
@@ -5724,7 +5730,7 @@ const go = [
     preview: !0
   }
 ];
-for (const e of go)
+for (const e of wo)
   window.customCards.some((t) => t.type === e.type) || window.customCards.push(e);
 console.info(
   `%cPOWER PILZ%c v${be}`,
