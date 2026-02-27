@@ -23,6 +23,7 @@ interface GraphCardConfig extends LovelaceCardConfig {
   clip_graph_to_labels?: boolean;
   hover_enabled?: boolean;
   fill_area_enabled?: boolean;
+  shared_trend_scale?: boolean;
 
   entity?: string;
   icon?: string;
@@ -79,6 +80,7 @@ export class PowerPilzGraphCardEditor extends LitElement implements LovelaceCard
       timeframe_hours: normalizeTimeframeHours(config.timeframe_hours),
       hover_enabled: config.hover_enabled ?? true,
       fill_area_enabled: config.fill_area_enabled ?? true,
+      shared_trend_scale: config.shared_trend_scale ?? false,
       line_thickness: clampLineThickness(config.line_thickness),
       clip_graph_to_labels: config.clip_graph_to_labels ?? false,
       ...normalizeGraphEntityFields(config)

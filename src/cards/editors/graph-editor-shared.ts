@@ -25,6 +25,7 @@ const BASE_LABELS: Record<string, string> = {
   timeframe_hours: "Time range",
   hover_enabled: "Enable hover",
   fill_area_enabled: "Enable area fill",
+  shared_trend_scale: "Shared trend scale",
   clip_graph_to_labels: "Clip graph below labels",
   line_thickness: "Line thickness",
   unit: "Unit override",
@@ -41,6 +42,7 @@ interface GraphEditorLikeConfig extends LovelaceCardConfig {
   line_thickness?: number;
   hover_enabled?: boolean;
   fill_area_enabled?: boolean;
+  shared_trend_scale?: boolean;
   clip_graph_to_labels?: boolean;
   [key: string]: unknown;
 }
@@ -83,7 +85,8 @@ const entitySchema = (index: number): HaFormSchema => ({
 export const createGraphSchema = (includeNormalizeStackToPercent = false): HaFormSchema[] => {
   const toggles: HaFormSchema[] = [
     { name: "hover_enabled", selector: { boolean: {} } },
-    { name: "fill_area_enabled", selector: { boolean: {} } }
+    { name: "fill_area_enabled", selector: { boolean: {} } },
+    { name: "shared_trend_scale", selector: { boolean: {} } }
   ];
 
   if (includeNormalizeStackToPercent) {

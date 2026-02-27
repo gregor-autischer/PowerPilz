@@ -1,6 +1,6 @@
 {
   "name": "power-pilz",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Custom Home Assistant cards with Mushroom-inspired styling for energy and wallbox data.",
   "type": "module",
   "main": "dist/power-pilz.js",

@@ -56,6 +56,11 @@ interface TrendCanvasPoint {
   value: number;
 }
 
+interface TrendValueRange {
+  min: number;
+  max: number;
+}
+
 interface TrendCanvasSegment {
   start: TrendCanvasPoint;
   end: TrendCanvasPoint;
@@ -163,6 +168,7 @@ interface PowerPilzEnergyCardConfig extends LovelaceCardConfig {
   home_trend_color?: string | number[];
   battery_trend_color?: string | number[];
   battery_secondary_trend_color?: string | number[];
+  shared_trend_scale?: boolean;
   battery_low_alert?: boolean;
   battery_low_threshold?: number;
   battery_secondary_low_alert?: boolean;
@@ -216,6 +222,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       grid_entity: gridEntity,
       battery_entity: batteryEntity,
       battery_percentage_entity: batterySocEntity,
+      shared_trend_scale: false,
       decimals: DEFAULT_DECIMALS
     };
   }
@@ -298,6 +305,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       home_trend: config.home_trend ?? false,
       battery_trend: config.battery_trend ?? false,
       battery_secondary_trend: config.battery_secondary_trend ?? false,
+      shared_trend_scale: config.shared_trend_scale ?? false,
       battery_low_alert: config.battery_low_alert ?? false,
       battery_low_threshold: this.normalizeBatteryThreshold(config.battery_low_threshold),
       battery_secondary_low_alert: config.battery_secondary_low_alert ?? false,
@@ -1333,15 +1341,18 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     return segments;
   }
 
-  private toTrendCoordinates(points: TrendPoint[]): TrendCoordinate[] {
+  private toTrendCoordinates(
+    points: TrendPoint[],
+    valueRange?: TrendValueRange | null
+  ): TrendCoordinate[] {
     const now = Date.now();
     const start = now - TREND_WINDOW_MS;
     const xMin = 0;
     const xMax = 100;
 
     const values = points.map((point) => point.value);
-    const min = Math.min(...values);
-    const max = Math.max(...values);
+    const min = valueRange?.min ?? Math.min(...values);
+    const max = valueRange?.max ?? Math.max(...values);
 
     if (!Number.isFinite(min) || !Number.isFinite(max)) {
       return [];
@@ -1387,6 +1398,27 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
 
   private toCanvasPoints(points: TrendCoordinate[], width: number, height: number): TrendCanvasPoint[] {
     return toTrendCanvasPoints(points, width, height);
+  }
+
+  private computeTrendValueRange(
+    seriesByNode: Partial<Record<NodeKey, TrendPoint[]>>
+  ): TrendValueRange | null {
+    const values: number[] = [];
+    (Object.values(seriesByNode) as TrendPoint[][]).forEach((series) => {
+      series.forEach((point) => values.push(point.value));
+    });
+
+    if (values.length === 0) {
+      return null;
+    }
+
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    if (!Number.isFinite(min) || !Number.isFinite(max)) {
+      return null;
+    }
+
+    return { min, max };
   }
 
   private updateSubBlockVisibility(): void {
@@ -1715,6 +1747,21 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       }
     });
 
+    const trendSeriesByNode: Partial<Record<NodeKey, TrendPoint[]>> = {};
+    (Object.keys(this._trendDrawConfig) as NodeKey[]).forEach((node) => {
+      const drawConfig = this._trendDrawConfig[node];
+      if (!drawConfig) {
+        return;
+      }
+      const points = this.trendPoints(node, drawConfig.currentValue);
+      if (points.length >= 2) {
+        trendSeriesByNode[node] = points;
+      }
+    });
+    const sharedRange = this._config?.shared_trend_scale === true
+      ? this.computeTrendValueRange(trendSeriesByNode)
+      : null;
+
     (Object.keys(this._trendDrawConfig) as NodeKey[]).forEach((node) => {
       const drawConfig = this._trendDrawConfig[node];
       if (!drawConfig) {
@@ -1727,12 +1774,12 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
         return;
       }
 
-      const points = this.trendPoints(node, drawConfig.currentValue);
-      if (points.length < 2) {
+      const points = trendSeriesByNode[node];
+      if (!points || points.length < 2) {
         return;
       }
 
-      const coordinates = this.toTrendCoordinates(points);
+      const coordinates = this.toTrendCoordinates(points, sharedRange);
       if (coordinates.length < 2) {
         return;
       }

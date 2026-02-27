@@ -108,6 +108,7 @@ interface PowerPilzGraphStackCardConfig extends LovelaceCardConfig {
   clip_graph_to_labels?: boolean;
   hover_enabled?: boolean;
   fill_area_enabled?: boolean;
+  shared_trend_scale?: boolean;
   normalize_stack_to_percent?: boolean;
 
   entity?: string;
@@ -175,6 +176,7 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
       timeframe_hours: DEFAULT_TIMEFRAME_HOURS,
       hover_enabled: true,
       fill_area_enabled: true,
+      shared_trend_scale: false,
       normalize_stack_to_percent: false,
       entity_1: entity1,
       entity_1_enabled: true,
@@ -250,6 +252,7 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
       clip_graph_to_labels: config.clip_graph_to_labels ?? false,
       hover_enabled: config.hover_enabled ?? true,
       fill_area_enabled: config.fill_area_enabled ?? true,
+      shared_trend_scale: config.shared_trend_scale ?? false,
       normalize_stack_to_percent: config.normalize_stack_to_percent ?? false,
       entity_1: entity1,
       entity_1_name: this.readConfigString(config.entity_1_name),
@@ -687,6 +690,7 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
 
     const fillAreaEnabled = this._config?.fill_area_enabled !== false;
     const normalizeToPercent = this._config?.normalize_stack_to_percent === true;
+    const sharedScaleEnabled = this._config?.shared_trend_scale === true;
     const windowMs = this.trendWindowMs(this._config);
     const linePointsBySlot: Partial<Record<GraphSlot, TrendCanvasPoint[]>> = {};
     const stackedSeriesBySlotRaw = this.buildStackedTrendSeries(windowMs);
@@ -694,8 +698,8 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
       ? this.normalizeStackedSeriesToPercent(stackedSeriesBySlotRaw)
       : stackedSeriesBySlotRaw;
     const stackedRange = normalizeToPercent
-      ? { min: 0, max: 100 }
-      : this.computeStackedValueRange(stackedSeriesBySlot);
+      ? (sharedScaleEnabled ? { min: 0, max: 100 } : null)
+      : (sharedScaleEnabled ? this.computeStackedValueRange(stackedSeriesBySlot) : null);
     const drawOrder = [...this._drawConfigs].sort((left, right) => right.slot - left.slot);
     drawOrder.forEach((drawConfig) => {
       const points = stackedSeriesBySlot[drawConfig.slot] ?? [];

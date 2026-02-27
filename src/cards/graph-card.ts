@@ -64,6 +64,11 @@ interface TrendCanvasPoint {
   value: number;
 }
 
+interface TrendValueRange {
+  min: number;
+  max: number;
+}
+
 interface GraphSeriesEntry {
   slot: GraphSlot;
   entityId: string;
@@ -103,6 +108,7 @@ interface PowerPilzGraphCardConfig extends LovelaceCardConfig {
   clip_graph_to_labels?: boolean;
   hover_enabled?: boolean;
   fill_area_enabled?: boolean;
+  shared_trend_scale?: boolean;
 
   entity?: string;
   icon?: string;
@@ -169,6 +175,7 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
       timeframe_hours: DEFAULT_TIMEFRAME_HOURS,
       hover_enabled: true,
       fill_area_enabled: true,
+      shared_trend_scale: false,
       entity_1: entity1,
       entity_1_enabled: true,
       entity_1_show_icon: true,
@@ -243,6 +250,7 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
       clip_graph_to_labels: config.clip_graph_to_labels ?? false,
       hover_enabled: config.hover_enabled ?? true,
       fill_area_enabled: config.fill_area_enabled ?? true,
+      shared_trend_scale: config.shared_trend_scale ?? false,
       entity_1: entity1,
       entity_1_name: this.readConfigString(config.entity_1_name),
       entity_1_enabled: config.entity_1_enabled ?? true,
@@ -527,15 +535,19 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
     return points;
   }
 
-  private toTrendCoordinates(points: TrendPoint[], windowMs: number): TrendCoordinate[] {
+  private toTrendCoordinates(
+    points: TrendPoint[],
+    windowMs: number,
+    valueRange?: TrendValueRange | null
+  ): TrendCoordinate[] {
     const now = Date.now();
     const start = now - windowMs;
     const xMin = 0;
     const xMax = 100;
 
     const values = points.map((point) => point.value);
-    const min = Math.min(...values);
-    const max = Math.max(...values);
+    const min = valueRange?.min ?? Math.min(...values);
+    const max = valueRange?.max ?? Math.max(...values);
 
     if (!Number.isFinite(min) || !Number.isFinite(max)) {
       return [];
@@ -581,6 +593,27 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
 
   private toCanvasPoints(points: TrendCoordinate[], width: number, height: number): TrendCanvasPoint[] {
     return toTrendCanvasPoints(points, width, height);
+  }
+
+  private computeTrendValueRange(
+    seriesBySlot: Partial<Record<GraphSlot, TrendPoint[]>>
+  ): TrendValueRange | null {
+    const values: number[] = [];
+    (Object.values(seriesBySlot) as TrendPoint[][]).forEach((series) => {
+      series.forEach((point) => values.push(point.value));
+    });
+
+    if (values.length === 0) {
+      return null;
+    }
+
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    if (!Number.isFinite(min) || !Number.isFinite(max)) {
+      return null;
+    }
+
+    return { min, max };
   }
 
   private syncTrendResizeObserver(): void {
@@ -648,15 +681,25 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
 
     const fillAreaEnabled = this._config?.fill_area_enabled !== false;
     const windowMs = this.trendWindowMs(this._config);
+    const trendSeriesBySlot: Partial<Record<GraphSlot, TrendPoint[]>> = {};
+    this._drawConfigs.forEach((drawConfig) => {
+      const points = this.trendPoints(drawConfig.slot, drawConfig.currentValue);
+      if (points.length >= 2) {
+        trendSeriesBySlot[drawConfig.slot] = points;
+      }
+    });
+    const sharedRange = this._config?.shared_trend_scale === true
+      ? this.computeTrendValueRange(trendSeriesBySlot)
+      : null;
     const linePointsBySlot: Partial<Record<GraphSlot, TrendCanvasPoint[]>> = {};
     const drawOrder = [...this._drawConfigs].sort((left, right) => right.slot - left.slot);
     drawOrder.forEach((drawConfig) => {
-      const points = this.trendPoints(drawConfig.slot, drawConfig.currentValue);
-      if (points.length < 2) {
+      const points = trendSeriesBySlot[drawConfig.slot];
+      if (!points || points.length < 2) {
         return;
       }
 
-      const coordinates = this.toTrendCoordinates(points, windowMs);
+      const coordinates = this.toTrendCoordinates(points, windowMs, sharedRange);
       if (coordinates.length < 2) {
         return;
       }

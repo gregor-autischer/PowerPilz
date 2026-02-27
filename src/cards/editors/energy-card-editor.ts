@@ -63,6 +63,7 @@ interface EnergyCardConfig extends LovelaceCardConfig {
   home_trend_color?: string | number[];
   battery_trend_color?: string | number[];
   battery_secondary_trend_color?: string | number[];
+  shared_trend_scale?: boolean;
   battery_low_alert?: boolean;
   battery_low_threshold?: number;
   battery_secondary_low_alert?: boolean;
@@ -315,6 +316,13 @@ const SCHEMA: HaFormSchema[] = [
     type: "grid",
     name: "",
     schema: [
+      { name: "shared_trend_scale", selector: { boolean: {} } }
+    ]
+  },
+  {
+    type: "grid",
+    name: "",
+    schema: [
       { name: "unit", selector: { text: {} } },
       { name: "decimals", selector: { number: { mode: "box", min: 0, max: 3, step: 1 } } }
     ]
@@ -378,6 +386,7 @@ const LABELS: Record<string, string> = {
   battery_secondary_icon_color: "Second battery color",
   battery_secondary_trend: "Second battery trend",
   battery_secondary_trend_color: "Second battery trend color",
+  shared_trend_scale: "Shared trend scale",
   battery_low_alert: "Low battery alert",
   battery_low_threshold: "Low battery threshold",
   battery_secondary_low_alert: "Second low battery alert",
@@ -407,6 +416,7 @@ export class PowerPilzEnergyCardEditor extends LitElement implements LovelaceCar
       battery_visible: config.battery_visible ?? true,
       battery_secondary_visible: config.battery_secondary_visible ?? false,
       battery_dual_alignment: config.battery_dual_alignment ?? "center",
+      shared_trend_scale: config.shared_trend_scale ?? false,
       type: "custom:power-pilz-energy-card"
     };
   }
