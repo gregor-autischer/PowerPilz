@@ -10,7 +10,12 @@ import type {
   LovelaceLayoutOptions
 } from "../types";
 import { readNumber, readUnit } from "../utils/entity";
-import { fetchHistoryTrendPointsBatch, mergeHistoryTrendPoints } from "../utils/history";
+import {
+  fetchHistoryTrendPointsBatch,
+  mergeHistoryTrendPoints,
+  normalizeTrendDataSource,
+  type TrendDataSource
+} from "../utils/history";
 import { mushroomIconStyle, resolveColor as resolveCssColor } from "../utils/color";
 import { toTrendCanvasPoints } from "../utils/trend";
 import {
@@ -112,6 +117,7 @@ interface PowerPilzGraphCardConfig extends LovelaceCardConfig {
   fill_area_enabled?: boolean;
   shared_trend_scale?: boolean;
   debug_performance?: boolean;
+  trend_data_source?: TrendDataSource | "auto";
 
   entity?: string;
   icon?: string;
@@ -179,6 +185,7 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
       hover_enabled: true,
       fill_area_enabled: true,
       shared_trend_scale: false,
+      trend_data_source: "hybrid",
       entity_1: entity1,
       entity_1_enabled: true,
       entity_1_show_icon: true,
@@ -258,6 +265,7 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
       fill_area_enabled: config.fill_area_enabled ?? true,
       shared_trend_scale: config.shared_trend_scale ?? false,
       debug_performance: config.debug_performance ?? false,
+      trend_data_source: normalizeTrendDataSource(config.trend_data_source, "hybrid"),
       entity_1: entity1,
       entity_1_name: this.readConfigString(config.entity_1_name),
       entity_1_enabled: config.entity_1_enabled ?? true,
@@ -1303,6 +1311,7 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
     const config = this._config;
     const next: Partial<Record<GraphSlot, TrendPoint[]>> = {};
     const windowMs = this.trendWindowMs(config);
+    const trendDataSource = normalizeTrendDataSource(config.trend_data_source, "hybrid");
 
     const slots = this.enabledSlots(config);
     if (slots.length === 0) {
@@ -1348,7 +1357,12 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
       const fullByEntity = fullEntityIds.size > 0
         ? await (async () => {
             const fetchStartedAt = this.perfNow();
-            const fetched = await fetchHistoryTrendPointsBatch(this.hass, Array.from(fullEntityIds), windowMs);
+            const fetched = await fetchHistoryTrendPointsBatch(
+              this.hass,
+              Array.from(fullEntityIds),
+              windowMs,
+              { dataSource: trendDataSource }
+            );
             fullFetchMs = this.perfNow() - fetchStartedAt;
             return fetched;
           })()
@@ -1361,7 +1375,10 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
               this.hass,
               Array.from(incrementalEntityIds),
               windowMs,
-              { startMs: Number.isFinite(incrementalStartMs) ? incrementalStartMs : cutoffMs }
+              {
+                startMs: Number.isFinite(incrementalStartMs) ? incrementalStartMs : cutoffMs,
+                dataSource: trendDataSource
+              }
             );
             incrementalFetchMs = this.perfNow() - fetchStartedAt;
             return fetched;
@@ -1407,6 +1424,7 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
         slots: slots.length,
         full_entities: fullEntityIds.size,
         incremental_entities: incrementalEntityIds.size,
+        data_source: trendDataSource,
         full_fetch_ms: this.toPerfMs(fullFetchMs),
         incremental_fetch_ms: this.toPerfMs(incrementalFetchMs),
         series_changed: !same
@@ -1460,6 +1478,13 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
     }
 
     if (this.trendWindowMs(previousConfig) !== this.trendWindowMs(nextConfig)) {
+      return true;
+    }
+
+    if (
+      normalizeTrendDataSource(previousConfig.trend_data_source, "hybrid")
+      !== normalizeTrendDataSource(nextConfig.trend_data_source, "hybrid")
+    ) {
       return true;
     }
 

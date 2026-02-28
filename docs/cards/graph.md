@@ -21,6 +21,7 @@ All options are available in the Lovelace editor, but you can also use YAML.
 | `clip_graph_to_labels` | boolean | `false` | Keep graph below label area |
 | `hover_enabled` | boolean | `true` | Enable hover dot + value inspection |
 | `fill_area_enabled` | boolean | `true` | Enable gradient fill below each line |
+| `trend_data_source` | `hybrid` \| `statistics` \| `history` | `hybrid` | Trend backend (`hybrid` prefers HA statistics and falls back to history) |
 | `debug_performance` | boolean | `false` | Log trend fetch + draw timing to browser console |
 | `unit` | string | entity unit | Optional unit override |
 | `decimals` | number | `1` | Decimal precision |

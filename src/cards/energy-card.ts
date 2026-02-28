@@ -10,7 +10,12 @@ import type {
   LovelaceLayoutOptions
 } from "../types";
 import { readNumber, readUnit } from "../utils/entity";
-import { fetchHistoryTrendPointsBatch, mergeHistoryTrendPoints } from "../utils/history";
+import {
+  fetchHistoryTrendPointsBatch,
+  mergeHistoryTrendPoints,
+  normalizeTrendDataSource,
+  type TrendDataSource
+} from "../utils/history";
 import { resolveColor as resolveCssColor, toRgbCss as toRgbCssValue } from "../utils/color";
 import { toTrendCanvasPoints } from "../utils/trend";
 import "./editors/energy-card-editor";
@@ -179,6 +184,7 @@ interface PowerPilzEnergyCardConfig extends LovelaceCardConfig {
   battery_secondary_trend_color?: string | number[];
   shared_trend_scale?: boolean;
   debug_performance?: boolean;
+  trend_data_source?: TrendDataSource | "auto";
   battery_low_alert?: boolean;
   battery_low_threshold?: number;
   battery_secondary_low_alert?: boolean;
@@ -234,6 +240,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       battery_entity: batteryEntity,
       battery_percentage_entity: batterySocEntity,
       shared_trend_scale: false,
+      trend_data_source: "hybrid",
       decimals: DEFAULT_DECIMALS
     };
   }
@@ -322,6 +329,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       battery_secondary_trend: config.battery_secondary_trend ?? false,
       shared_trend_scale: config.shared_trend_scale ?? false,
       debug_performance: config.debug_performance ?? false,
+      trend_data_source: normalizeTrendDataSource(config.trend_data_source, "hybrid"),
       battery_low_alert: config.battery_low_alert ?? false,
       battery_low_threshold: this.normalizeBatteryThreshold(config.battery_low_threshold),
       battery_secondary_low_alert: config.battery_secondary_low_alert ?? false,
@@ -2426,6 +2434,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     }
 
     const config = this._config;
+    const trendDataSource = normalizeTrendDataSource(config.trend_data_source, "hybrid");
     const enabledNodes = this.enabledTrendNodes(config);
     if (enabledNodes.length === 0) {
       if (Object.keys(this._trendSeries).length > 0) {
@@ -2502,7 +2511,12 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       const fullByEntity = fullEntityIds.size > 0
         ? await (async () => {
             const fetchStartedAt = this.perfNow();
-            const fetched = await fetchHistoryTrendPointsBatch(this.hass, Array.from(fullEntityIds), TREND_WINDOW_MS);
+            const fetched = await fetchHistoryTrendPointsBatch(
+              this.hass,
+              Array.from(fullEntityIds),
+              TREND_WINDOW_MS,
+              { dataSource: trendDataSource }
+            );
             fullFetchMs = this.perfNow() - fetchStartedAt;
             return fetched;
           })()
@@ -2515,7 +2529,10 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
               this.hass,
               Array.from(incrementalEntityIds),
               TREND_WINDOW_MS,
-              { startMs: Number.isFinite(incrementalStartMs) ? incrementalStartMs : cutoffMs }
+              {
+                startMs: Number.isFinite(incrementalStartMs) ? incrementalStartMs : cutoffMs,
+                dataSource: trendDataSource
+              }
             );
             incrementalFetchMs = this.perfNow() - fetchStartedAt;
             return fetched;
@@ -2577,6 +2594,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
         nodes: enabledNodes.length,
         full_entities: fullEntityIds.size,
         incremental_entities: incrementalEntityIds.size,
+        data_source: trendDataSource,
         full_fetch_ms: this.toPerfMs(fullFetchMs),
         incremental_fetch_ms: this.toPerfMs(incrementalFetchMs),
         series_changed: !same
@@ -2693,6 +2711,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     }
 
     const entries: string[] = [];
+    entries.push(`source:${normalizeTrendDataSource(config.trend_data_source, "hybrid")}`);
     this.enabledTrendNodes(config).forEach((node) => {
       if (node === "home" && config.home_auto_calculate === true) {
         const dependencySignature = this.homeComputationDependencies(config)

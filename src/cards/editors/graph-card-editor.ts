@@ -10,6 +10,7 @@ import {
   normalizeLegendLayout,
   normalizeTimeframeHours,
   type GraphLegendLayout,
+  type TrendDataSource,
   type GraphTimeframeHours
 } from "./graph-editor-shared";
 
@@ -24,6 +25,7 @@ interface GraphCardConfig extends LovelaceCardConfig {
   hover_enabled?: boolean;
   fill_area_enabled?: boolean;
   shared_trend_scale?: boolean;
+  trend_data_source?: TrendDataSource | "auto";
   debug_performance?: boolean;
 
   entity?: string;

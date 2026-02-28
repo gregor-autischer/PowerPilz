@@ -1,6 +1,7 @@
 import { LitElement, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { HomeAssistant, LovelaceCardConfig, LovelaceCardEditor } from "../../types";
+import { normalizeTrendDataSource, type TrendDataSource } from "../../utils/history";
 import { POWER_PILZ_VERSION } from "../../version";
 
 interface EnergyCardConfig extends LovelaceCardConfig {
@@ -65,6 +66,7 @@ interface EnergyCardConfig extends LovelaceCardConfig {
   battery_trend_color?: string | number[];
   battery_secondary_trend_color?: string | number[];
   shared_trend_scale?: boolean;
+  trend_data_source?: TrendDataSource | "auto";
   debug_performance?: boolean;
   battery_low_alert?: boolean;
   battery_low_threshold?: number;
@@ -314,6 +316,19 @@ const SCHEMA: HaFormSchema[] = [
         name: "",
         schema: [
           { name: "shared_trend_scale", selector: { boolean: {} } },
+          {
+            name: "trend_data_source",
+            selector: {
+              select: {
+                mode: "dropdown",
+                options: [
+                  { label: "Hybrid (stats + history)", value: "hybrid" },
+                  { label: "Statistics only", value: "statistics" },
+                  { label: "History only", value: "history" }
+                ]
+              }
+            }
+          },
           { name: "debug_performance", selector: { boolean: {} } }
         ]
       }
@@ -392,6 +407,7 @@ const LABELS: Record<string, string> = {
   battery_secondary_trend: "Second battery trend",
   battery_secondary_trend_color: "Second battery trend color",
   shared_trend_scale: "Shared scale for all node trends",
+  trend_data_source: "Trend data source",
   debug_performance: "Enable debug performance logs",
   battery_low_alert: "Low battery alert",
   battery_low_threshold: "Low battery threshold",
@@ -424,6 +440,7 @@ export class PowerPilzEnergyCardEditor extends LitElement implements LovelaceCar
       battery_dual_alignment: config.battery_dual_alignment ?? "center",
       home_auto_calculate: config.home_auto_calculate ?? false,
       shared_trend_scale: config.shared_trend_scale ?? false,
+      trend_data_source: normalizeTrendDataSource(config.trend_data_source, "hybrid"),
       debug_performance: config.debug_performance ?? false,
       type: "custom:power-pilz-energy-card"
     };

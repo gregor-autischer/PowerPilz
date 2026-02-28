@@ -1,4 +1,5 @@
 import type { LovelaceCardConfig } from "../../types";
+import { normalizeTrendDataSource, type TrendDataSource } from "../../utils/history";
 import {
   normalizeLineThickness as normalizeLineThicknessValue,
   normalizeTimeframeHours as normalizeTimeframeHoursValue,
@@ -7,7 +8,7 @@ import {
   type GraphTimeframeHours
 } from "../../utils/graph";
 
-export type { GraphLegendLayout, GraphSlot, GraphTimeframeHours };
+export type { GraphLegendLayout, GraphSlot, GraphTimeframeHours, TrendDataSource };
 export type GraphColor = string | number[];
 export type HaFormSchema = Record<string, unknown>;
 
@@ -26,6 +27,7 @@ const BASE_LABELS: Record<string, string> = {
   hover_enabled: "Enable hover",
   fill_area_enabled: "Enable area fill",
   shared_trend_scale: "Shared trend scale",
+  trend_data_source: "Trend data source",
   debug_performance: "Enable debug performance logs",
   clip_graph_to_labels: "Clip graph below labels",
   line_thickness: "Line thickness",
@@ -44,6 +46,7 @@ interface GraphEditorLikeConfig extends LovelaceCardConfig {
   hover_enabled?: boolean;
   fill_area_enabled?: boolean;
   shared_trend_scale?: boolean;
+  trend_data_source?: TrendDataSource | "auto";
   debug_performance?: boolean;
   clip_graph_to_labels?: boolean;
   [key: string]: unknown;
@@ -127,6 +130,19 @@ export const createGraphSchema = (includeNormalizeStackToPercent = false): HaFor
               ]
             }
           }
+        },
+        {
+          name: "trend_data_source",
+          selector: {
+            select: {
+              mode: "dropdown",
+              options: [
+                { label: "Hybrid (stats + history)", value: "hybrid" },
+                { label: "Statistics only", value: "statistics" },
+                { label: "History only", value: "history" }
+              ]
+            }
+          }
         }
       ]
     },
@@ -181,6 +197,7 @@ export const normalizeTrendColor = (
 };
 
 export const normalizeGraphEntityFields = (config: GraphEditorLikeConfig): Record<string, unknown> => ({
+  trend_data_source: normalizeTrendDataSource(config.trend_data_source, "hybrid"),
   entity_1: readOptionalString(config.entity_1) ?? readOptionalString(config.entity),
   entity_1_name: readOptionalString(config.entity_1_name),
   entity_1_enabled: config.entity_1_enabled ?? true,

@@ -14,6 +14,7 @@ export interface HomeAssistant {
     path: string,
     parameters?: Record<string, unknown>
   ): Promise<unknown>;
+  callWS?<T = unknown>(msg: Record<string, unknown>): Promise<T>;
   callService(
     domain: string,
     service: string,
