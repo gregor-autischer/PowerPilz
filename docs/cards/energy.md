@@ -15,6 +15,7 @@ All options are available in the Lovelace editor, but you can also use YAML.
 | `type` | string | Required | `custom:power-pilz-energy-card` |
 | `name` | string | `Energy Flow` | Card title |
 | `home_entity` | string | Optional | Home consumption entity |
+| `home_auto_calculate` | boolean | `false` | Calculate home value from selected node entities (`solar + grid + grid_secondary - battery - battery_secondary`) |
 | `solar_entity` | string | Optional | Solar production entity |
 | `grid_entity` | string | Optional | Grid power entity |
 | `grid_secondary_entity` | string | Optional | Second grid power entity |
@@ -70,6 +71,7 @@ Energy sub-nodes are configured with repeated fields:
 type: custom:power-pilz-energy-card
 name: House Energy
 home_entity: sensor.dev_home_power
+home_auto_calculate: false
 solar_entity: sensor.dev_solar_power
 grid_entity: sensor.dev_grid_power
 battery_entity: sensor.dev_battery_power

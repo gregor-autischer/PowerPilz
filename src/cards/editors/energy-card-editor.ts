@@ -14,6 +14,7 @@ interface EnergyCardConfig extends LovelaceCardConfig {
   battery_secondary_visible?: boolean;
   battery_dual_alignment?: "center" | "left" | "right";
   home_entity?: string;
+  home_auto_calculate?: boolean;
   solar_entity?: string;
   grid_entity?: string;
   grid_secondary_entity?: string;
@@ -150,6 +151,7 @@ const SCHEMA: HaFormSchema[] = [
     type: "grid",
     name: "",
     schema: [
+      { name: "home_auto_calculate", selector: { boolean: {} } },
       { name: "home_entity", selector: { entity: { filter: { domain: "sensor" } } } },
       { name: "solar_entity", selector: { entity: { filter: { domain: "sensor" } } } }
     ]
@@ -305,6 +307,13 @@ const SCHEMA: HaFormSchema[] = [
             selector: { ui_color: { include_state: true, include_none: true, default_color: "none" } }
           }
         ]
+      },
+      {
+        type: "grid",
+        name: "",
+        schema: [
+          { name: "shared_trend_scale", selector: { boolean: {} } }
+        ]
       }
     ]
   },
@@ -312,13 +321,6 @@ const SCHEMA: HaFormSchema[] = [
   subBlockSchemas("grid", "Grid 1 sub blocks", "mdi:transmission-tower", GRID_SUB_BLOCK_COUNT),
   subBlockSchemas("grid_secondary", "Grid 2 sub blocks", "mdi:transmission-tower", GRID_SUB_BLOCK_COUNT),
   subBlockSchemas("home", "Home sub blocks", "mdi:flash", HOME_SUB_BLOCK_COUNT),
-  {
-    type: "grid",
-    name: "",
-    schema: [
-      { name: "shared_trend_scale", selector: { boolean: {} } }
-    ]
-  },
   {
     type: "grid",
     name: "",
@@ -338,6 +340,7 @@ const LABELS: Record<string, string> = {
   battery_visible: "Show battery node",
   battery_secondary_visible: "Show second battery node",
   battery_dual_alignment: "Dual battery alignment",
+  home_auto_calculate: "Auto-calculate home value",
   home_entity: "Home entity",
   solar_entity: "Solar entity",
   grid_entity: "Grid entity",
@@ -386,7 +389,7 @@ const LABELS: Record<string, string> = {
   battery_secondary_icon_color: "Second battery color",
   battery_secondary_trend: "Second battery trend",
   battery_secondary_trend_color: "Second battery trend color",
-  shared_trend_scale: "Shared trend scale",
+  shared_trend_scale: "Shared scale for all node trends",
   battery_low_alert: "Low battery alert",
   battery_low_threshold: "Low battery threshold",
   battery_secondary_low_alert: "Second low battery alert",
@@ -416,6 +419,7 @@ export class PowerPilzEnergyCardEditor extends LitElement implements LovelaceCar
       battery_visible: config.battery_visible ?? true,
       battery_secondary_visible: config.battery_secondary_visible ?? false,
       battery_dual_alignment: config.battery_dual_alignment ?? "center",
+      home_auto_calculate: config.home_auto_calculate ?? false,
       shared_trend_scale: config.shared_trend_scale ?? false,
       type: "custom:power-pilz-energy-card"
     };

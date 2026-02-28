@@ -10,7 +10,7 @@ import type {
   LovelaceLayoutOptions
 } from "../types";
 import { readNumber, readUnit } from "../utils/entity";
-import { fetchHistoryTrendPoints } from "../utils/history";
+import { fetchHistoryTrendPointsBatch, mergeHistoryTrendPoints } from "../utils/history";
 import { resolveColor as resolveCssColor, toRgbCss as toRgbCssValue } from "../utils/color";
 import { toTrendCanvasPoints } from "../utils/trend";
 import "./editors/energy-card-editor";
@@ -18,11 +18,14 @@ import "./editors/energy-card-editor";
 type FlowDirection = "none" | "forward" | "backward";
 type TapActionType = "none" | "navigate" | "more-info";
 type NodeKey = "solar" | "grid" | "grid_secondary" | "home" | "battery" | "battery_secondary";
+type HomeComputationRole = Exclude<NodeKey, "home">;
 
 const EPSILON = 0.01;
 const DEFAULT_DECIMALS = 1;
 const TREND_WINDOW_MS = 24 * 60 * 60 * 1000;
 const TREND_REFRESH_MS = 5 * 60 * 1000;
+const TREND_INCREMENTAL_OVERLAP_MS = 60 * 1000;
+const CONFIG_REFRESH_DEBOUNCE_MS = 350;
 const SOLAR_SUB_BLOCK_SLOT_COUNT = 4;
 const HOME_SUB_BLOCK_SLOT_COUNT = 8;
 const GRID_SUB_BLOCK_SLOT_COUNT = 2;
@@ -72,6 +75,11 @@ interface TrendAreaRun {
   points: TrendCanvasPoint[];
 }
 
+interface HomeComputationDependency {
+  role: HomeComputationRole;
+  entityId: string;
+}
+
 interface EnergySubBlockEntry {
   key: string;
   index: number;
@@ -117,6 +125,7 @@ interface PowerPilzEnergyCardConfig extends LovelaceCardConfig {
   battery_secondary_visible?: boolean;
   battery_dual_alignment?: "center" | "left" | "right";
   home_entity?: string;
+  home_auto_calculate?: boolean;
   consumption_entity?: string;
   solar_entity?: string;
   production_entity?: string;
@@ -218,6 +227,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       battery_secondary_visible: false,
       battery_dual_alignment: "center",
       home_entity: homeEntity,
+      home_auto_calculate: false,
       solar_entity: solarEntity,
       grid_entity: gridEntity,
       battery_entity: batteryEntity,
@@ -254,6 +264,9 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
   private _trendCanvasRaf?: number;
   private _subNodeConnectorRaf?: number;
   private _trendResizeObserver?: ResizeObserver;
+  private _visibilityObserver?: IntersectionObserver;
+  private _isVisible = false;
+  private _configRefreshTimer?: number;
   private _liveRuntimeActive = false;
   private _trendDrawConfig: Partial<
     Record<NodeKey, { currentValue: number | null; color: string; threshold: number | null; thresholdColor: string }>
@@ -279,6 +292,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       battery_secondary_visible: config.battery_secondary_visible ?? false,
       battery_dual_alignment: this.normalizeBatteryDualAlignment(config.battery_dual_alignment),
       home_entity: homeEntity,
+      home_auto_calculate: config.home_auto_calculate ?? false,
       solar_entity: config.solar_entity ?? config.production_entity,
       solar_sub_enabled: config.solar_sub_enabled ?? false,
       solar_sub_label: config.solar_sub_label ?? "Solar Sub",
@@ -357,7 +371,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     const batterySecondaryVisible = batteryVisible && config.battery_secondary_visible === true;
     const batteryDualAlignment = this.normalizeBatteryDualAlignment(config.battery_dual_alignment);
 
-    const home = readNumber(this.hass, config.home_entity);
+    const homeEntityValue = readNumber(this.hass, config.home_entity);
     const solar = solarVisible ? readNumber(this.hass, config.solar_entity) : null;
     const grid = gridVisible ? readNumber(this.hass, config.grid_entity) : null;
     const gridSecondary = gridSecondaryVisible ? readNumber(this.hass, config.grid_secondary_entity) : null;
@@ -365,10 +379,21 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     const batteryPercentage = readNumber(this.hass, config.battery_percentage_entity);
     const batterySecondary = batterySecondaryVisible ? readNumber(this.hass, config.battery_secondary_entity) : null;
     const batterySecondaryPercentage = readNumber(this.hass, config.battery_secondary_percentage_entity);
+    const home = config.home_auto_calculate === true
+      ? this.computeAutoHomeValueFromNodeValues({
+          solar,
+          grid,
+          grid_secondary: gridSecondary,
+          battery,
+          battery_secondary: batterySecondary
+        })
+      : homeEntityValue;
 
     const fallbackUnit = config.unit ?? "kW";
     const solarUnit = readUnit(this.hass, config.solar_entity) ?? fallbackUnit;
-    const homeUnit = readUnit(this.hass, config.home_entity) ?? fallbackUnit;
+    const homeUnit = config.home_auto_calculate === true
+      ? this.resolveAutoHomeUnit(config, fallbackUnit)
+      : (readUnit(this.hass, config.home_entity) ?? fallbackUnit);
     const gridUnit = readUnit(this.hass, config.grid_entity) ?? fallbackUnit;
     const gridSecondaryUnit = readUnit(this.hass, config.grid_secondary_entity) ?? fallbackUnit;
     const batteryUnit = readUnit(this.hass, config.battery_entity) ?? fallbackUnit;
@@ -1252,6 +1277,76 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     return trimmed.length > 0 ? trimmed : undefined;
   }
 
+  private homeComputationDependencies(config: PowerPilzEnergyCardConfig): HomeComputationDependency[] {
+    const dependencies: HomeComputationDependency[] = [];
+    const addDependency = (role: HomeComputationRole, entityId: string | undefined): void => {
+      if (entityId) {
+        dependencies.push({ role, entityId });
+      }
+    };
+
+    if (config.solar_visible !== false) {
+      addDependency("solar", this.readConfigString(config.solar_entity));
+    }
+
+    if (config.grid_visible !== false) {
+      addDependency("grid", this.readConfigString(config.grid_entity));
+      if (config.grid_secondary_visible === true) {
+        addDependency("grid_secondary", this.readConfigString(config.grid_secondary_entity));
+      }
+    }
+
+    if (config.battery_visible !== false) {
+      addDependency("battery", this.readConfigString(config.battery_entity));
+      if (config.battery_secondary_visible === true) {
+        addDependency("battery_secondary", this.readConfigString(config.battery_secondary_entity));
+      }
+    }
+
+    return dependencies;
+  }
+
+  private resolveAutoHomeUnit(config: PowerPilzEnergyCardConfig, fallbackUnit: string): string {
+    const preferredUnit = config.unit;
+    if (preferredUnit && preferredUnit.trim().length > 0) {
+      return preferredUnit;
+    }
+
+    const dependencies = this.homeComputationDependencies(config);
+    for (const dependency of dependencies) {
+      const unit = readUnit(this.hass, dependency.entityId);
+      if (unit && unit.trim().length > 0) {
+        return unit;
+      }
+    }
+
+    return fallbackUnit;
+  }
+
+  private computeAutoHomeValueFromNodeValues(
+    values: Partial<Record<HomeComputationRole, number | null>>
+  ): number | null {
+    const hasAny =
+      (Object.values(values) as Array<number | null | undefined>)
+        .some((value) => value !== null && value !== undefined && Number.isFinite(value));
+    if (!hasAny) {
+      return null;
+    }
+
+    const computed =
+      (values.solar ?? 0)
+      + (values.grid ?? 0)
+      + (values.grid_secondary ?? 0)
+      - (values.battery ?? 0)
+      - (values.battery_secondary ?? 0);
+
+    if (!Number.isFinite(computed)) {
+      return null;
+    }
+
+    return computed <= EPSILON ? 0 : computed;
+  }
+
   private renderTrend(
     node: NodeKey,
     currentValue: number | null,
@@ -2056,8 +2151,13 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
 
   public connectedCallback(): void {
     super.connectedCallback();
-    this.startLiveRuntime(true);
-    if (!this.shouldRunLiveRuntime()) {
+    if (this.shouldRunLiveRuntime()) {
+      this.setupVisibilityObserver();
+      if (this._isVisible) {
+        this.startLiveRuntime(true);
+      }
+    } else {
+      this.maybeRefreshTrendHistory(true, true);
       void this.updateComplete.then(() => {
         this.updateSubBlockVisibility();
         this.scheduleSubNodeConnectorDraw();
@@ -2067,6 +2167,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
   }
 
   public disconnectedCallback(): void {
+    this.teardownVisibilityObserver();
     this.stopLiveRuntime();
     super.disconnectedCallback();
   }
@@ -2074,30 +2175,54 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
   protected updated(changedProps: Map<string, unknown>): void {
     if (changedProps.has("preview") || changedProps.has("editMode")) {
       if (this.shouldRunLiveRuntime()) {
-        this.startLiveRuntime(true);
+        this.setupVisibilityObserver();
+        if (this._isVisible) {
+          this.startLiveRuntime(true);
+        } else {
+          this.stopLiveRuntime();
+        }
       } else {
+        this.teardownVisibilityObserver();
         this.stopLiveRuntime();
+        this.maybeRefreshTrendHistory(true, true);
       }
     }
 
     if (this.shouldRunLiveRuntime()) {
       if (changedProps.has("_config")) {
-        this.maybeRefreshTrendHistory(true);
-      } else if (changedProps.has("hass")) {
+        this.scheduleConfigRefresh();
+      } else if (changedProps.has("hass") && this._isVisible) {
         this.maybeRefreshTrendHistory();
       }
-      this.syncTrendResizeObserver();
-    } else if (this._trendResizeObserver) {
-      this._trendResizeObserver.disconnect();
+      if (this._isVisible) {
+        this.syncTrendResizeObserver();
+      } else if (this._trendResizeObserver) {
+        this._trendResizeObserver.disconnect();
+      }
+    } else {
+      if (changedProps.has("_config")) {
+        this.scheduleConfigRefresh(true);
+      } else if (changedProps.has("hass")) {
+        this.maybeRefreshTrendHistory(false, true);
+      }
+      if (this._trendResizeObserver) {
+        this._trendResizeObserver.disconnect();
+      }
     }
 
     this.updateSubBlockVisibility();
-    this.scheduleSubNodeConnectorDraw();
-    this.scheduleTrendCanvasDraw();
+    if (!this.shouldRunLiveRuntime() || this._isVisible) {
+      this.scheduleSubNodeConnectorDraw();
+      this.scheduleTrendCanvasDraw();
+    }
   }
 
-  private maybeRefreshTrendHistory(force = false): void {
-    if (!this.shouldRunLiveRuntime()) {
+  private maybeRefreshTrendHistory(force = false, allowPreviewFetch = false): void {
+    if (
+      (!this.shouldRunLiveRuntime() && !allowPreviewFetch)
+      || (!this._isVisible && !allowPreviewFetch)
+      || (allowPreviewFetch && !this.isEditorPreview())
+    ) {
       return;
     }
 
@@ -2111,7 +2236,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     }
 
     this._lastTrendRefresh = now;
-    void this.refreshTrendHistory();
+    void this.refreshTrendHistory(force, allowPreviewFetch);
   }
 
   private isEditorPreview(): boolean {
@@ -2122,8 +2247,75 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     return !this.isEditorPreview();
   }
 
+  private setupVisibilityObserver(): void {
+    if (typeof IntersectionObserver === "undefined") {
+      this._isVisible = true;
+      return;
+    }
+
+    if (this._visibilityObserver) {
+      return;
+    }
+
+    this._visibilityObserver = new IntersectionObserver((entries) => {
+      const visible = entries.some((entry) => entry.isIntersecting && entry.intersectionRatio > 0);
+      if (visible === this._isVisible) {
+        return;
+      }
+
+      this._isVisible = visible;
+      if (!this.shouldRunLiveRuntime()) {
+        return;
+      }
+
+      if (visible) {
+        this.startLiveRuntime(true);
+        this.syncTrendResizeObserver();
+        this.updateSubBlockVisibility();
+        this.scheduleSubNodeConnectorDraw();
+        this.scheduleTrendCanvasDraw();
+      } else {
+        this.stopLiveRuntime();
+      }
+    }, { threshold: [0, 0.01] });
+
+    this._visibilityObserver.observe(this);
+  }
+
+  private teardownVisibilityObserver(): void {
+    if (this._visibilityObserver) {
+      this._visibilityObserver.disconnect();
+      this._visibilityObserver = undefined;
+    }
+    this._isVisible = typeof IntersectionObserver === "undefined";
+  }
+
+  private scheduleConfigRefresh(allowPreviewFetch = false): void {
+    if (
+      (!this.shouldRunLiveRuntime() && !allowPreviewFetch)
+      || (!this._isVisible && !allowPreviewFetch)
+      || (allowPreviewFetch && !this.isEditorPreview())
+    ) {
+      return;
+    }
+    if (this._configRefreshTimer !== undefined) {
+      window.clearTimeout(this._configRefreshTimer);
+    }
+    this._configRefreshTimer = window.setTimeout(() => {
+      this._configRefreshTimer = undefined;
+      this.maybeRefreshTrendHistory(true, allowPreviewFetch);
+    }, CONFIG_REFRESH_DEBOUNCE_MS);
+  }
+
+  private clearConfigRefreshTimer(): void {
+    if (this._configRefreshTimer !== undefined) {
+      window.clearTimeout(this._configRefreshTimer);
+      this._configRefreshTimer = undefined;
+    }
+  }
+
   private startLiveRuntime(forceRefresh = false): void {
-    if (!this.shouldRunLiveRuntime() || this._liveRuntimeActive) {
+    if (!this.shouldRunLiveRuntime() || !this._isVisible || this._liveRuntimeActive) {
       return;
     }
 
@@ -2144,6 +2336,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
   }
 
   private stopLiveRuntime(): void {
+    this.clearConfigRefreshTimer();
     this._liveRuntimeActive = false;
     if (this._trendRefreshTimer !== undefined) {
       window.clearInterval(this._trendRefreshTimer);
@@ -2163,8 +2356,14 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     }
   }
 
-  private async refreshTrendHistory(): Promise<void> {
-    if (this._trendRefreshInFlight || !this._config || !this.hass || typeof this.hass.callApi !== "function") {
+  private async refreshTrendHistory(forceFull = false, allowPreviewFetch = false): Promise<void> {
+    if (
+      this._trendRefreshInFlight
+      || !this._config
+      || !this.hass
+      || typeof this.hass.callApi !== "function"
+      || (!this._isVisible && !allowPreviewFetch)
+    ) {
       return;
     }
 
@@ -2180,14 +2379,126 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     this._trendRefreshInFlight = true;
     try {
       const next: Partial<Record<NodeKey, TrendPoint[]>> = {};
+      const nodeToEntity = new Map<NodeKey, string>();
+      const nodeToComputedHomeDependencies = new Map<NodeKey, HomeComputationDependency[]>();
+      const fullComputedNodes = new Set<NodeKey>();
+      const fullEntityIds = new Set<string>();
+      const incrementalEntityIds = new Set<string>();
+      let incrementalStartMs = Number.POSITIVE_INFINITY;
+      const cutoffMs = Date.now() - TREND_WINDOW_MS;
+
       for (const node of enabledNodes) {
+        if (node === "home" && config.home_auto_calculate === true) {
+          const dependencies = this.homeComputationDependencies(config);
+          if (dependencies.length === 0) {
+            next[node] = [];
+            continue;
+          }
+
+          nodeToComputedHomeDependencies.set(node, dependencies);
+          const existing = this._trendSeries[node] ?? [];
+          if (forceFull || existing.length === 0) {
+            fullComputedNodes.add(node);
+            dependencies.forEach((dependency) => {
+              fullEntityIds.add(dependency.entityId);
+              incrementalEntityIds.delete(dependency.entityId);
+            });
+            continue;
+          }
+
+          const lastTs = existing[existing.length - 1]?.ts ?? cutoffMs;
+          const sinceMs = Math.max(cutoffMs, lastTs - TREND_INCREMENTAL_OVERLAP_MS);
+          incrementalStartMs = Math.min(incrementalStartMs, sinceMs);
+          dependencies.forEach((dependency) => {
+            if (!fullEntityIds.has(dependency.entityId)) {
+              incrementalEntityIds.add(dependency.entityId);
+            }
+          });
+          continue;
+        }
+
         const entityId = this.trendEntityId(node, config);
         if (!entityId) {
           continue;
         }
-        next[node] = await this.fetchTrendHistory(entityId);
+        nodeToEntity.set(node, entityId);
+
+        const existing = this._trendSeries[node] ?? [];
+        if (forceFull || existing.length === 0 || fullEntityIds.has(entityId)) {
+          fullEntityIds.add(entityId);
+          incrementalEntityIds.delete(entityId);
+          continue;
+        }
+
+        if (fullEntityIds.has(entityId)) {
+          continue;
+        }
+        incrementalEntityIds.add(entityId);
+        const lastTs = existing[existing.length - 1]?.ts ?? cutoffMs;
+        const sinceMs = Math.max(cutoffMs, lastTs - TREND_INCREMENTAL_OVERLAP_MS);
+        incrementalStartMs = Math.min(incrementalStartMs, sinceMs);
       }
-      this._trendSeries = next;
+
+      const fullByEntity = fullEntityIds.size > 0
+        ? await fetchHistoryTrendPointsBatch(this.hass, Array.from(fullEntityIds), TREND_WINDOW_MS)
+        : {};
+      const incrementalByEntity = incrementalEntityIds.size > 0
+        ? await fetchHistoryTrendPointsBatch(
+            this.hass,
+            Array.from(incrementalEntityIds),
+            TREND_WINDOW_MS,
+            { startMs: Number.isFinite(incrementalStartMs) ? incrementalStartMs : cutoffMs }
+          )
+        : {};
+
+      nodeToEntity.forEach((entityId, node) => {
+        const existing = this._trendSeries[node] ?? [];
+        if (fullEntityIds.has(entityId)) {
+          const fetched = fullByEntity[entityId] ?? [];
+          next[node] = fetched.length > 0
+            ? fetched
+            : existing.filter((point) => point.ts >= cutoffMs);
+          return;
+        }
+
+        if (incrementalEntityIds.has(entityId)) {
+          const fetched = incrementalByEntity[entityId] ?? [];
+          next[node] = mergeHistoryTrendPoints(existing, fetched, cutoffMs);
+          return;
+        }
+
+        next[node] = existing.filter((point) => point.ts >= cutoffMs);
+      });
+
+      nodeToComputedHomeDependencies.forEach((dependencies, node) => {
+        const existing = this._trendSeries[node] ?? [];
+        const fetched = this.computeAutoHomeTrendFromFetchedDependencies(
+          dependencies,
+          fullByEntity,
+          incrementalByEntity,
+          fullEntityIds,
+          incrementalEntityIds,
+          cutoffMs
+        );
+
+        if (fullComputedNodes.has(node)) {
+          next[node] = fetched.length > 0
+            ? fetched
+            : existing.filter((point) => point.ts >= cutoffMs);
+          return;
+        }
+
+        next[node] = mergeHistoryTrendPoints(existing, fetched, cutoffMs);
+      });
+
+      const same =
+        this.sameTrendSeriesKeys(next, this._trendSeries)
+        && (Object.keys(next) as NodeKey[]).every((node) =>
+          this.areTrendSeriesEqual(next[node] ?? [], this._trendSeries[node] ?? [])
+        );
+      if (!same) {
+        this._trendSeries = next;
+      }
     } finally {
       this._trendRefreshInFlight = false;
     }
@@ -2225,7 +2536,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       case "grid_secondary":
         return config.grid_secondary_entity;
       case "home":
-        return config.home_entity;
+        return config.home_auto_calculate === true ? undefined : config.home_entity;
       case "battery":
         return config.battery_percentage_entity ?? config.battery_entity;
       case "battery_secondary":
@@ -2235,8 +2546,133 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     }
   }
 
-  private async fetchTrendHistory(entityId: string): Promise<TrendPoint[]> {
-    return fetchHistoryTrendPoints(this.hass, entityId, TREND_WINDOW_MS);
+  private computeAutoHomeTrendFromFetchedDependencies(
+    dependencies: HomeComputationDependency[],
+    fullByEntity: Record<string, TrendPoint[]>,
+    incrementalByEntity: Record<string, TrendPoint[]>,
+    fullEntityIds: Set<string>,
+    incrementalEntityIds: Set<string>,
+    cutoffMs: number
+  ): TrendPoint[] {
+    const roleSeries: Partial<Record<HomeComputationRole, TrendPoint[]>> = {};
+    dependencies.forEach((dependency) => {
+      const source = fullEntityIds.has(dependency.entityId)
+        ? (fullByEntity[dependency.entityId] ?? [])
+        : incrementalEntityIds.has(dependency.entityId)
+          ? (incrementalByEntity[dependency.entityId] ?? [])
+          : [];
+      roleSeries[dependency.role] = source
+        .filter((point) => Number.isFinite(point.ts) && Number.isFinite(point.value) && point.ts >= cutoffMs)
+        .sort((left, right) => left.ts - right.ts);
+    });
+
+    return this.computeAutoHomeTrendSeries(roleSeries, cutoffMs);
+  }
+
+  private computeAutoHomeTrendSeries(
+    roleSeries: Partial<Record<HomeComputationRole, TrendPoint[]>>,
+    cutoffMs: number
+  ): TrendPoint[] {
+    const timestamps: number[] = [];
+    (Object.values(roleSeries) as TrendPoint[][]).forEach((series) => {
+      series.forEach((point) => {
+        if (Number.isFinite(point.ts) && point.ts >= cutoffMs) {
+          timestamps.push(point.ts);
+        }
+      });
+    });
+
+    if (timestamps.length === 0) {
+      return [];
+    }
+
+    timestamps.sort((left, right) => left - right);
+    const dedupedTimestamps: number[] = [];
+    timestamps.forEach((timestamp) => {
+      const last = dedupedTimestamps[dedupedTimestamps.length - 1];
+      if (last === undefined || Math.abs(last - timestamp) > 0.5) {
+        dedupedTimestamps.push(timestamp);
+      }
+    });
+
+    return dedupedTimestamps
+      .map((timestamp) => {
+        const value = this.computeAutoHomeValueFromNodeValues({
+          solar: this.interpolateTrendSeriesValue(roleSeries.solar ?? [], timestamp),
+          grid: this.interpolateTrendSeriesValue(roleSeries.grid ?? [], timestamp),
+          grid_secondary: this.interpolateTrendSeriesValue(roleSeries.grid_secondary ?? [], timestamp),
+          battery: this.interpolateTrendSeriesValue(roleSeries.battery ?? [], timestamp),
+          battery_secondary: this.interpolateTrendSeriesValue(roleSeries.battery_secondary ?? [], timestamp)
+        });
+        if (value === null) {
+          return null;
+        }
+        return { ts: timestamp, value };
+      })
+      .filter((point): point is TrendPoint => point !== null);
+  }
+
+  private interpolateTrendSeriesValue(points: TrendPoint[], timestamp: number): number | null {
+    if (points.length === 0) {
+      return null;
+    }
+
+    if (timestamp <= points[0].ts) {
+      return points[0].value;
+    }
+    const last = points[points.length - 1];
+    if (timestamp >= last.ts) {
+      return last.value;
+    }
+
+    let low = 0;
+    let high = points.length - 1;
+    while (low <= high) {
+      const middle = Math.floor((low + high) / 2);
+      const point = points[middle];
+      if (Math.abs(point.ts - timestamp) <= 0.5) {
+        return point.value;
+      }
+      if (point.ts < timestamp) {
+        low = middle + 1;
+      } else {
+        high = middle - 1;
+      }
+    }
+
+    const rightIndex = Math.max(1, Math.min(points.length - 1, low));
+    const leftPoint = points[rightIndex - 1];
+    const rightPoint = points[rightIndex];
+    const span = rightPoint.ts - leftPoint.ts;
+    if (Math.abs(span) <= EPSILON) {
+      return rightPoint.value;
+    }
+
+    const ratio = (timestamp - leftPoint.ts) / span;
+    return leftPoint.value + ((rightPoint.value - leftPoint.value) * ratio);
+  }
+
+  private sameTrendSeriesKeys(
+    left: Partial<Record<NodeKey, TrendPoint[]>>,
+    right: Partial<Record<NodeKey, TrendPoint[]>>
+  ): boolean {
+    const leftKeys = Object.keys(left).sort();
+    const rightKeys = Object.keys(right).sort();
+    return leftKeys.length === rightKeys.length && leftKeys.every((key, index) => key === rightKeys[index]);
+  }
+
+  private areTrendSeriesEqual(left: TrendPoint[], right: TrendPoint[]): boolean {
+    if (left.length !== right.length) {
+      return false;
+    }
+    for (let index = 0; index < left.length; index += 1) {
+      const leftPoint = left[index];
+      const rightPoint = right[index];
+      if (leftPoint.ts !== rightPoint.ts || Math.abs(leftPoint.value - rightPoint.value) > 0.0001) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private handleCardClick = (): void => {

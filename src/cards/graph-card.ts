@@ -10,7 +10,7 @@ import type {
   LovelaceLayoutOptions
 } from "../types";
 import { readNumber, readUnit } from "../utils/entity";
-import { fetchHistoryTrendPoints } from "../utils/history";
+import { fetchHistoryTrendPointsBatch, mergeHistoryTrendPoints } from "../utils/history";
 import { mushroomIconStyle, resolveColor as resolveCssColor } from "../utils/color";
 import { toTrendCanvasPoints } from "../utils/trend";
 import {
@@ -36,6 +36,8 @@ import "./editors/graph-card-editor";
 const DEFAULT_DECIMALS = 1;
 const DEFAULT_TIMEFRAME_HOURS = 24;
 const TREND_REFRESH_MS = 5 * 60 * 1000;
+const TREND_INCREMENTAL_OVERLAP_MS = 60 * 1000;
+const CONFIG_REFRESH_DEBOUNCE_MS = 350;
 const EPSILON = 0.01;
 const GRAPH_SLOT_COUNT = 4;
 const DEFAULT_TREND_COLOR = "rgb(var(--rgb-primary-text-color, 33, 33, 33))";
@@ -228,6 +230,9 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
   private _lastTrendRefresh = 0;
   private _trendCanvasRaf?: number;
   private _trendResizeObserver?: ResizeObserver;
+  private _visibilityObserver?: IntersectionObserver;
+  private _isVisible = false;
+  private _configRefreshTimer?: number;
   private _liveRuntimeActive = false;
   private _canvasColorContext?: CanvasRenderingContext2D | null;
 
@@ -993,8 +998,13 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
 
   public connectedCallback(): void {
     super.connectedCallback();
-    this.startLiveRuntime(true);
-    if (!this.shouldRunLiveRuntime()) {
+    if (this.shouldRunLiveRuntime()) {
+      this.setupVisibilityObserver();
+      if (this._isVisible) {
+        this.startLiveRuntime(true);
+      }
+    } else {
+      this.maybeRefreshTrendHistory(true, true);
       void this.updateComplete.then(() => {
         this.updateGraphTopInset();
         this.scheduleTrendCanvasDraw();
@@ -1004,6 +1014,7 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
 
   public disconnectedCallback(): void {
     this.clearHoverState();
+    this.teardownVisibilityObserver();
     this.stopLiveRuntime();
     super.disconnectedCallback();
   }
@@ -1011,29 +1022,51 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
   protected updated(changedProps: Map<string, unknown>): void {
     if (changedProps.has("preview") || changedProps.has("editMode")) {
       if (this.shouldRunLiveRuntime()) {
-        this.startLiveRuntime(true);
+        this.setupVisibilityObserver();
+        if (this._isVisible) {
+          this.startLiveRuntime(true);
+        } else {
+          this.stopLiveRuntime();
+        }
       } else {
+        this.teardownVisibilityObserver();
         this.stopLiveRuntime();
+        this.maybeRefreshTrendHistory(true, true);
       }
     }
 
     if (this.shouldRunLiveRuntime()) {
       if (changedProps.has("_config")) {
-        this.maybeRefreshTrendHistory(true);
+        this.scheduleConfigRefresh();
         this.clearHoverState();
-      } else if (changedProps.has("hass")) {
+      } else if (changedProps.has("hass") && this._isVisible) {
         this.maybeRefreshTrendHistory();
         this.clearHoverState();
       }
-      this.syncTrendResizeObserver();
-    } else if (this._trendResizeObserver) {
-      this._trendResizeObserver.disconnect();
+      if (this._isVisible) {
+        this.syncTrendResizeObserver();
+      } else if (this._trendResizeObserver) {
+        this._trendResizeObserver.disconnect();
+      }
+    } else {
+      if (changedProps.has("_config")) {
+        this.scheduleConfigRefresh(true);
+        this.clearHoverState();
+      } else if (changedProps.has("hass")) {
+        this.maybeRefreshTrendHistory(false, true);
+        this.clearHoverState();
+      }
+      if (this._trendResizeObserver) {
+        this._trendResizeObserver.disconnect();
+      }
     }
     if (this._config?.hover_enabled === false) {
       this.clearHoverState();
     }
     this.updateGraphTopInset();
-    this.scheduleTrendCanvasDraw();
+    if (!this.shouldRunLiveRuntime() || this._isVisible) {
+      this.scheduleTrendCanvasDraw();
+    }
   }
 
   private updateGraphTopInset(): void {
@@ -1063,8 +1096,12 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
     }
   }
 
-  private maybeRefreshTrendHistory(force = false): void {
-    if (!this.shouldRunLiveRuntime()) {
+  private maybeRefreshTrendHistory(force = false, allowPreviewFetch = false): void {
+    if (
+      (!this.shouldRunLiveRuntime() && !allowPreviewFetch)
+      || (!this._isVisible && !allowPreviewFetch)
+      || (allowPreviewFetch && !this.isEditorPreview())
+    ) {
       return;
     }
 
@@ -1078,7 +1115,7 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
     }
 
     this._lastTrendRefresh = now;
-    void this.refreshTrendHistory();
+    void this.refreshTrendHistory(force, allowPreviewFetch);
   }
 
   private isEditorPreview(): boolean {
@@ -1089,8 +1126,74 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
     return !this.isEditorPreview();
   }
 
+  private setupVisibilityObserver(): void {
+    if (typeof IntersectionObserver === "undefined") {
+      this._isVisible = true;
+      return;
+    }
+
+    if (this._visibilityObserver) {
+      return;
+    }
+
+    this._visibilityObserver = new IntersectionObserver((entries) => {
+      const visible = entries.some((entry) => entry.isIntersecting && entry.intersectionRatio > 0);
+      if (visible === this._isVisible) {
+        return;
+      }
+
+      this._isVisible = visible;
+      if (!this.shouldRunLiveRuntime()) {
+        return;
+      }
+
+      if (visible) {
+        this.startLiveRuntime(true);
+        this.syncTrendResizeObserver();
+        this.scheduleTrendCanvasDraw();
+      } else {
+        this.clearHoverState();
+        this.stopLiveRuntime();
+      }
+    }, { threshold: [0, 0.01] });
+
+    this._visibilityObserver.observe(this);
+  }
+
+  private teardownVisibilityObserver(): void {
+    if (this._visibilityObserver) {
+      this._visibilityObserver.disconnect();
+      this._visibilityObserver = undefined;
+    }
+    this._isVisible = typeof IntersectionObserver === "undefined";
+  }
+
+  private scheduleConfigRefresh(allowPreviewFetch = false): void {
+    if (
+      (!this.shouldRunLiveRuntime() && !allowPreviewFetch)
+      || (!this._isVisible && !allowPreviewFetch)
+      || (allowPreviewFetch && !this.isEditorPreview())
+    ) {
+      return;
+    }
+    if (this._configRefreshTimer !== undefined) {
+      window.clearTimeout(this._configRefreshTimer);
+    }
+    this._configRefreshTimer = window.setTimeout(() => {
+      this._configRefreshTimer = undefined;
+      this.maybeRefreshTrendHistory(true, allowPreviewFetch);
+    }, CONFIG_REFRESH_DEBOUNCE_MS);
+  }
+
+  private clearConfigRefreshTimer(): void {
+    if (this._configRefreshTimer !== undefined) {
+      window.clearTimeout(this._configRefreshTimer);
+      this._configRefreshTimer = undefined;
+    }
+  }
+
   private startLiveRuntime(forceRefresh = false): void {
-    if (!this.shouldRunLiveRuntime() || this._liveRuntimeActive) {
+    if (!this.shouldRunLiveRuntime() || !this._isVisible || this._liveRuntimeActive) {
       return;
     }
 
@@ -1110,6 +1213,7 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
   }
 
   private stopLiveRuntime(): void {
+    this.clearConfigRefreshTimer();
     this._liveRuntimeActive = false;
     if (this._trendRefreshTimer !== undefined) {
       window.clearInterval(this._trendRefreshTimer);
@@ -1125,8 +1229,14 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
     }
   }
 
-  private async refreshTrendHistory(): Promise<void> {
-    if (this._trendRefreshInFlight || !this._config || !this.hass || typeof this.hass.callApi !== "function") {
+  private async refreshTrendHistory(forceFull = false, allowPreviewFetch = false): Promise<void> {
+    if (
+      this._trendRefreshInFlight
+      || !this._config
+      || !this.hass
+      || typeof this.hass.callApi !== "function"
+      || (!this._isVisible && !allowPreviewFetch)
+    ) {
       return;
     }
 
@@ -1144,14 +1254,78 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
 
     this._trendRefreshInFlight = true;
     try {
+      const slotToEntity = new Map<GraphSlot, string>();
+      const fullEntityIds = new Set<string>();
+      const incrementalEntityIds = new Set<string>();
+      let incrementalStartMs = Number.POSITIVE_INFINITY;
+      const cutoffMs = Date.now() - windowMs;
+
       for (const slot of slots) {
         const entityId = this.slotEntityId(slot, config);
         if (!entityId) {
           continue;
         }
-        next[slot] = await this.fetchTrendHistory(entityId, windowMs);
+        slotToEntity.set(slot, entityId);
+
+        const existing = this._trendSeries[slot] ?? [];
+        if (forceFull || existing.length === 0 || fullEntityIds.has(entityId)) {
+          fullEntityIds.add(entityId);
+          incrementalEntityIds.delete(entityId);
+          continue;
+        }
+
+        if (fullEntityIds.has(entityId)) {
+          continue;
+        }
+        incrementalEntityIds.add(entityId);
+        const lastTs = existing[existing.length - 1]?.ts ?? cutoffMs;
+        const sinceMs = Math.max(cutoffMs, lastTs - TREND_INCREMENTAL_OVERLAP_MS);
+        incrementalStartMs = Math.min(incrementalStartMs, sinceMs);
       }
-      this._trendSeries = next;
+
+      const fullByEntity = fullEntityIds.size > 0
+        ? await fetchHistoryTrendPointsBatch(this.hass, Array.from(fullEntityIds), windowMs)
+        : {};
+      const incrementalByEntity = incrementalEntityIds.size > 0
+        ? await fetchHistoryTrendPointsBatch(
+            this.hass,
+            Array.from(incrementalEntityIds),
+            windowMs,
+            { startMs: Number.isFinite(incrementalStartMs) ? incrementalStartMs : cutoffMs }
+          )
+        : {};
+
+      slotToEntity.forEach((entityId, slot) => {
+        const existing = this._trendSeries[slot] ?? [];
+        if (fullEntityIds.has(entityId)) {
+          const fetched = fullByEntity[entityId] ?? [];
+          next[slot] = fetched.length > 0
+            ? fetched
+            : existing.filter((point) => point.ts >= cutoffMs);
+          return;
+        }
+
+        if (incrementalEntityIds.has(entityId)) {
+          const fetched = incrementalByEntity[entityId] ?? [];
+          next[slot] = mergeHistoryTrendPoints(existing, fetched, cutoffMs);
+          return;
+        }
+
+        next[slot] = existing.filter((point) => point.ts >= cutoffMs);
+      });
+
+      const same =
+        this.sameTrendSeriesKeys(next, this._trendSeries)
+        && (Object.keys(next) as unknown[])
+          .map((value) => Number(value))
+          .filter((value): value is number => Number.isFinite(value) && value >= 1 && value <= GRAPH_SLOT_COUNT)
+          .every((slotNumber) => {
+            const slot = slotNumber as GraphSlot;
+            return this.areTrendSeriesEqual(next[slot] ?? [], this._trendSeries[slot] ?? []);
+          });
+      if (!same) {
+        this._trendSeries = next;
+      }
     } finally {
       this._trendRefreshInFlight = false;
     }
@@ -1168,8 +1342,27 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
     return slots;
   }
 
-  private async fetchTrendHistory(entityId: string, windowMs: number): Promise<TrendPoint[]> {
-    return fetchHistoryTrendPoints(this.hass, entityId, windowMs);
+  private sameTrendSeriesKeys(
+    left: Partial<Record<GraphSlot, TrendPoint[]>>,
+    right: Partial<Record<GraphSlot, TrendPoint[]>>
+  ): boolean {
+    const leftKeys = Object.keys(left).sort();
+    const rightKeys = Object.keys(right).sort();
+    return leftKeys.length === rightKeys.length && leftKeys.every((key, index) => key === rightKeys[index]);
+  }
+
+  private areTrendSeriesEqual(left: TrendPoint[], right: TrendPoint[]): boolean {
+    if (left.length !== right.length) {
+      return false;
+    }
+    for (let index = 0; index < left.length; index += 1) {
+      const leftPoint = left[index];
+      const rightPoint = right[index];
+      if (leftPoint.ts !== rightPoint.ts || Math.abs(leftPoint.value - rightPoint.value) > 0.0001) {
+        return false;
+      }
+    }
+    return true;
   }
 
   static styles = css`
