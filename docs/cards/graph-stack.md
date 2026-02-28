@@ -22,7 +22,7 @@ All options are available in the Lovelace editor, but you can also use YAML.
 | `hover_enabled` | boolean | `true` | Enable hover dot + value inspection |
 | `fill_area_enabled` | boolean | `true` | Enable gradient fill below each stacked line |
 | `trend_data_source` | `hybrid` \| `statistics` \| `history` | `hybrid` | Trend backend (`hybrid` prefers HA statistics and falls back to history) |
-| `debug_performance` | boolean | `false` | Log trend fetch + draw timing to browser console |
+| `debug_performance` | boolean | `false` | Log trend fetch + draw timing to browser console (YAML only) |
 | `normalize_stack_to_percent` | boolean | `false` | Normalize cumulative result to 100% |
 | `unit` | string | entity unit | Optional unit override |
 | `decimals` | number | `1` | Decimal precision |

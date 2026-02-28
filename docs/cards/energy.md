@@ -36,7 +36,7 @@ All options are available in the Lovelace editor, but you can also use YAML.
 | `*_trend` | boolean | `false` | Enable trend graph per node |
 | `*_trend_color` | string \| rgb array | `purple` | Trend line color per node |
 | `trend_data_source` | `hybrid` \| `statistics` \| `history` | `hybrid` | Trend backend (`hybrid` prefers HA statistics and falls back to history) |
-| `debug_performance` | boolean | `false` | Log trend fetch + draw timing to browser console |
+| `debug_performance` | boolean | `false` | Log trend fetch + draw timing to browser console (YAML only) |
 | `battery_low_alert` | boolean | `false` | Color battery icon/trend red under threshold |
 | `battery_low_threshold` | number | `20` | Battery low threshold in `%` |
 | `battery_secondary_low_alert` | boolean | `false` | Low alert for second battery |

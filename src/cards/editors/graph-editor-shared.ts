@@ -28,7 +28,6 @@ const BASE_LABELS: Record<string, string> = {
   fill_area_enabled: "Area fill",
   shared_trend_scale: "Shared scale",
   trend_data_source: "Trend source (auto)",
-  debug_performance: "Debug logs",
   clip_graph_to_labels: "Clip below labels",
   line_thickness: "Line width",
   unit: "Unit",
@@ -91,8 +90,7 @@ export const createGraphSchema = (includeNormalizeStackToPercent = false): HaFor
   const toggles: HaFormSchema[] = [
     { name: "hover_enabled", selector: { boolean: {} } },
     { name: "fill_area_enabled", selector: { boolean: {} } },
-    { name: "shared_trend_scale", selector: { boolean: {} } },
-    { name: "debug_performance", selector: { boolean: {} } }
+    { name: "shared_trend_scale", selector: { boolean: {} } }
   ];
 
   if (includeNormalizeStackToPercent) {

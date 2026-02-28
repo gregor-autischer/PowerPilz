@@ -284,8 +284,7 @@ const SCHEMA: HaFormSchema[] = [
   ]),
   nodeStyleSection("Trend settings", "mdi:chart-line", [
     { name: "shared_trend_scale", selector: { boolean: {} } },
-    { name: "trend_data_source", selector: TREND_SOURCE_SELECTOR },
-    { name: "debug_performance", selector: { boolean: {} } }
+    { name: "trend_data_source", selector: TREND_SOURCE_SELECTOR }
   ]),
   subBlockSchemas("solar", "Solar sub blocks", "mdi:solar-power-variant", SOLAR_SUB_BLOCK_COUNT),
   subBlockSchemas("grid", "Grid 1 sub blocks", "mdi:transmission-tower", GRID_SUB_BLOCK_COUNT),
@@ -361,7 +360,6 @@ const LABELS: Record<string, string> = {
   battery_secondary_trend_color: "Battery 2 trend color",
   shared_trend_scale: "Shared trend scale",
   trend_data_source: "Trend source (auto)",
-  debug_performance: "Debug logs",
   battery_low_alert: "Low battery alert",
   battery_low_threshold: "Low battery %",
   battery_secondary_low_alert: "Battery 2 low alert",
