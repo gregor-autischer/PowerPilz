@@ -24,6 +24,7 @@ interface GraphStackCardConfig extends LovelaceCardConfig {
   hover_enabled?: boolean;
   fill_area_enabled?: boolean;
   shared_trend_scale?: boolean;
+  debug_performance?: boolean;
   normalize_stack_to_percent?: boolean;
 
   entity?: string;
@@ -82,6 +83,7 @@ export class PowerPilzGraphStackCardEditor extends LitElement implements Lovelac
       hover_enabled: config.hover_enabled ?? true,
       fill_area_enabled: config.fill_area_enabled ?? true,
       shared_trend_scale: config.shared_trend_scale ?? false,
+      debug_performance: config.debug_performance ?? false,
       normalize_stack_to_percent: config.normalize_stack_to_percent ?? false,
       line_thickness: clampLineThickness(config.line_thickness),
       clip_graph_to_labels: config.clip_graph_to_labels ?? false,

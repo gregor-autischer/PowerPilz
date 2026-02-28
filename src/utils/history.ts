@@ -10,8 +10,87 @@ interface HistoryFetchBatchOptions {
 }
 
 const HISTORY_CACHE_TTL_MS = 30_000;
+const MAX_HISTORY_POINTS_PER_SERIES = 1_440;
+const FULL_WINDOW_START_BUCKET_MS = 10_000;
+const INCREMENTAL_START_BUCKET_MS = 2_000;
 const entityHistoryCache = new Map<string, { expiresAt: number; points: HistoryTrendPoint[] }>();
 const batchInflight = new Map<string, Promise<Record<string, HistoryTrendPoint[]>>>();
+
+const downsampleHistoryTrendPoints = (
+  points: HistoryTrendPoint[],
+  maxPoints = MAX_HISTORY_POINTS_PER_SERIES
+): HistoryTrendPoint[] => {
+  if (points.length <= maxPoints) {
+    return points;
+  }
+
+  if (maxPoints <= 2) {
+    return [points[0], points[points.length - 1]];
+  }
+
+  const interior = points.slice(1, -1);
+  const bucketCount = Math.max(1, Math.floor((maxPoints - 2) / 2));
+  const bucketSize = interior.length / bucketCount;
+  const sampled: HistoryTrendPoint[] = [points[0]];
+
+  for (let index = 0; index < bucketCount; index += 1) {
+    const start = Math.floor(index * bucketSize);
+    const endExclusive = Math.max(start + 1, Math.floor((index + 1) * bucketSize));
+    const bucket = interior.slice(start, endExclusive);
+    if (bucket.length === 0) {
+      continue;
+    }
+
+    let minPoint = bucket[0];
+    let maxPoint = bucket[0];
+    for (const point of bucket) {
+      if (point.value < minPoint.value) {
+        minPoint = point;
+      }
+      if (point.value > maxPoint.value) {
+        maxPoint = point;
+      }
+    }
+
+    if (minPoint.ts <= maxPoint.ts) {
+      sampled.push(minPoint);
+      if (maxPoint !== minPoint) {
+        sampled.push(maxPoint);
+      }
+    } else {
+      sampled.push(maxPoint);
+      if (minPoint !== maxPoint) {
+        sampled.push(minPoint);
+      }
+    }
+
+    if (sampled.length >= maxPoints - 1) {
+      break;
+    }
+  }
+
+  sampled.push(points[points.length - 1]);
+  if (sampled.length <= maxPoints) {
+    return sampled;
+  }
+
+  const trimmed: HistoryTrendPoint[] = [sampled[0]];
+  const stride = (sampled.length - 2) / (maxPoints - 2);
+  for (let index = 0; index < maxPoints - 2; index += 1) {
+    const sampledIndex = 1 + Math.floor(index * stride);
+    trimmed.push(sampled[sampledIndex]);
+  }
+  trimmed.push(sampled[sampled.length - 1]);
+  return trimmed;
+};
+
+const normalizeHistoryStartMs = (requestedStartMs: number, useCache: boolean): number => {
+  const bucketMs = useCache ? FULL_WINDOW_START_BUCKET_MS : INCREMENTAL_START_BUCKET_MS;
+  if (!Number.isFinite(requestedStartMs) || requestedStartMs <= 0 || bucketMs <= 1) {
+    return Math.max(0, Math.floor(requestedStartMs));
+  }
+  return Math.max(0, Math.floor(requestedStartMs / bucketMs) * bucketMs);
+};
 
 const parseHistoryTimestamp = (stateObj: Record<string, unknown>): number | null => {
   const parseCandidate = (candidate: unknown): number | null => {
@@ -82,9 +161,10 @@ export const parseHistoryTrendResponse = (
   }
 
   const cutoff = nowMs - windowMs;
-  return points
+  const filtered = points
     .filter((point) => point.ts >= cutoff)
     .sort((a, b) => a.ts - b.ts);
+  return downsampleHistoryTrendPoints(filtered);
 };
 
 export const fetchHistoryTrendPoints = async (
@@ -118,7 +198,7 @@ export const mergeHistoryTrendPoints = (
     }
     deduped.push(point);
   });
-  return deduped;
+  return downsampleHistoryTrendPoints(deduped);
 };
 
 const parseHistoryEntitySeries = (
@@ -149,11 +229,13 @@ const parseHistoryEntitySeries = (
   }
 
   const cutoff = nowMs - windowMs;
+  const filtered = points
+    .filter((point) => point.ts >= cutoff)
+    .sort((a, b) => a.ts - b.ts);
+
   return {
     entityId,
-    points: points
-      .filter((point) => point.ts >= cutoff)
-      .sort((a, b) => a.ts - b.ts)
+    points: downsampleHistoryTrendPoints(filtered)
   };
 };
 
@@ -180,6 +262,7 @@ export const fetchHistoryTrendPointsBatch = async (
     ? Math.max(now - windowMs, Math.floor(options.startMs))
     : now - windowMs;
   const useCache = requestedStartMs <= (now - windowMs + 1000);
+  const normalizedStartMs = normalizeHistoryStartMs(requestedStartMs, useCache);
   const result: Record<string, HistoryTrendPoint[]> = {};
   const missingEntityIds: string[] = [];
 
@@ -200,7 +283,7 @@ export const fetchHistoryTrendPointsBatch = async (
   }
 
   const sortedForKey = [...missingEntityIds].sort();
-  const inflightKey = `${requestedStartMs}|${windowMs}|${sortedForKey.join(",")}`;
+  const inflightKey = `${normalizedStartMs}|${windowMs}|${sortedForKey.join(",")}`;
   const existingInflight = batchInflight.get(inflightKey);
   if (existingInflight) {
     const inflightResult = await existingInflight;
@@ -211,7 +294,7 @@ export const fetchHistoryTrendPointsBatch = async (
   }
 
   const task = (async (): Promise<Record<string, HistoryTrendPoint[]>> => {
-    const startIso = new Date(requestedStartMs).toISOString();
+    const startIso = new Date(normalizedStartMs).toISOString();
     const filter = missingEntityIds.join(",");
     const path =
       `history/period/${startIso}?filter_entity_id=${encodeURIComponent(filter)}`

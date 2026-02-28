@@ -111,6 +111,7 @@ interface PowerPilzGraphStackCardConfig extends LovelaceCardConfig {
   hover_enabled?: boolean;
   fill_area_enabled?: boolean;
   shared_trend_scale?: boolean;
+  debug_performance?: boolean;
   normalize_stack_to_percent?: boolean;
 
   entity?: string;
@@ -258,6 +259,7 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
       hover_enabled: config.hover_enabled ?? true,
       fill_area_enabled: config.fill_area_enabled ?? true,
       shared_trend_scale: config.shared_trend_scale ?? false,
+      debug_performance: config.debug_performance ?? false,
       normalize_stack_to_percent: config.normalize_stack_to_percent ?? false,
       entity_1: entity1,
       entity_1_name: this.readConfigString(config.entity_1_name),
@@ -558,10 +560,12 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
   private trendPoints(slot: GraphSlot, currentValue: number | null): TrendPoint[] {
     const now = Date.now();
     const cutoff = now - this.trendWindowMs(this._config);
-    const stored = (this._trendSeries[slot] ?? [])
-      .filter((point) => point.ts >= cutoff)
-      .sort((a, b) => a.ts - b.ts);
-    const points = [...stored];
+    const stored = this._trendSeries[slot] ?? [];
+    let startIndex = 0;
+    while (startIndex < stored.length && stored[startIndex].ts < cutoff) {
+      startIndex += 1;
+    }
+    const points = startIndex > 0 ? stored.slice(startIndex) : [...stored];
 
     if (currentValue !== null && Number.isFinite(currentValue)) {
       points.push({ ts: now, value: currentValue });
@@ -665,11 +669,13 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
   }
 
   private drawTrendCanvases(): void {
+    const drawStartedAt = this.perfNow();
     if (this._drawConfigs.length === 0) {
       this._linePointsBySlot = {};
       if (this._hoverState) {
         this._hoverState = undefined;
       }
+      this.logPerformance("draw-skip", { reason: "no-draw-configs" });
       return;
     }
 
@@ -680,6 +686,7 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
       if (this._hoverState) {
         this._hoverState = undefined;
       }
+      this.logPerformance("draw-skip", { reason: "missing-canvas" });
       return;
     }
 
@@ -690,6 +697,7 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
       if (this._hoverState) {
         this._hoverState = undefined;
       }
+      this.logPerformance("draw-skip", { reason: "canvas-context" });
       return;
     }
 
@@ -705,6 +713,8 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
     const stackedRange = normalizeToPercent
       ? (sharedScaleEnabled ? { min: 0, max: 100 } : null)
       : (sharedScaleEnabled ? this.computeStackedValueRange(stackedSeriesBySlot) : null);
+    let drawnSeries = 0;
+    let drawnPointCount = 0;
     const drawOrder = [...this._drawConfigs].sort((left, right) => right.slot - left.slot);
     drawOrder.forEach((drawConfig) => {
       const points = stackedSeriesBySlot[drawConfig.slot] ?? [];
@@ -724,12 +734,23 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
       }
       this.drawTrendLine(line.ctx, linePoints, drawConfig.color, drawConfig.lineWidth);
       linePointsBySlot[drawConfig.slot] = linePoints;
+      drawnSeries += 1;
+      drawnPointCount += linePoints.length;
     });
 
     this._linePointsBySlot = linePointsBySlot;
     if (this._hoverState && !linePointsBySlot[this._hoverState.slot]) {
       this._hoverState = undefined;
     }
+
+    this.logPerformance("draw-complete", {
+      duration_ms: this.toPerfMs(this.perfNow() - drawStartedAt),
+      series: drawnSeries,
+      points: drawnPointCount,
+      fill_area: fillAreaEnabled,
+      shared_scale: sharedScaleEnabled,
+      normalize_percent: normalizeToPercent
+    });
   }
 
   private buildStackedTrendSeries(windowMs: number): Partial<Record<GraphSlot, TrendPoint[]>> {
@@ -1226,6 +1247,14 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
   }
 
   protected updated(changedProps: Map<string, unknown>): void {
+    const previousConfig = changedProps.get("_config") as PowerPilzGraphStackCardConfig | undefined;
+    const shouldRefreshOnConfigChange =
+      changedProps.has("_config")
+      && this.shouldRefreshTrendOnConfigChange(previousConfig, this._config);
+    const previousHass = changedProps.get("hass") as HomeAssistant | undefined;
+    const trackedHassChanged = changedProps.has("hass")
+      && this.didTrackedEntityStateChange(previousHass);
+
     if (changedProps.has("preview") || changedProps.has("editMode")) {
       if (this.shouldRunLiveRuntime()) {
         this.setupVisibilityObserver();
@@ -1243,9 +1272,11 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
 
     if (this.shouldRunLiveRuntime()) {
       if (changedProps.has("_config")) {
-        this.scheduleConfigRefresh();
+        if (shouldRefreshOnConfigChange) {
+          this.scheduleConfigRefresh();
+        }
         this.clearHoverState();
-      } else if (changedProps.has("hass") && this._isVisible) {
+      } else if (changedProps.has("hass") && this._isVisible && trackedHassChanged) {
         this.maybeRefreshTrendHistory();
         this.clearHoverState();
       }
@@ -1256,9 +1287,11 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
       }
     } else {
       if (changedProps.has("_config")) {
-        this.scheduleConfigRefresh(true);
+        if (shouldRefreshOnConfigChange) {
+          this.scheduleConfigRefresh(true);
+        }
         this.clearHoverState();
-      } else if (changedProps.has("hass")) {
+      } else if (changedProps.has("hass") && trackedHassChanged) {
         this.maybeRefreshTrendHistory(false, true);
         this.clearHoverState();
       }
@@ -1270,7 +1303,14 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
       this.clearHoverState();
     }
     this.updateGraphTopInset();
-    if (!this.shouldRunLiveRuntime() || this._isVisible) {
+    const shouldRedrawTrendCanvas =
+      changedProps.has("_config")
+      || changedProps.has("_trendSeries")
+      || changedProps.has("_graphTopInset")
+      || changedProps.has("preview")
+      || changedProps.has("editMode")
+      || trackedHassChanged;
+    if ((!this.shouldRunLiveRuntime() || this._isVisible) && shouldRedrawTrendCanvas) {
       this.scheduleTrendCanvasDraw();
     }
   }
@@ -1330,6 +1370,27 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
 
   private shouldRunLiveRuntime(): boolean {
     return !this.isEditorPreview();
+  }
+
+  private perfNow(): number {
+    return typeof performance !== "undefined" && typeof performance.now === "function"
+      ? performance.now()
+      : Date.now();
+  }
+
+  private toPerfMs(value: number): number {
+    return Math.round(value * 10) / 10;
+  }
+
+  private logPerformance(event: string, detail?: Record<string, unknown>): void {
+    if (this._config?.debug_performance !== true) {
+      return;
+    }
+    if (detail) {
+      console.debug("[PowerPilz][GraphStack]", event, detail);
+      return;
+    }
+    console.debug("[PowerPilz][GraphStack]", event);
   }
 
   private setupVisibilityObserver(): void {
@@ -1460,6 +1521,7 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
 
     this._trendRefreshInFlight = true;
     try {
+      const refreshStartedAt = this.perfNow();
       const slotToEntity = new Map<GraphSlot, string>();
       const fullEntityIds = new Set<string>();
       const incrementalEntityIds = new Set<string>();
@@ -1489,16 +1551,28 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
         incrementalStartMs = Math.min(incrementalStartMs, sinceMs);
       }
 
+      let fullFetchMs = 0;
       const fullByEntity = fullEntityIds.size > 0
-        ? await fetchHistoryTrendPointsBatch(this.hass, Array.from(fullEntityIds), windowMs)
+        ? await (async () => {
+            const fetchStartedAt = this.perfNow();
+            const fetched = await fetchHistoryTrendPointsBatch(this.hass, Array.from(fullEntityIds), windowMs);
+            fullFetchMs = this.perfNow() - fetchStartedAt;
+            return fetched;
+          })()
         : {};
+      let incrementalFetchMs = 0;
       const incrementalByEntity = incrementalEntityIds.size > 0
-        ? await fetchHistoryTrendPointsBatch(
-            this.hass,
-            Array.from(incrementalEntityIds),
-            windowMs,
-            { startMs: Number.isFinite(incrementalStartMs) ? incrementalStartMs : cutoffMs }
-          )
+        ? await (async () => {
+            const fetchStartedAt = this.perfNow();
+            const fetched = await fetchHistoryTrendPointsBatch(
+              this.hass,
+              Array.from(incrementalEntityIds),
+              windowMs,
+              { startMs: Number.isFinite(incrementalStartMs) ? incrementalStartMs : cutoffMs }
+            );
+            incrementalFetchMs = this.perfNow() - fetchStartedAt;
+            return fetched;
+          })()
         : {};
 
       slotToEntity.forEach((entityId, slot) => {
@@ -1532,6 +1606,18 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
       if (!same) {
         this._trendSeries = next;
       }
+
+      this.logPerformance("trend-refresh", {
+        duration_ms: this.toPerfMs(this.perfNow() - refreshStartedAt),
+        window_ms: windowMs,
+        force_full: forceFull,
+        slots: slots.length,
+        full_entities: fullEntityIds.size,
+        incremental_entities: incrementalEntityIds.size,
+        full_fetch_ms: this.toPerfMs(fullFetchMs),
+        incremental_fetch_ms: this.toPerfMs(incrementalFetchMs),
+        series_changed: !same
+      });
     } finally {
       this._trendRefreshInFlight = false;
     }
@@ -1546,6 +1632,59 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
       }
     }
     return slots;
+  }
+
+  private trackedEntityIds(config: PowerPilzGraphStackCardConfig): string[] {
+    const ids = new Set<string>();
+    this.enabledSlots(config).forEach((slot) => {
+      const entityId = this.slotEntityId(slot, config);
+      if (entityId) {
+        ids.add(entityId);
+      }
+    });
+    return Array.from(ids);
+  }
+
+  private didTrackedEntityStateChange(previousHass: HomeAssistant | undefined): boolean {
+    if (!this._config || !this.hass || !previousHass) {
+      return true;
+    }
+
+    const entityIds = this.trackedEntityIds(this._config);
+    if (entityIds.length === 0) {
+      return false;
+    }
+
+    return entityIds.some((entityId) => previousHass.states[entityId] !== this.hass.states[entityId]);
+  }
+
+  private shouldRefreshTrendOnConfigChange(
+    previousConfig: PowerPilzGraphStackCardConfig | undefined,
+    nextConfig: PowerPilzGraphStackCardConfig | undefined
+  ): boolean {
+    if (!previousConfig || !nextConfig) {
+      return true;
+    }
+
+    if (this.trendWindowMs(previousConfig) !== this.trendWindowMs(nextConfig)) {
+      return true;
+    }
+
+    for (let index = 1; index <= GRAPH_SLOT_COUNT; index += 1) {
+      const slot = index as GraphSlot;
+      const previousEnabled = this.slotEnabled(slot, previousConfig);
+      const nextEnabled = this.slotEnabled(slot, nextConfig);
+      const previousEntityId = previousEnabled ? this.slotEntityId(slot, previousConfig) : undefined;
+      const nextEntityId = nextEnabled ? this.slotEntityId(slot, nextConfig) : undefined;
+      if (
+        previousEnabled !== nextEnabled
+        || previousEntityId !== nextEntityId
+      ) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   private sameTrendSeriesKeys(

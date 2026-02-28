@@ -26,6 +26,7 @@ const BASE_LABELS: Record<string, string> = {
   hover_enabled: "Enable hover",
   fill_area_enabled: "Enable area fill",
   shared_trend_scale: "Shared trend scale",
+  debug_performance: "Enable debug performance logs",
   clip_graph_to_labels: "Clip graph below labels",
   line_thickness: "Line thickness",
   unit: "Unit override",
@@ -43,6 +44,7 @@ interface GraphEditorLikeConfig extends LovelaceCardConfig {
   hover_enabled?: boolean;
   fill_area_enabled?: boolean;
   shared_trend_scale?: boolean;
+  debug_performance?: boolean;
   clip_graph_to_labels?: boolean;
   [key: string]: unknown;
 }
@@ -86,7 +88,8 @@ export const createGraphSchema = (includeNormalizeStackToPercent = false): HaFor
   const toggles: HaFormSchema[] = [
     { name: "hover_enabled", selector: { boolean: {} } },
     { name: "fill_area_enabled", selector: { boolean: {} } },
-    { name: "shared_trend_scale", selector: { boolean: {} } }
+    { name: "shared_trend_scale", selector: { boolean: {} } },
+    { name: "debug_performance", selector: { boolean: {} } }
   ];
 
   if (includeNormalizeStackToPercent) {

@@ -178,6 +178,7 @@ interface PowerPilzEnergyCardConfig extends LovelaceCardConfig {
   battery_trend_color?: string | number[];
   battery_secondary_trend_color?: string | number[];
   shared_trend_scale?: boolean;
+  debug_performance?: boolean;
   battery_low_alert?: boolean;
   battery_low_threshold?: number;
   battery_secondary_low_alert?: boolean;
@@ -320,6 +321,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       battery_trend: config.battery_trend ?? false,
       battery_secondary_trend: config.battery_secondary_trend ?? false,
       shared_trend_scale: config.shared_trend_scale ?? false,
+      debug_performance: config.debug_performance ?? false,
       battery_low_alert: config.battery_low_alert ?? false,
       battery_low_threshold: this.normalizeBatteryThreshold(config.battery_low_threshold),
       battery_secondary_low_alert: config.battery_secondary_low_alert ?? false,
@@ -1380,10 +1382,12 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
   private trendPoints(node: NodeKey, currentValue: number | null): TrendPoint[] {
     const now = Date.now();
     const cutoff = now - TREND_WINDOW_MS;
-    const stored = (this._trendSeries[node] ?? [])
-      .filter((point) => point.ts >= cutoff)
-      .sort((a, b) => a.ts - b.ts);
-    const points = [...stored];
+    const stored = this._trendSeries[node] ?? [];
+    let startIndex = 0;
+    while (startIndex < stored.length && stored[startIndex].ts < cutoff) {
+      startIndex += 1;
+    }
+    const points = startIndex > 0 ? stored.slice(startIndex) : [...stored];
 
     if (currentValue !== null && Number.isFinite(currentValue)) {
       points.push({ ts: now, value: currentValue });
@@ -1823,6 +1827,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
   }
 
   private drawTrendCanvases(): void {
+    const drawStartedAt = this.perfNow();
     const areaCanvases = this.collectTrendCanvases(".node-trend-canvas-area");
     const lineCanvases = this.collectTrendCanvases(".node-trend-canvas-line");
     const areaContexts = new Map<NodeKey, { ctx: CanvasRenderingContext2D; width: number; height: number }>();
@@ -1856,6 +1861,8 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     const sharedRange = this._config?.shared_trend_scale === true
       ? this.computeTrendValueRange(trendSeriesByNode)
       : null;
+    let drawnSeries = 0;
+    let drawnPointCount = 0;
 
     (Object.keys(this._trendDrawConfig) as NodeKey[]).forEach((node) => {
       const drawConfig = this._trendDrawConfig[node];
@@ -1890,6 +1897,15 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
         drawConfig.thresholdColor
       );
       this.drawTrendLine(line.ctx, linePoints, drawConfig.color, drawConfig.threshold, drawConfig.thresholdColor);
+      drawnSeries += 1;
+      drawnPointCount += linePoints.length;
+    });
+
+    this.logPerformance("draw-complete", {
+      duration_ms: this.toPerfMs(this.perfNow() - drawStartedAt),
+      series: drawnSeries,
+      points: drawnPointCount,
+      shared_scale: this._config?.shared_trend_scale === true
     });
   }
 
@@ -2173,6 +2189,14 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
   }
 
   protected updated(changedProps: Map<string, unknown>): void {
+    const previousConfig = changedProps.get("_config") as PowerPilzEnergyCardConfig | undefined;
+    const shouldRefreshOnConfigChange =
+      changedProps.has("_config")
+      && this.shouldRefreshTrendOnConfigChange(previousConfig, this._config);
+    const previousHass = changedProps.get("hass") as HomeAssistant | undefined;
+    const relevantHassChanged = changedProps.has("hass")
+      && this.didRelevantEntityStateChange(previousHass);
+
     if (changedProps.has("preview") || changedProps.has("editMode")) {
       if (this.shouldRunLiveRuntime()) {
         this.setupVisibilityObserver();
@@ -2190,8 +2214,10 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
 
     if (this.shouldRunLiveRuntime()) {
       if (changedProps.has("_config")) {
-        this.scheduleConfigRefresh();
-      } else if (changedProps.has("hass") && this._isVisible) {
+        if (shouldRefreshOnConfigChange) {
+          this.scheduleConfigRefresh();
+        }
+      } else if (changedProps.has("hass") && this._isVisible && relevantHassChanged) {
         this.maybeRefreshTrendHistory();
       }
       if (this._isVisible) {
@@ -2201,8 +2227,10 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       }
     } else {
       if (changedProps.has("_config")) {
-        this.scheduleConfigRefresh(true);
-      } else if (changedProps.has("hass")) {
+        if (shouldRefreshOnConfigChange) {
+          this.scheduleConfigRefresh(true);
+        }
+      } else if (changedProps.has("hass") && relevantHassChanged) {
         this.maybeRefreshTrendHistory(false, true);
       }
       if (this._trendResizeObserver) {
@@ -2210,8 +2238,17 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       }
     }
 
-    this.updateSubBlockVisibility();
-    if (!this.shouldRunLiveRuntime() || this._isVisible) {
+    const shouldRecomputeLayoutOrTrend =
+      changedProps.has("_config")
+      || changedProps.has("_trendSeries")
+      || changedProps.has("_showSubBlocks")
+      || changedProps.has("preview")
+      || changedProps.has("editMode")
+      || relevantHassChanged;
+    if (shouldRecomputeLayoutOrTrend) {
+      this.updateSubBlockVisibility();
+    }
+    if ((!this.shouldRunLiveRuntime() || this._isVisible) && shouldRecomputeLayoutOrTrend) {
       this.scheduleSubNodeConnectorDraw();
       this.scheduleTrendCanvasDraw();
     }
@@ -2245,6 +2282,27 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
 
   private shouldRunLiveRuntime(): boolean {
     return !this.isEditorPreview();
+  }
+
+  private perfNow(): number {
+    return typeof performance !== "undefined" && typeof performance.now === "function"
+      ? performance.now()
+      : Date.now();
+  }
+
+  private toPerfMs(value: number): number {
+    return Math.round(value * 10) / 10;
+  }
+
+  private logPerformance(event: string, detail?: Record<string, unknown>): void {
+    if (this._config?.debug_performance !== true) {
+      return;
+    }
+    if (detail) {
+      console.debug("[PowerPilz][Energy]", event, detail);
+      return;
+    }
+    console.debug("[PowerPilz][Energy]", event);
   }
 
   private setupVisibilityObserver(): void {
@@ -2378,6 +2436,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
 
     this._trendRefreshInFlight = true;
     try {
+      const refreshStartedAt = this.perfNow();
       const next: Partial<Record<NodeKey, TrendPoint[]>> = {};
       const nodeToEntity = new Map<NodeKey, string>();
       const nodeToComputedHomeDependencies = new Map<NodeKey, HomeComputationDependency[]>();
@@ -2439,16 +2498,28 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
         incrementalStartMs = Math.min(incrementalStartMs, sinceMs);
       }
 
+      let fullFetchMs = 0;
       const fullByEntity = fullEntityIds.size > 0
-        ? await fetchHistoryTrendPointsBatch(this.hass, Array.from(fullEntityIds), TREND_WINDOW_MS)
+        ? await (async () => {
+            const fetchStartedAt = this.perfNow();
+            const fetched = await fetchHistoryTrendPointsBatch(this.hass, Array.from(fullEntityIds), TREND_WINDOW_MS);
+            fullFetchMs = this.perfNow() - fetchStartedAt;
+            return fetched;
+          })()
         : {};
+      let incrementalFetchMs = 0;
       const incrementalByEntity = incrementalEntityIds.size > 0
-        ? await fetchHistoryTrendPointsBatch(
-            this.hass,
-            Array.from(incrementalEntityIds),
-            TREND_WINDOW_MS,
-            { startMs: Number.isFinite(incrementalStartMs) ? incrementalStartMs : cutoffMs }
-          )
+        ? await (async () => {
+            const fetchStartedAt = this.perfNow();
+            const fetched = await fetchHistoryTrendPointsBatch(
+              this.hass,
+              Array.from(incrementalEntityIds),
+              TREND_WINDOW_MS,
+              { startMs: Number.isFinite(incrementalStartMs) ? incrementalStartMs : cutoffMs }
+            );
+            incrementalFetchMs = this.perfNow() - fetchStartedAt;
+            return fetched;
+          })()
         : {};
 
       nodeToEntity.forEach((entityId, node) => {
@@ -2499,6 +2570,17 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       if (!same) {
         this._trendSeries = next;
       }
+
+      this.logPerformance("trend-refresh", {
+        duration_ms: this.toPerfMs(this.perfNow() - refreshStartedAt),
+        force_full: forceFull,
+        nodes: enabledNodes.length,
+        full_entities: fullEntityIds.size,
+        incremental_entities: incrementalEntityIds.size,
+        full_fetch_ms: this.toPerfMs(fullFetchMs),
+        incremental_fetch_ms: this.toPerfMs(incrementalFetchMs),
+        series_changed: !same
+      });
     } finally {
       this._trendRefreshInFlight = false;
     }
@@ -2544,6 +2626,98 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       default:
         return undefined;
     }
+  }
+
+  private relevantEntityIds(config: PowerPilzEnergyCardConfig): string[] {
+    const ids = new Set<string>();
+    const addEntity = (value: unknown): void => {
+      const entityId = this.readConfigString(value);
+      if (entityId) {
+        ids.add(entityId);
+      }
+    };
+
+    addEntity(config.home_entity);
+    addEntity(config.solar_entity);
+    addEntity(config.grid_entity);
+    addEntity(config.grid_secondary_entity);
+    addEntity(config.battery_entity);
+    addEntity(config.battery_percentage_entity);
+    addEntity(config.battery_secondary_entity);
+    addEntity(config.battery_secondary_percentage_entity);
+
+    if (config.solar_sub_enabled) {
+      addEntity(config.solar_sub_entity);
+    }
+    if (config.home_sub_enabled) {
+      addEntity(config.home_sub_entity);
+    }
+
+    const addNodeSubEntities = (
+      node: "solar" | "home" | "grid" | "grid_secondary",
+      slotCount: number
+    ): void => {
+      for (let index = 1; index <= slotCount; index += 1) {
+        const enabled = config[`${node}_sub_${index}_enabled`] === true;
+        if (!enabled) {
+          continue;
+        }
+        addEntity(config[`${node}_sub_${index}_entity`]);
+      }
+    };
+
+    addNodeSubEntities("solar", SOLAR_SUB_BLOCK_SLOT_COUNT);
+    addNodeSubEntities("home", HOME_SUB_BLOCK_SLOT_COUNT);
+    addNodeSubEntities("grid", GRID_SUB_BLOCK_SLOT_COUNT);
+    addNodeSubEntities("grid_secondary", GRID_SUB_BLOCK_SLOT_COUNT);
+
+    return Array.from(ids);
+  }
+
+  private didRelevantEntityStateChange(previousHass: HomeAssistant | undefined): boolean {
+    if (!this._config || !this.hass || !previousHass) {
+      return true;
+    }
+
+    const entityIds = this.relevantEntityIds(this._config);
+    if (entityIds.length === 0) {
+      return false;
+    }
+
+    return entityIds.some((entityId) => previousHass.states[entityId] !== this.hass.states[entityId]);
+  }
+
+  private trendHistorySignature(config: PowerPilzEnergyCardConfig | undefined): string {
+    if (!config) {
+      return "";
+    }
+
+    const entries: string[] = [];
+    this.enabledTrendNodes(config).forEach((node) => {
+      if (node === "home" && config.home_auto_calculate === true) {
+        const dependencySignature = this.homeComputationDependencies(config)
+          .map((dependency) => `${dependency.role}:${dependency.entityId}`)
+          .sort()
+          .join(",");
+        entries.push(`home:auto:${dependencySignature}`);
+        return;
+      }
+
+      entries.push(`${node}:${this.trendEntityId(node, config) ?? ""}`);
+    });
+
+    return entries.sort().join("|");
+  }
+
+  private shouldRefreshTrendOnConfigChange(
+    previousConfig: PowerPilzEnergyCardConfig | undefined,
+    nextConfig: PowerPilzEnergyCardConfig | undefined
+  ): boolean {
+    if (!previousConfig || !nextConfig) {
+      return true;
+    }
+
+    return this.trendHistorySignature(previousConfig) !== this.trendHistorySignature(nextConfig);
   }
 
   private computeAutoHomeTrendFromFetchedDependencies(
