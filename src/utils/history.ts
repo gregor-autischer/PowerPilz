@@ -13,8 +13,24 @@ const HISTORY_CACHE_TTL_MS = 30_000;
 const MAX_HISTORY_POINTS_PER_SERIES = 1_440;
 const FULL_WINDOW_START_BUCKET_MS = 10_000;
 const INCREMENTAL_START_BUCKET_MS = 2_000;
+const FULL_WINDOW_COALESCE_DELAY_MS = 40;
 const entityHistoryCache = new Map<string, { expiresAt: number; points: HistoryTrendPoint[] }>();
 const batchInflight = new Map<string, Promise<Record<string, HistoryTrendPoint[]>>>();
+type HistoryCallApi = NonNullable<HomeAssistant["callApi"]>;
+
+interface CoalescedFullWindowWaiter {
+  entityIds: string[];
+  resolve: (value: Record<string, HistoryTrendPoint[]>) => void;
+  reject: (reason?: unknown) => void;
+}
+
+interface CoalescedFullWindowBucket {
+  entityIds: Set<string>;
+  waiters: CoalescedFullWindowWaiter[];
+  flushTimer?: ReturnType<typeof setTimeout>;
+}
+
+const coalescedFullWindowBuckets = new WeakMap<HistoryCallApi, Map<string, CoalescedFullWindowBucket>>();
 
 const downsampleHistoryTrendPoints = (
   points: HistoryTrendPoint[],
@@ -245,13 +261,134 @@ const cacheKeyForEntityWindow = (entityId: string, windowMs: number): string =>
 const clonePoints = (points: HistoryTrendPoint[]): HistoryTrendPoint[] =>
   points.map((point) => ({ ts: point.ts, value: point.value }));
 
+const getCoalescedBucketMap = (callApi: HistoryCallApi): Map<string, CoalescedFullWindowBucket> => {
+  const existing = coalescedFullWindowBuckets.get(callApi);
+  if (existing) {
+    return existing;
+  }
+
+  const created = new Map<string, CoalescedFullWindowBucket>();
+  coalescedFullWindowBuckets.set(callApi, created);
+  return created;
+};
+
+const fetchHistoryBatchFromApi = async (
+  callApi: HistoryCallApi,
+  entityIds: string[],
+  windowMs: number,
+  startMs: number,
+  now: number,
+  useCache: boolean
+): Promise<Record<string, HistoryTrendPoint[]>> => {
+  const startIso = new Date(startMs).toISOString();
+  const filter = entityIds.join(",");
+  const path =
+    `history/period/${startIso}?filter_entity_id=${encodeURIComponent(filter)}`
+    + "&minimal_response&no_attributes";
+
+  let raw: unknown;
+  try {
+    raw = await callApi("GET", path);
+  } catch {
+    const failed: Record<string, HistoryTrendPoint[]> = {};
+    entityIds.forEach((entityId) => {
+      failed[entityId] = [];
+    });
+    return failed;
+  }
+
+  const seriesList = Array.isArray(raw) ? raw : [];
+  const byEntity: Record<string, HistoryTrendPoint[]> = {};
+
+  seriesList.forEach((seriesRaw, index) => {
+    const parsed = parseHistoryEntitySeries(seriesRaw, windowMs, now);
+    const fallbackEntityId = entityIds[index];
+    const entityId = parsed.entityId ?? fallbackEntityId;
+    if (!entityId) {
+      return;
+    }
+    byEntity[entityId] = parsed.points;
+  });
+
+  entityIds.forEach((entityId) => {
+    if (!(entityId in byEntity)) {
+      byEntity[entityId] = [];
+    }
+    if (useCache) {
+      entityHistoryCache.set(cacheKeyForEntityWindow(entityId, windowMs), {
+        expiresAt: now + HISTORY_CACHE_TTL_MS,
+        points: clonePoints(byEntity[entityId])
+      });
+    }
+  });
+
+  return byEntity;
+};
+
+const queueCoalescedFullWindowFetch = (
+  callApi: HistoryCallApi,
+  key: string,
+  entityIds: string[],
+  windowMs: number,
+  startMs: number
+): Promise<Record<string, HistoryTrendPoint[]>> => {
+  const bucketMap = getCoalescedBucketMap(callApi);
+  let bucket = bucketMap.get(key);
+  if (!bucket) {
+    bucket = {
+      entityIds: new Set<string>(),
+      waiters: []
+    };
+    bucketMap.set(key, bucket);
+  }
+
+  entityIds.forEach((entityId) => bucket?.entityIds.add(entityId));
+
+  return new Promise((resolve, reject) => {
+    bucket?.waiters.push({ entityIds: [...entityIds], resolve, reject });
+
+    if (bucket?.flushTimer !== undefined) {
+      return;
+    }
+
+    bucket!.flushTimer = setTimeout(async () => {
+      const activeBucket = bucketMap.get(key);
+      if (!activeBucket) {
+        return;
+      }
+      bucketMap.delete(key);
+
+      const mergedEntityIds = Array.from(activeBucket.entityIds);
+      try {
+        const fetched = await fetchHistoryBatchFromApi(
+          callApi,
+          mergedEntityIds,
+          windowMs,
+          startMs,
+          Date.now(),
+          true
+        );
+        activeBucket.waiters.forEach((waiter) => {
+          const subset: Record<string, HistoryTrendPoint[]> = {};
+          waiter.entityIds.forEach((entityId) => {
+            subset[entityId] = clonePoints(fetched[entityId] ?? []);
+          });
+          waiter.resolve(subset);
+        });
+      } catch (error) {
+        activeBucket.waiters.forEach((waiter) => waiter.reject(error));
+      }
+    }, FULL_WINDOW_COALESCE_DELAY_MS);
+  });
+};
+
 export const fetchHistoryTrendPointsBatch = async (
   hass: Pick<HomeAssistant, "callApi">,
   entityIds: string[],
   windowMs: number,
   options?: HistoryFetchBatchOptions
 ): Promise<Record<string, HistoryTrendPoint[]>> => {
-  const callApi = hass.callApi;
+  const callApi = hass.callApi as HistoryCallApi | undefined;
   const uniqueEntityIds = Array.from(new Set(entityIds.filter((entityId) => entityId.length > 0)));
   if (!callApi || uniqueEntityIds.length === 0) {
     return {};
@@ -282,6 +419,21 @@ export const fetchHistoryTrendPointsBatch = async (
     return result;
   }
 
+  if (useCache) {
+    const coalescedKey = `${normalizedStartMs}|${windowMs}`;
+    const fetched = await queueCoalescedFullWindowFetch(
+      callApi,
+      coalescedKey,
+      missingEntityIds,
+      windowMs,
+      normalizedStartMs
+    );
+    missingEntityIds.forEach((entityId) => {
+      result[entityId] = clonePoints(fetched[entityId] ?? []);
+    });
+    return result;
+  }
+
   const sortedForKey = [...missingEntityIds].sort();
   const inflightKey = `${normalizedStartMs}|${windowMs}|${sortedForKey.join(",")}`;
   const existingInflight = batchInflight.get(inflightKey);
@@ -294,49 +446,14 @@ export const fetchHistoryTrendPointsBatch = async (
   }
 
   const task = (async (): Promise<Record<string, HistoryTrendPoint[]>> => {
-    const startIso = new Date(normalizedStartMs).toISOString();
-    const filter = missingEntityIds.join(",");
-    const path =
-      `history/period/${startIso}?filter_entity_id=${encodeURIComponent(filter)}`
-      + "&minimal_response&no_attributes";
-
-    let raw: unknown;
-    try {
-      raw = await callApi("GET", path);
-    } catch {
-      const failed: Record<string, HistoryTrendPoint[]> = {};
-      missingEntityIds.forEach((entityId) => {
-        failed[entityId] = [];
-      });
-      return failed;
-    }
-
-    const seriesList = Array.isArray(raw) ? raw : [];
-    const byEntity: Record<string, HistoryTrendPoint[]> = {};
-
-    seriesList.forEach((seriesRaw, index) => {
-      const parsed = parseHistoryEntitySeries(seriesRaw, windowMs, now);
-      const fallbackEntityId = missingEntityIds[index];
-      const entityId = parsed.entityId ?? fallbackEntityId;
-      if (!entityId) {
-        return;
-      }
-      byEntity[entityId] = parsed.points;
-    });
-
-    missingEntityIds.forEach((entityId) => {
-      if (!(entityId in byEntity)) {
-        byEntity[entityId] = [];
-      }
-      if (useCache) {
-        entityHistoryCache.set(cacheKeyForEntityWindow(entityId, windowMs), {
-          expiresAt: now + HISTORY_CACHE_TTL_MS,
-          points: clonePoints(byEntity[entityId])
-        });
-      }
-    });
-
-    return byEntity;
+    return fetchHistoryBatchFromApi(
+      callApi,
+      missingEntityIds,
+      windowMs,
+      normalizedStartMs,
+      now,
+      useCache
+    );
   })();
 
   batchInflight.set(inflightKey, task);
