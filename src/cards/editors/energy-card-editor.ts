@@ -127,6 +127,36 @@ const subBlockSchemas = (
   }))
 });
 
+const nodeStyleSection = (
+  title: string,
+  icon: string,
+  schema: HaFormSchema[]
+): HaFormSchema => ({
+  type: "expandable",
+  name: "",
+  title,
+  icon,
+  expanded: false,
+  schema: [
+    {
+      type: "grid",
+      name: "",
+      schema
+    }
+  ]
+});
+
+const TREND_SOURCE_SELECTOR = {
+  select: {
+    mode: "dropdown",
+    options: [
+      { label: "Hybrid (auto fallback)", value: "hybrid" },
+      { label: "Statistics (fastest)", value: "statistics" },
+      { label: "History (raw)", value: "history" }
+    ]
+  }
+} as const;
+
 const SCHEMA: HaFormSchema[] = [
   { name: "name", selector: { text: {} } },
   {
@@ -177,163 +207,110 @@ const SCHEMA: HaFormSchema[] = [
       { name: "battery_secondary_percentage_entity", selector: { entity: { filter: { domain: "sensor" } } } }
     ]
   },
-  {
-    type: "expandable",
-    name: "",
-    title: "Node styling",
-    icon: "mdi:shape-outline",
-    expanded: false,
-    schema: [
-      {
-        type: "grid",
-        name: "",
-        schema: [
-          { name: "solar_label", selector: { text: {} } },
-          { name: "solar_icon", selector: { icon: {} }, context: { icon_entity: "solar_entity" } },
-          {
-            name: "solar_icon_color",
-            selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
-          },
-          { name: "solar_trend", selector: { boolean: {} } },
-          {
-            name: "solar_trend_color",
-            selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
-          }
-        ]
-      },
-      {
-        type: "grid",
-        name: "",
-        schema: [
-          { name: "grid_label", selector: { text: {} } },
-          { name: "grid_icon", selector: { icon: {} }, context: { icon_entity: "grid_entity" } },
-          {
-            name: "grid_icon_color",
-            selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
-          },
-          { name: "grid_trend", selector: { boolean: {} } },
-          {
-            name: "grid_trend_color",
-            selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
-          }
-        ]
-      },
-      {
-        type: "grid",
-        name: "",
-        schema: [
-          { name: "grid_secondary_label", selector: { text: {} } },
-          { name: "grid_secondary_icon", selector: { icon: {} }, context: { icon_entity: "grid_secondary_entity" } },
-          {
-            name: "grid_secondary_icon_color",
-            selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
-          },
-          { name: "grid_secondary_trend", selector: { boolean: {} } },
-          {
-            name: "grid_secondary_trend_color",
-            selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
-          }
-        ]
-      },
-      {
-        type: "grid",
-        name: "",
-        schema: [
-          { name: "home_label", selector: { text: {} } },
-          { name: "home_icon", selector: { icon: {} }, context: { icon_entity: "home_entity" } },
-          {
-            name: "home_icon_color",
-            selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
-          },
-          { name: "home_trend", selector: { boolean: {} } },
-          {
-            name: "home_trend_color",
-            selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
-          }
-        ]
-      },
-      {
-        type: "grid",
-        name: "",
-        schema: [
-          { name: "battery_label", selector: { text: {} } },
-          { name: "battery_icon", selector: { icon: {} }, context: { icon_entity: "battery_entity" } },
-          {
-            name: "battery_icon_color",
-            selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
-          },
-          { name: "battery_trend", selector: { boolean: {} } },
-          {
-            name: "battery_trend_color",
-            selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
-          },
-          { name: "battery_low_alert", selector: { boolean: {} } },
-          {
-            name: "battery_low_threshold",
-            selector: { number: { mode: "box", min: 0, max: 100, step: 1, unit_of_measurement: "%" } }
-          }
-        ]
-      },
-      {
-        type: "grid",
-        name: "",
-        schema: [
-          { name: "battery_secondary_label", selector: { text: {} } },
-          { name: "battery_secondary_icon", selector: { icon: {} }, context: { icon_entity: "battery_secondary_entity" } },
-          {
-            name: "battery_secondary_icon_color",
-            selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
-          },
-          { name: "battery_secondary_trend", selector: { boolean: {} } },
-          {
-            name: "battery_secondary_trend_color",
-            selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
-          },
-          { name: "battery_secondary_low_alert", selector: { boolean: {} } },
-          {
-            name: "battery_secondary_low_threshold",
-            selector: { number: { mode: "box", min: 0, max: 100, step: 1, unit_of_measurement: "%" } }
-          }
-        ]
-      },
-      {
-        type: "grid",
-        name: "",
-        schema: [
-          { name: "core_icon", selector: { icon: {} }, context: { icon_entity: "home_entity" } },
-          {
-            name: "core_icon_color",
-            selector: { ui_color: { include_state: true, include_none: true, default_color: "none" } }
-          },
-          {
-            name: "flow_color",
-            selector: { ui_color: { include_state: true, include_none: true, default_color: "none" } }
-          }
-        ]
-      },
-      {
-        type: "grid",
-        name: "",
-        schema: [
-          { name: "shared_trend_scale", selector: { boolean: {} } },
-          {
-            name: "trend_data_source",
-            selector: {
-              select: {
-                mode: "dropdown",
-                options: [
-                  { label: "Hybrid (auto fallback)", value: "hybrid" },
-                  { label: "Statistics (fastest)", value: "statistics" },
-                  { label: "History (raw)", value: "history" }
-                ]
-              }
-            }
-          },
-          { name: "debug_performance", selector: { boolean: {} } }
-        ]
-      }
-    ]
-  },
+  nodeStyleSection("Solar node", "mdi:weather-sunny", [
+    { name: "solar_label", selector: { text: {} } },
+    { name: "solar_icon", selector: { icon: {} }, context: { icon_entity: "solar_entity" } },
+    {
+      name: "solar_icon_color",
+      selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+    },
+    { name: "solar_trend", selector: { boolean: {} } },
+    {
+      name: "solar_trend_color",
+      selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
+    }
+  ]),
+  nodeStyleSection("Grid node", "mdi:transmission-tower", [
+    { name: "grid_label", selector: { text: {} } },
+    { name: "grid_icon", selector: { icon: {} }, context: { icon_entity: "grid_entity" } },
+    {
+      name: "grid_icon_color",
+      selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+    },
+    { name: "grid_trend", selector: { boolean: {} } },
+    {
+      name: "grid_trend_color",
+      selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
+    }
+  ]),
+  nodeStyleSection("Grid 2 node", "mdi:transmission-tower", [
+    { name: "grid_secondary_label", selector: { text: {} } },
+    { name: "grid_secondary_icon", selector: { icon: {} }, context: { icon_entity: "grid_secondary_entity" } },
+    {
+      name: "grid_secondary_icon_color",
+      selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+    },
+    { name: "grid_secondary_trend", selector: { boolean: {} } },
+    {
+      name: "grid_secondary_trend_color",
+      selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
+    }
+  ]),
+  nodeStyleSection("Home node", "mdi:home-lightning-bolt", [
+    { name: "home_label", selector: { text: {} } },
+    { name: "home_icon", selector: { icon: {} }, context: { icon_entity: "home_entity" } },
+    {
+      name: "home_icon_color",
+      selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+    },
+    { name: "home_trend", selector: { boolean: {} } },
+    {
+      name: "home_trend_color",
+      selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
+    }
+  ]),
+  nodeStyleSection("Battery node", "mdi:battery", [
+    { name: "battery_label", selector: { text: {} } },
+    { name: "battery_icon", selector: { icon: {} }, context: { icon_entity: "battery_entity" } },
+    {
+      name: "battery_icon_color",
+      selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+    },
+    { name: "battery_trend", selector: { boolean: {} } },
+    {
+      name: "battery_trend_color",
+      selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
+    },
+    { name: "battery_low_alert", selector: { boolean: {} } },
+    {
+      name: "battery_low_threshold",
+      selector: { number: { mode: "box", min: 0, max: 100, step: 1, unit_of_measurement: "%" } }
+    }
+  ]),
+  nodeStyleSection("Battery 2 node", "mdi:battery-outline", [
+    { name: "battery_secondary_label", selector: { text: {} } },
+    { name: "battery_secondary_icon", selector: { icon: {} }, context: { icon_entity: "battery_secondary_entity" } },
+    {
+      name: "battery_secondary_icon_color",
+      selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+    },
+    { name: "battery_secondary_trend", selector: { boolean: {} } },
+    {
+      name: "battery_secondary_trend_color",
+      selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
+    },
+    { name: "battery_secondary_low_alert", selector: { boolean: {} } },
+    {
+      name: "battery_secondary_low_threshold",
+      selector: { number: { mode: "box", min: 0, max: 100, step: 1, unit_of_measurement: "%" } }
+    }
+  ]),
+  nodeStyleSection("Card visuals", "mdi:palette-outline", [
+    { name: "core_icon", selector: { icon: {} }, context: { icon_entity: "home_entity" } },
+    {
+      name: "core_icon_color",
+      selector: { ui_color: { include_state: true, include_none: true, default_color: "none" } }
+    },
+    {
+      name: "flow_color",
+      selector: { ui_color: { include_state: true, include_none: true, default_color: "none" } }
+    }
+  ]),
+  nodeStyleSection("Trend settings", "mdi:chart-line", [
+    { name: "shared_trend_scale", selector: { boolean: {} } },
+    { name: "trend_data_source", selector: TREND_SOURCE_SELECTOR },
+    { name: "debug_performance", selector: { boolean: {} } }
+  ]),
   subBlockSchemas("solar", "Solar sub blocks", "mdi:solar-power-variant", SOLAR_SUB_BLOCK_COUNT),
   subBlockSchemas("grid", "Grid 1 sub blocks", "mdi:transmission-tower", GRID_SUB_BLOCK_COUNT),
   subBlockSchemas("grid_secondary", "Grid 2 sub blocks", "mdi:transmission-tower", GRID_SUB_BLOCK_COUNT),
