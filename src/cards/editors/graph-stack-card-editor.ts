@@ -116,7 +116,7 @@ export class PowerPilzGraphStackCardEditor extends LitElement implements Lovelac
 
   private computeLabel = (schema: { name?: string }): string => {
     return computeGraphEditorLabel(schema, {
-      normalize_stack_to_percent: "Normalize stack to 100%"
+      normalize_stack_to_percent: "Normalize to 100%"
     });
   };
 

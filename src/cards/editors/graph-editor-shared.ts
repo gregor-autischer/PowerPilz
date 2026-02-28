@@ -22,16 +22,16 @@ export const TREND_DEFAULTS: Record<number, string> = {
 };
 
 const BASE_LABELS: Record<string, string> = {
-  legend_layout: "Label layout",
-  timeframe_hours: "Time range",
-  hover_enabled: "Enable hover",
-  fill_area_enabled: "Enable area fill",
-  shared_trend_scale: "Shared trend scale",
-  trend_data_source: "Trend data source",
-  debug_performance: "Enable debug performance logs",
-  clip_graph_to_labels: "Clip graph below labels",
-  line_thickness: "Line thickness",
-  unit: "Unit override",
+  legend_layout: "Layout",
+  timeframe_hours: "Range",
+  hover_enabled: "Hover",
+  fill_area_enabled: "Area fill",
+  shared_trend_scale: "Shared scale",
+  trend_data_source: "Trend source (auto)",
+  debug_performance: "Debug logs",
+  clip_graph_to_labels: "Clip below labels",
+  line_thickness: "Line width",
+  unit: "Unit",
   decimals: "Decimals"
 };
 
@@ -137,9 +137,9 @@ export const createGraphSchema = (includeNormalizeStackToPercent = false): HaFor
             select: {
               mode: "dropdown",
               options: [
-                { label: "Hybrid (stats + history)", value: "hybrid" },
-                { label: "Statistics only", value: "statistics" },
-                { label: "History only", value: "history" }
+                { label: "Hybrid (auto fallback)", value: "hybrid" },
+                { label: "Statistics (fastest)", value: "statistics" },
+                { label: "History (raw)", value: "history" }
               ]
             }
           }
@@ -236,7 +236,7 @@ export const computeGraphEditorLabel = (
 
   const match = name.match(/^entity_(\d+)_(enabled|name|show_icon|icon|icon_color|trend_color)$/);
   if (match) {
-    const [, index, field] = match;
+    const [, , field] = match;
     const fieldLabel: Record<string, string> = {
       enabled: "Enabled",
       name: "Name",
@@ -245,12 +245,12 @@ export const computeGraphEditorLabel = (
       icon_color: "Icon color",
       trend_color: "Graph color"
     };
-    return `Entity ${index} ${fieldLabel[field] ?? field}`;
+    return fieldLabel[field] ?? field;
   }
 
   const entityMatch = name.match(/^entity_(\d+)$/);
   if (entityMatch) {
-    return `Entity ${entityMatch[1]}`;
+    return "Sensor";
   }
 
   return extraLabels[name] ?? BASE_LABELS[name] ?? name;

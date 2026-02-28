@@ -1276,7 +1276,7 @@ const Rr = "important", oi = " !" + Rr, M = ii(class extends si {
     });
   }
   return t.push(e[e.length - 1]), t;
-}, Ce = "0.1.16";
+}, Ce = "0.1.17";
 var Ci = Object.defineProperty, $i = Object.getOwnPropertyDescriptor, xt = (e, t, r, n) => {
   for (var i = n > 1 ? void 0 : n ? $i(t, r) : t, s = e.length - 1, o; s >= 0; s--)
     (o = e[s]) && (i = (n ? o(t, r, i) : o(i)) || i);
@@ -1513,9 +1513,9 @@ const Ti = 4, Ei = 8, dr = 2, Mi = (e, t) => {
               select: {
                 mode: "dropdown",
                 options: [
-                  { label: "Hybrid (stats + history)", value: "hybrid" },
-                  { label: "Statistics only", value: "statistics" },
-                  { label: "History only", value: "history" }
+                  { label: "Hybrid (auto fallback)", value: "hybrid" },
+                  { label: "Statistics (fastest)", value: "statistics" },
+                  { label: "History (raw)", value: "history" }
                 ]
               }
             }
@@ -1539,72 +1539,72 @@ const Ti = 4, Ei = 8, dr = 2, Mi = (e, t) => {
   }
 ], zi = {
   name: "Name",
-  home_visible: "Show home node",
-  solar_visible: "Show solar node",
-  grid_visible: "Show grid node",
-  grid_secondary_visible: "Show second grid node",
-  battery_visible: "Show battery node",
-  battery_secondary_visible: "Show second battery node",
-  battery_dual_alignment: "Dual battery alignment",
-  home_auto_calculate: "Auto-calculate home value",
-  home_entity: "Home entity",
-  solar_entity: "Solar entity",
-  grid_entity: "Grid entity",
-  grid_secondary_entity: "Second grid entity",
-  battery_entity: "Battery entity",
-  battery_percentage_entity: "Battery percentage entity",
-  battery_secondary_entity: "Second battery entity",
-  battery_secondary_percentage_entity: "Second battery percentage entity",
-  solar_sub_enabled: "Enable solar sub block",
-  solar_sub_entity: "Solar sub entity",
-  solar_sub_label: "Solar sub label",
+  home_visible: "Show home",
+  solar_visible: "Show solar",
+  grid_visible: "Show grid",
+  grid_secondary_visible: "Show grid 2",
+  battery_visible: "Show battery",
+  battery_secondary_visible: "Show battery 2",
+  battery_dual_alignment: "Battery 2 alignment",
+  home_auto_calculate: "Auto-calc home",
+  home_entity: "Home sensor",
+  solar_entity: "Solar sensor",
+  grid_entity: "Grid sensor",
+  grid_secondary_entity: "Grid 2 sensor",
+  battery_entity: "Battery sensor",
+  battery_percentage_entity: "Battery SoC sensor",
+  battery_secondary_entity: "Battery 2 sensor",
+  battery_secondary_percentage_entity: "Battery 2 SoC sensor",
+  solar_sub_enabled: "Enable solar sub",
+  solar_sub_entity: "Solar sub sensor",
+  solar_sub_label: "Solar sub name",
   solar_sub_icon: "Solar sub icon",
   solar_sub_icon_color: "Solar sub color",
-  home_sub_enabled: "Enable home sub block",
-  home_sub_entity: "Home sub entity",
-  home_sub_label: "Home sub label",
+  home_sub_enabled: "Enable home sub",
+  home_sub_entity: "Home sub sensor",
+  home_sub_label: "Home sub name",
   home_sub_icon: "Home sub icon",
   home_sub_icon_color: "Home sub color",
-  solar_label: "Solar label",
-  home_label: "Home label",
-  grid_label: "Grid label",
-  grid_secondary_label: "Second grid label",
-  battery_label: "Battery label",
-  battery_secondary_label: "Second battery label",
+  solar_label: "Solar name",
+  home_label: "Home name",
+  grid_label: "Grid name",
+  grid_secondary_label: "Grid 2 name",
+  battery_label: "Battery name",
+  battery_secondary_label: "Battery 2 name",
   solar_icon: "Solar icon",
-  solar_icon_color: "Solar color",
+  solar_icon_color: "Solar icon color",
   solar_trend: "Solar trend",
   solar_trend_color: "Solar trend color",
   grid_icon: "Grid icon",
-  grid_icon_color: "Grid color",
-  grid_secondary_icon: "Second grid icon",
-  grid_secondary_icon_color: "Second grid color",
-  grid_secondary_trend: "Second grid trend",
-  grid_secondary_trend_color: "Second grid trend color",
+  grid_icon_color: "Grid icon color",
+  grid_secondary_icon: "Grid 2 icon",
+  grid_secondary_icon_color: "Grid 2 icon color",
+  grid_secondary_trend: "Grid 2 trend",
+  grid_secondary_trend_color: "Grid 2 trend color",
   grid_trend: "Grid trend",
   grid_trend_color: "Grid trend color",
   home_icon: "Home icon",
-  home_icon_color: "Home color",
+  home_icon_color: "Home icon color",
   home_trend: "Home trend",
   home_trend_color: "Home trend color",
   battery_icon: "Battery icon",
-  battery_icon_color: "Battery color",
+  battery_icon_color: "Battery icon color",
   battery_trend: "Battery trend",
   battery_trend_color: "Battery trend color",
-  battery_secondary_icon: "Second battery icon",
-  battery_secondary_icon_color: "Second battery color",
-  battery_secondary_trend: "Second battery trend",
-  battery_secondary_trend_color: "Second battery trend color",
-  shared_trend_scale: "Shared scale for all node trends",
-  trend_data_source: "Trend data source",
-  debug_performance: "Enable debug performance logs",
+  battery_secondary_icon: "Battery 2 icon",
+  battery_secondary_icon_color: "Battery 2 icon color",
+  battery_secondary_trend: "Battery 2 trend",
+  battery_secondary_trend_color: "Battery 2 trend color",
+  shared_trend_scale: "Shared trend scale",
+  trend_data_source: "Trend source (auto)",
+  debug_performance: "Debug logs",
   battery_low_alert: "Low battery alert",
-  battery_low_threshold: "Low battery threshold",
-  battery_secondary_low_alert: "Second low battery alert",
-  battery_secondary_low_threshold: "Second low battery threshold",
+  battery_low_threshold: "Low battery %",
+  battery_secondary_low_alert: "Battery 2 low alert",
+  battery_secondary_low_threshold: "Battery 2 low %",
   core_icon: "Core icon",
-  core_icon_color: "Core color",
-  flow_color: "Flow color",
+  core_icon_color: "Core icon color",
+  flow_color: "Flow line color",
   unit: "Unit",
   decimals: "Decimals"
 };
@@ -1613,14 +1613,14 @@ let Le = class extends U {
     super(...arguments), this.computeLabel = (e) => {
       const t = e.name ?? "", r = t.match(/^(solar|home|grid|grid_secondary)_sub_(\d+)_(enabled|entity|label|icon|icon_color)$/);
       if (r) {
-        const [, n, i, s] = r;
-        return `${n === "solar" ? "Solar" : n === "home" ? "Home" : n === "grid" ? "Grid 1" : "Grid 2"} block ${i} ${{
+        const [, , , n] = r;
+        return {
           enabled: "Enabled",
           entity: "Entity",
           label: "Label",
           icon: "Icon",
           icon_color: "Color"
-        }[s] ?? s}`;
+        }[n] ?? n;
       }
       return zi[t] ?? t;
     }, this.valueChanged = (e) => {
@@ -3765,16 +3765,16 @@ const G = (e) => {
   3: "amber",
   4: "green"
 }, Di = {
-  legend_layout: "Label layout",
-  timeframe_hours: "Time range",
-  hover_enabled: "Enable hover",
-  fill_area_enabled: "Enable area fill",
-  shared_trend_scale: "Shared trend scale",
-  trend_data_source: "Trend data source",
-  debug_performance: "Enable debug performance logs",
-  clip_graph_to_labels: "Clip graph below labels",
-  line_thickness: "Line thickness",
-  unit: "Unit override",
+  legend_layout: "Layout",
+  timeframe_hours: "Range",
+  hover_enabled: "Hover",
+  fill_area_enabled: "Area fill",
+  shared_trend_scale: "Shared scale",
+  trend_data_source: "Trend source (auto)",
+  debug_performance: "Debug logs",
+  clip_graph_to_labels: "Clip below labels",
+  line_thickness: "Line width",
+  unit: "Unit",
   decimals: "Decimals"
 }, Vi = (e) => ({
   type: "expandable",
@@ -3852,9 +3852,9 @@ const G = (e) => {
             select: {
               mode: "dropdown",
               options: [
-                { label: "Hybrid (stats + history)", value: "hybrid" },
-                { label: "Statistics only", value: "statistics" },
-                { label: "History only", value: "history" }
+                { label: "Hybrid (auto fallback)", value: "hybrid" },
+                { label: "Statistics (fastest)", value: "statistics" },
+                { label: "History (raw)", value: "history" }
               ]
             }
           }
@@ -3912,18 +3912,17 @@ const G = (e) => {
 }), tn = (e, t = {}) => {
   const r = e.name ?? "", n = r.match(/^entity_(\d+)_(enabled|name|show_icon|icon|icon_color|trend_color)$/);
   if (n) {
-    const [, s, o] = n;
-    return `Entity ${s} ${{
+    const [, , s] = n;
+    return {
       enabled: "Enabled",
       name: "Name",
       show_icon: "Show icon",
       icon: "Icon",
       icon_color: "Icon color",
       trend_color: "Graph color"
-    }[o] ?? o}`;
+    }[s] ?? s;
   }
-  const i = r.match(/^entity_(\d+)$/);
-  return i ? `Entity ${i[1]}` : t[r] ?? Di[r] ?? r;
+  return r.match(/^entity_(\d+)$/) ? "Sensor" : t[r] ?? Di[r] ?? r;
 };
 var Fi = Object.defineProperty, Ui = Object.getOwnPropertyDescriptor, Tt = (e, t, r, n) => {
   for (var i = n > 1 ? void 0 : n ? Ui(t, r) : t, s = e.length - 1, o; s >= 0; s--)
@@ -4925,7 +4924,7 @@ const Zi = Yr(!0);
 let He = class extends U {
   constructor() {
     super(...arguments), this.computeLabel = (e) => tn(e, {
-      normalize_stack_to_percent: "Normalize stack to 100%"
+      normalize_stack_to_percent: "Normalize to 100%"
     }), this.valueChanged = (e) => {
       const t = e.target;
       if (!(t instanceof HTMLElement) || t.tagName !== "HA-FORM")
