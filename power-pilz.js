@@ -1276,7 +1276,7 @@ const zr = "important", ai = " !" + zr, M = si(class extends oi {
     });
   }
   return t.push(e[e.length - 1]), t;
-}, $e = "0.1.18";
+}, $e = "0.1.19";
 var $i = Object.defineProperty, Ti = Object.getOwnPropertyDescriptor, Ct = (e, t, r, n) => {
   for (var i = n > 1 ? void 0 : n ? Ti(t, r) : t, s = e.length - 1, o; s >= 0; s--)
     (o = e[s]) && (i = (n ? o(t, r, i) : o(i)) || i);
@@ -1342,55 +1342,9 @@ const Ei = 4, Mi = 8, hr = 2, Ri = (e, t) => {
   }
 }, Ai = [
   { name: "name", selector: { text: {} } },
-  {
-    type: "grid",
-    name: "",
-    schema: [
-      { name: "home_visible", selector: { boolean: {} } },
-      { name: "solar_visible", selector: { boolean: {} } },
-      { name: "grid_visible", selector: { boolean: {} } },
-      { name: "grid_secondary_visible", selector: { boolean: {} } },
-      { name: "battery_visible", selector: { boolean: {} } },
-      { name: "battery_secondary_visible", selector: { boolean: {} } }
-    ]
-  },
-  {
-    name: "battery_dual_alignment",
-    selector: {
-      select: {
-        mode: "dropdown",
-        options: ["center", "left", "right"]
-      }
-    }
-  },
-  {
-    type: "grid",
-    name: "",
-    schema: [
-      { name: "home_auto_calculate", selector: { boolean: {} } },
-      { name: "home_entity", selector: { entity: { filter: { domain: "sensor" } } } },
-      { name: "solar_entity", selector: { entity: { filter: { domain: "sensor" } } } }
-    ]
-  },
-  {
-    type: "grid",
-    name: "",
-    schema: [
-      { name: "grid_entity", selector: { entity: { filter: { domain: "sensor" } } } },
-      { name: "grid_secondary_entity", selector: { entity: { filter: { domain: "sensor" } } } },
-      { name: "battery_entity", selector: { entity: { filter: { domain: "sensor" } } } },
-      { name: "battery_secondary_entity", selector: { entity: { filter: { domain: "sensor" } } } }
-    ]
-  },
-  {
-    type: "grid",
-    name: "",
-    schema: [
-      { name: "battery_percentage_entity", selector: { entity: { filter: { domain: "sensor" } } } },
-      { name: "battery_secondary_percentage_entity", selector: { entity: { filter: { domain: "sensor" } } } }
-    ]
-  },
   Y("Solar node", "mdi:weather-sunny", [
+    { name: "solar_visible", selector: { boolean: {} } },
+    { name: "solar_entity", selector: { entity: { filter: { domain: "sensor" } } } },
     { name: "solar_label", selector: { text: {} } },
     { name: "solar_icon", selector: { icon: {} }, context: { icon_entity: "solar_entity" } },
     {
@@ -1404,6 +1358,8 @@ const Ei = 4, Mi = 8, hr = 2, Ri = (e, t) => {
     }
   ]),
   Y("Grid node", "mdi:transmission-tower", [
+    { name: "grid_visible", selector: { boolean: {} } },
+    { name: "grid_entity", selector: { entity: { filter: { domain: "sensor" } } } },
     { name: "grid_label", selector: { text: {} } },
     { name: "grid_icon", selector: { icon: {} }, context: { icon_entity: "grid_entity" } },
     {
@@ -1417,6 +1373,8 @@ const Ei = 4, Mi = 8, hr = 2, Ri = (e, t) => {
     }
   ]),
   Y("Grid 2 node", "mdi:transmission-tower", [
+    { name: "grid_secondary_visible", selector: { boolean: {} } },
+    { name: "grid_secondary_entity", selector: { entity: { filter: { domain: "sensor" } } } },
     { name: "grid_secondary_label", selector: { text: {} } },
     { name: "grid_secondary_icon", selector: { icon: {} }, context: { icon_entity: "grid_secondary_entity" } },
     {
@@ -1430,6 +1388,9 @@ const Ei = 4, Mi = 8, hr = 2, Ri = (e, t) => {
     }
   ]),
   Y("Home node", "mdi:home-lightning-bolt", [
+    { name: "home_visible", selector: { boolean: {} } },
+    { name: "home_entity", selector: { entity: { filter: { domain: "sensor" } } } },
+    { name: "home_auto_calculate", selector: { boolean: {} } },
     { name: "home_label", selector: { text: {} } },
     { name: "home_icon", selector: { icon: {} }, context: { icon_entity: "home_entity" } },
     {
@@ -1443,6 +1404,9 @@ const Ei = 4, Mi = 8, hr = 2, Ri = (e, t) => {
     }
   ]),
   Y("Battery node", "mdi:battery", [
+    { name: "battery_visible", selector: { boolean: {} } },
+    { name: "battery_entity", selector: { entity: { filter: { domain: "sensor" } } } },
+    { name: "battery_percentage_entity", selector: { entity: { filter: { domain: "sensor" } } } },
     { name: "battery_label", selector: { text: {} } },
     { name: "battery_icon", selector: { icon: {} }, context: { icon_entity: "battery_entity" } },
     {
@@ -1461,6 +1425,18 @@ const Ei = 4, Mi = 8, hr = 2, Ri = (e, t) => {
     }
   ]),
   Y("Battery 2 node", "mdi:battery-outline", [
+    { name: "battery_secondary_visible", selector: { boolean: {} } },
+    { name: "battery_secondary_entity", selector: { entity: { filter: { domain: "sensor" } } } },
+    { name: "battery_secondary_percentage_entity", selector: { entity: { filter: { domain: "sensor" } } } },
+    {
+      name: "battery_dual_alignment",
+      selector: {
+        select: {
+          mode: "dropdown",
+          options: ["center", "left", "right"]
+        }
+      }
+    },
     { name: "battery_secondary_label", selector: { text: {} } },
     { name: "battery_secondary_icon", selector: { icon: {} }, context: { icon_entity: "battery_secondary_entity" } },
     {
