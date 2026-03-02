@@ -42,6 +42,8 @@ const HOME_SUB_BLOCK_SLOT_COUNT = 8;
 const GRID_SUB_BLOCK_SLOT_COUNT = 2;
 const SUB_BLOCKS_COMPACT_MAX_WIDTH = 260;
 const SUB_BLOCKS_COMPACT_MAX_HEIGHT = 220;
+const GRID_EXPORT_THRESHOLD = -0.000001;
+const DEFAULT_ALERT_COLOR = "red";
 const DEFAULT_NEUTRAL_RGB = "var(--rgb-primary-text-color, 33, 33, 33)";
 const EDITOR_PREVIEW_SELECTOR = [
   "hui-card-preview",
@@ -194,6 +196,14 @@ interface PowerPilzEnergyCardConfig extends LovelaceCardConfig {
   home_trend_color?: string | number[];
   battery_trend_color?: string | number[];
   battery_secondary_trend_color?: string | number[];
+  grid_export_highlight?: boolean;
+  grid_export_trend_color?: string | number[];
+  grid_export_icon_highlight?: boolean;
+  grid_export_icon_color?: string | number[];
+  grid_secondary_export_highlight?: boolean;
+  grid_secondary_export_trend_color?: string | number[];
+  grid_secondary_export_icon_highlight?: boolean;
+  grid_secondary_export_icon_color?: string | number[];
   shared_trend_scale?: boolean;
   debug_performance?: boolean;
   trend_data_source?: TrendDataSource | "auto";
@@ -202,8 +212,10 @@ interface PowerPilzEnergyCardConfig extends LovelaceCardConfig {
   decimals_prefixed_unit?: number;
   battery_low_alert?: boolean;
   battery_low_threshold?: number;
+  battery_low_alert_color?: string | number[];
   battery_secondary_low_alert?: boolean;
   battery_secondary_low_threshold?: number;
+  battery_secondary_low_alert_color?: string | number[];
   flow_color?: string | number[];
   unit?: string;
   decimals?: number;
@@ -355,6 +367,14 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       home_trend: config.home_trend ?? false,
       battery_trend: config.battery_trend ?? false,
       battery_secondary_trend: config.battery_secondary_trend ?? false,
+      grid_export_highlight: config.grid_export_highlight ?? false,
+      grid_export_trend_color: config.grid_export_trend_color ?? DEFAULT_ALERT_COLOR,
+      grid_export_icon_highlight: config.grid_export_icon_highlight ?? false,
+      grid_export_icon_color: config.grid_export_icon_color ?? DEFAULT_ALERT_COLOR,
+      grid_secondary_export_highlight: config.grid_secondary_export_highlight ?? false,
+      grid_secondary_export_trend_color: config.grid_secondary_export_trend_color ?? DEFAULT_ALERT_COLOR,
+      grid_secondary_export_icon_highlight: config.grid_secondary_export_icon_highlight ?? false,
+      grid_secondary_export_icon_color: config.grid_secondary_export_icon_color ?? DEFAULT_ALERT_COLOR,
       shared_trend_scale: config.shared_trend_scale ?? false,
       debug_performance: config.debug_performance ?? false,
       trend_data_source: normalizeTrendDataSource(config.trend_data_source, "hybrid"),
@@ -363,8 +383,10 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       decimals_prefixed_unit: decimalsPrefixedUnit,
       battery_low_alert: config.battery_low_alert ?? false,
       battery_low_threshold: this.normalizeBatteryThreshold(config.battery_low_threshold),
+      battery_low_alert_color: config.battery_low_alert_color ?? DEFAULT_ALERT_COLOR,
       battery_secondary_low_alert: config.battery_secondary_low_alert ?? false,
       battery_secondary_low_threshold: this.normalizeBatteryThreshold(config.battery_secondary_low_threshold),
+      battery_secondary_low_alert_color: config.battery_secondary_low_alert_color ?? DEFAULT_ALERT_COLOR,
       flow_color: config.flow_color,
       decimals
     };
@@ -490,8 +512,6 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     const interactive = !this.isEditorPreview() && tapAction.action !== "none";
 
     const solarIconStyle = this.iconColorStyle(config.solar_icon_color);
-    const gridIconStyle = this.iconColorStyle(config.grid_icon_color);
-    const gridSecondaryIconStyle = this.iconColorStyle(config.grid_secondary_icon_color);
     const homeIconStyle = this.iconColorStyle(config.home_icon_color);
     const coreIconStyle = this.iconShapeStyle(config.core_icon_color);
     const homeSubIndexes = new Set(homeSubBlocks.map((entry) => entry.index));
@@ -591,20 +611,44 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     const batteryLowAlertEnabled = Boolean(config.battery_low_alert);
     const batterySecondaryLowThreshold = this.normalizeBatteryThreshold(config.battery_secondary_low_threshold);
     const batterySecondaryLowAlertEnabled = Boolean(config.battery_secondary_low_alert);
+    const defaultAlertColor = this.resolveColor(DEFAULT_ALERT_COLOR);
+    const batteryLowAlertColor = this.resolveColor(config.battery_low_alert_color, defaultAlertColor);
+    const batterySecondaryLowAlertColor = this.resolveColor(
+      config.battery_secondary_low_alert_color,
+      defaultAlertColor
+    );
     const batteryIsLow = batteryLowAlertEnabled && batteryPercentage !== null && batteryPercentage <= batteryLowThreshold;
-    const batteryIconStyle = this.iconColorStyle(batteryIsLow ? "red" : config.battery_icon_color);
+    const batteryIconStyle = this.iconColorStyle(
+      batteryIsLow
+        ? batteryLowAlertColor
+        : config.battery_icon_color
+    );
     const batteryIcon = this.batteryIcon(batteryPercentage, battery, config.battery_icon);
     const batterySecondaryIsLow =
       batterySecondaryLowAlertEnabled
       && batterySecondaryPercentage !== null
       && batterySecondaryPercentage <= batterySecondaryLowThreshold;
     const batterySecondaryIconStyle = this.iconColorStyle(
-      batterySecondaryIsLow ? "red" : config.battery_secondary_icon_color
+      batterySecondaryIsLow
+        ? batterySecondaryLowAlertColor
+        : config.battery_secondary_icon_color
     );
     const batterySecondaryIcon = this.batteryIcon(
       batterySecondaryPercentage,
       batterySecondary,
       config.battery_secondary_icon
+    );
+    const gridExportsToGrid = grid !== null && Number.isFinite(grid) && grid < 0;
+    const gridSecondaryExportsToGrid = gridSecondary !== null && Number.isFinite(gridSecondary) && gridSecondary < 0;
+    const gridIconStyle = this.iconColorStyle(
+      config.grid_export_icon_highlight === true && gridExportsToGrid
+        ? config.grid_export_icon_color
+        : config.grid_icon_color
+    );
+    const gridSecondaryIconStyle = this.iconColorStyle(
+      config.grid_secondary_export_icon_highlight === true && gridSecondaryExportsToGrid
+        ? config.grid_secondary_export_icon_color
+        : config.grid_secondary_icon_color
     );
 
     const flowRgb = this.toRgbCss(config.flow_color) ?? DEFAULT_NEUTRAL_RGB;
@@ -614,10 +658,18 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     const solarTrendColor = this.resolveColor(config.solar_trend_color, defaultTrendColor);
     const gridTrendColor = this.resolveColor(config.grid_trend_color, defaultTrendColor);
     const gridSecondaryTrendColor = this.resolveColor(config.grid_secondary_trend_color, defaultTrendColor);
+    const gridExportTrendColor = this.resolveColor(config.grid_export_trend_color, defaultAlertColor);
+    const gridSecondaryExportTrendColor = this.resolveColor(
+      config.grid_secondary_export_trend_color,
+      defaultAlertColor
+    );
     const homeTrendColor = this.resolveColor(config.home_trend_color, defaultTrendColor);
     const batteryTrendColor = this.resolveColor(config.battery_trend_color, defaultTrendColor);
     const batterySecondaryTrendColor = this.resolveColor(config.battery_secondary_trend_color, defaultTrendColor);
-    const batteryTrendAlertColor = this.resolveColor("red");
+    const gridTrendThreshold = config.grid_export_highlight === true ? GRID_EXPORT_THRESHOLD : null;
+    const gridSecondaryTrendThreshold = config.grid_secondary_export_highlight === true
+      ? GRID_EXPORT_THRESHOLD
+      : null;
     const batteryTrendThreshold = batteryLowAlertEnabled
       && (Boolean(config.battery_percentage_entity) || batteryPercentage !== null)
       ? batteryLowThreshold
@@ -708,7 +760,15 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
                     class="energy-value grid ${grid === null ? "missing" : ""}"
                     style=${styleMap(this.gridPlacementStyle(gridPlacement))}
                   >
-                    ${this.renderTrend("grid", grid, gridUnit, Boolean(config.grid_trend), gridTrendColor, null, "")}
+                    ${this.renderTrend(
+                      "grid",
+                      grid,
+                      gridUnit,
+                      Boolean(config.grid_trend),
+                      gridTrendColor,
+                      gridTrendThreshold,
+                      gridExportTrendColor
+                    )}
                     <div class="energy-content">
                       <ha-icon
                         class="energy-icon"
@@ -734,8 +794,8 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
                       gridSecondaryUnit,
                       Boolean(config.grid_secondary_trend),
                       gridSecondaryTrendColor,
-                      null,
-                      ""
+                      gridSecondaryTrendThreshold,
+                      gridSecondaryExportTrendColor
                     )}
                     <div class="energy-content">
                       <ha-icon
@@ -796,14 +856,17 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
                       Boolean(config.battery_trend),
                       batteryTrendColor,
                       batteryTrendThreshold,
-                      batteryTrendAlertColor
+                      batteryLowAlertColor
                     )}
                     <div class="energy-content">
                       <div class="battery-top-row">
                         <ha-icon class="energy-icon" .icon=${batteryIcon} style=${styleMap(batteryIconStyle)}></ha-icon>
                         ${batteryPercentage !== null
                           ? html`
-                              <div class="battery-percentage ${batteryIsLow ? "alert" : ""}">
+                              <div
+                                class="battery-percentage ${batteryIsLow ? "alert" : ""}"
+                                style=${styleMap(batteryIsLow ? { color: batteryLowAlertColor } : {})}
+                              >
                                 ${this.formatBatteryPercentage(batteryPercentage)}
                               </div>
                             `
@@ -829,7 +892,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
                       Boolean(config.battery_secondary_trend),
                       batterySecondaryTrendColor,
                       batterySecondaryTrendThreshold,
-                      batteryTrendAlertColor
+                      batterySecondaryLowAlertColor
                     )}
                     <div class="energy-content">
                       <div class="battery-top-row">
@@ -840,7 +903,10 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
                         ></ha-icon>
                         ${batterySecondaryPercentage !== null
                           ? html`
-                              <div class="battery-percentage ${batterySecondaryIsLow ? "alert" : ""}">
+                              <div
+                                class="battery-percentage ${batterySecondaryIsLow ? "alert" : ""}"
+                                style=${styleMap(batterySecondaryIsLow ? { color: batterySecondaryLowAlertColor } : {})}
+                              >
                                 ${this.formatBatteryPercentage(batterySecondaryPercentage)}
                               </div>
                             `

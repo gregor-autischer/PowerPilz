@@ -36,12 +36,22 @@ All options are available in the Lovelace editor, but you can also use YAML.
 | `*_icon_color` | string \| rgb array | `state`/theme | Node icon color |
 | `*_trend` | boolean | `false` | Enable trend graph per node |
 | `*_trend_color` | string \| rgb array | `purple` | Trend line color per node |
+| `grid_export_highlight` | boolean | `false` | Highlight negative grid values (export to grid) in the grid trend with an export color |
+| `grid_export_trend_color` | string \| rgb array | `red` | Export highlight color for grid trend segments |
+| `grid_export_icon_highlight` | boolean | `false` | Change grid icon color while exporting to grid (negative grid value) |
+| `grid_export_icon_color` | string \| rgb array | `red` | Grid icon color while exporting |
+| `grid_secondary_export_highlight` | boolean | `false` | Highlight negative grid 2 values (export to grid) in the grid 2 trend with an export color |
+| `grid_secondary_export_trend_color` | string \| rgb array | `red` | Export highlight color for grid 2 trend segments |
+| `grid_secondary_export_icon_highlight` | boolean | `false` | Change grid 2 icon color while exporting to grid (negative grid 2 value) |
+| `grid_secondary_export_icon_color` | string \| rgb array | `red` | Grid 2 icon color while exporting |
 | `trend_data_source` | `hybrid` \| `statistics` \| `history` | `hybrid` | Trend backend (`hybrid` prefers HA statistics and falls back to history) |
 | `debug_performance` | boolean | `false` | Log trend fetch + draw timing to browser console (YAML only) |
-| `battery_low_alert` | boolean | `false` | Color battery icon/trend red under threshold |
+| `battery_low_alert` | boolean | `false` | Enable low-threshold battery alert styling |
 | `battery_low_threshold` | number | `20` | Battery low threshold in `%` |
+| `battery_low_alert_color` | string \| rgb array | `red` | Color used for battery low-threshold icon + trend alert styling |
 | `battery_secondary_low_alert` | boolean | `false` | Low alert for second battery |
 | `battery_secondary_low_threshold` | number | `20` | Threshold for second battery in `%` |
+| `battery_secondary_low_alert_color` | string \| rgb array | `red` | Color used for battery 2 low-threshold icon + trend alert styling |
 | `flow_color` | string \| rgb array | theme neutral | Flow line color |
 | `unit` | string | entity unit | Unit override for displayed values |
 | `decimals` | number | `1` | Number precision |

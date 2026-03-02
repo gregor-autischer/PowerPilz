@@ -66,6 +66,14 @@ interface EnergyCardConfig extends LovelaceCardConfig {
   home_trend_color?: string | number[];
   battery_trend_color?: string | number[];
   battery_secondary_trend_color?: string | number[];
+  grid_export_highlight?: boolean;
+  grid_export_trend_color?: string | number[];
+  grid_export_icon_highlight?: boolean;
+  grid_export_icon_color?: string | number[];
+  grid_secondary_export_highlight?: boolean;
+  grid_secondary_export_trend_color?: string | number[];
+  grid_secondary_export_icon_highlight?: boolean;
+  grid_secondary_export_icon_color?: string | number[];
   shared_trend_scale?: boolean;
   trend_data_source?: TrendDataSource | "auto";
   debug_performance?: boolean;
@@ -74,8 +82,10 @@ interface EnergyCardConfig extends LovelaceCardConfig {
   decimals_prefixed_unit?: number;
   battery_low_alert?: boolean;
   battery_low_threshold?: number;
+  battery_low_alert_color?: string | number[];
   battery_secondary_low_alert?: boolean;
   battery_secondary_low_threshold?: number;
+  battery_secondary_low_alert_color?: string | number[];
   flow_color?: string | number[];
   unit?: string;
   decimals?: number;
@@ -150,150 +160,81 @@ const nodeStyleSection = (
   ]
 });
 
+const nodeSubSection = (title: string, schema: HaFormSchema[]): HaFormSchema => ({
+  type: "expandable",
+  name: "",
+  title,
+  icon: "mdi:view-list-outline",
+  expanded: true,
+  schema: [
+    {
+      type: "grid",
+      name: "",
+      schema
+    }
+  ]
+});
+
 const TREND_SOURCE_SELECTOR = {
   select: {
     mode: "dropdown",
     options: [
-      { label: "Hybrid (auto fallback)", value: "hybrid" },
+      { label: "Auto (recommended)", value: "auto" },
       { label: "Statistics (fastest)", value: "statistics" },
       { label: "History (raw)", value: "history" }
     ]
   }
 } as const;
 
+const toEditorTrendDataSource = (value: unknown): TrendDataSource | "auto" => {
+  const normalized = normalizeTrendDataSource(value, "hybrid");
+  return normalized === "hybrid" ? "auto" : normalized;
+};
+
+const toConfigTrendDataSource = (value: unknown): TrendDataSource | "auto" => {
+  if (value === "auto" || value === "history" || value === "statistics" || value === "hybrid") {
+    return value;
+  }
+  return "auto";
+};
+
 const SOLAR_AUTO_CALC_HELP =
   "When enabled, the solar main node shows the sum of all enabled solar sub-node entities instead of the solar entity.";
 const HOME_AUTO_CALC_HELP =
   "When enabled, the home main node is calculated as solar + grid + grid 2 - battery - battery 2 using compatible unit conversion.";
+const GRID_EXPORT_HIGHLIGHT_HELP =
+  "When enabled, negative grid values (energy exported to the grid) are highlighted in the trend with the export color.";
+const GRID_EXPORT_ICON_HIGHLIGHT_HELP =
+  "When enabled, the grid icon switches to the export icon color while the grid value is negative.";
+const GRID_VISIBLE_HELP =
+  "When enabled, the main grid node is shown. When disabled, the grid node is hidden.";
+const GRID_SECONDARY_VISIBLE_HELP =
+  "When enabled, the second grid node is shown. When disabled, the second grid node is hidden.";
+const SOLAR_VISIBLE_HELP =
+  "When enabled, the main solar node is shown. When disabled, the solar node is hidden.";
+const HOME_VISIBLE_HELP =
+  "When enabled, the main home node is shown. When disabled, the home node is hidden.";
+const BATTERY_VISIBLE_HELP =
+  "When enabled, the main battery node is shown. When disabled, the battery node is hidden.";
+const BATTERY_SECONDARY_VISIBLE_HELP =
+  "When enabled, the second battery node is shown. When disabled, the second battery node is hidden.";
+const BATTERY_LOW_ALERT_COLOR_HELP =
+  "Color used for battery low-threshold alert styling (icon and low trend section).";
 const AUTO_SCALE_UNITS_HELP =
   "Automatically formats values with metric prefixes (for example W/kW/MW and Wh/kWh/MWh).";
+const UNIT_FIELD_HELP =
+  "Optional unit override/fallback. Used when entities have no unit and as preferred output unit for auto-calculated values.";
+const DECIMALS_DEFAULT_HELP =
+  "Default decimal precision for displayed values and fallback when base/prefixed decimals are not set.";
+const DECIMALS_BASE_HELP =
+  "Decimal precision for base units (W, Wh) when Auto unit scaling is enabled.";
+const DECIMALS_PREFIXED_HELP =
+  "Decimal precision for prefixed units (kW, MW, kWh, MWh) when Auto unit scaling is enabled.";
+const TREND_SOURCE_HELP =
+  "Controls where trend data is fetched from. In most setups, keep Auto (recommended), which prefers statistics and falls back to history automatically.";
 
 const SCHEMA: HaFormSchema[] = [
-  { name: "name", selector: { text: {} } },
-  nodeStyleSection("Solar node", "mdi:weather-sunny", [
-    { name: "solar_visible", selector: { boolean: {} } },
-    { name: "solar_entity", selector: { entity: { filter: { domain: "sensor" } } } },
-    {
-      name: "solar_auto_calculate",
-      selector: { boolean: {} },
-      helper: SOLAR_AUTO_CALC_HELP,
-      description: SOLAR_AUTO_CALC_HELP
-    },
-    { name: "solar_label", selector: { text: {} } },
-    { name: "solar_icon", selector: { icon: {} }, context: { icon_entity: "solar_entity" } },
-    {
-      name: "solar_icon_color",
-      selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
-    },
-    { name: "solar_trend", selector: { boolean: {} } },
-    {
-      name: "solar_trend_color",
-      selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
-    }
-  ]),
-  nodeStyleSection("Grid node", "mdi:transmission-tower", [
-    { name: "grid_visible", selector: { boolean: {} } },
-    { name: "grid_entity", selector: { entity: { filter: { domain: "sensor" } } } },
-    { name: "grid_label", selector: { text: {} } },
-    { name: "grid_icon", selector: { icon: {} }, context: { icon_entity: "grid_entity" } },
-    {
-      name: "grid_icon_color",
-      selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
-    },
-    { name: "grid_trend", selector: { boolean: {} } },
-    {
-      name: "grid_trend_color",
-      selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
-    }
-  ]),
-  nodeStyleSection("Grid 2 node", "mdi:transmission-tower", [
-    { name: "grid_secondary_visible", selector: { boolean: {} } },
-    { name: "grid_secondary_entity", selector: { entity: { filter: { domain: "sensor" } } } },
-    { name: "grid_secondary_label", selector: { text: {} } },
-    { name: "grid_secondary_icon", selector: { icon: {} }, context: { icon_entity: "grid_secondary_entity" } },
-    {
-      name: "grid_secondary_icon_color",
-      selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
-    },
-    { name: "grid_secondary_trend", selector: { boolean: {} } },
-    {
-      name: "grid_secondary_trend_color",
-      selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
-    }
-  ]),
-  nodeStyleSection("Home node", "mdi:home-lightning-bolt", [
-    { name: "home_visible", selector: { boolean: {} } },
-    { name: "home_entity", selector: { entity: { filter: { domain: "sensor" } } } },
-    {
-      name: "home_auto_calculate",
-      selector: { boolean: {} },
-      helper: HOME_AUTO_CALC_HELP,
-      description: HOME_AUTO_CALC_HELP
-    },
-    { name: "home_label", selector: { text: {} } },
-    { name: "home_icon", selector: { icon: {} }, context: { icon_entity: "home_entity" } },
-    {
-      name: "home_icon_color",
-      selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
-    },
-    { name: "home_trend", selector: { boolean: {} } },
-    {
-      name: "home_trend_color",
-      selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
-    }
-  ]),
-  nodeStyleSection("Battery node", "mdi:battery", [
-    { name: "battery_visible", selector: { boolean: {} } },
-    { name: "battery_entity", selector: { entity: { filter: { domain: "sensor" } } } },
-    { name: "battery_percentage_entity", selector: { entity: { filter: { domain: "sensor" } } } },
-    { name: "battery_label", selector: { text: {} } },
-    { name: "battery_icon", selector: { icon: {} }, context: { icon_entity: "battery_entity" } },
-    {
-      name: "battery_icon_color",
-      selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
-    },
-    { name: "battery_trend", selector: { boolean: {} } },
-    {
-      name: "battery_trend_color",
-      selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
-    },
-    { name: "battery_low_alert", selector: { boolean: {} } },
-    {
-      name: "battery_low_threshold",
-      selector: { number: { mode: "box", min: 0, max: 100, step: 1, unit_of_measurement: "%" } }
-    }
-  ]),
-  nodeStyleSection("Battery 2 node", "mdi:battery-outline", [
-    { name: "battery_secondary_visible", selector: { boolean: {} } },
-    { name: "battery_secondary_entity", selector: { entity: { filter: { domain: "sensor" } } } },
-    { name: "battery_secondary_percentage_entity", selector: { entity: { filter: { domain: "sensor" } } } },
-    {
-      name: "battery_dual_alignment",
-      selector: {
-        select: {
-          mode: "dropdown",
-          options: ["center", "left", "right"]
-        }
-      }
-    },
-    { name: "battery_secondary_label", selector: { text: {} } },
-    { name: "battery_secondary_icon", selector: { icon: {} }, context: { icon_entity: "battery_secondary_entity" } },
-    {
-      name: "battery_secondary_icon_color",
-      selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
-    },
-    { name: "battery_secondary_trend", selector: { boolean: {} } },
-    {
-      name: "battery_secondary_trend_color",
-      selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
-    },
-    { name: "battery_secondary_low_alert", selector: { boolean: {} } },
-    {
-      name: "battery_secondary_low_threshold",
-      selector: { number: { mode: "box", min: 0, max: 100, step: 1, unit_of_measurement: "%" } }
-    }
-  ]),
-  nodeStyleSection("Card visuals", "mdi:palette-outline", [
+  nodeStyleSection("Center visuals", "mdi:palette-outline", [
     { name: "core_icon", selector: { icon: {} }, context: { icon_entity: "home_entity" } },
     {
       name: "core_icon_color",
@@ -304,30 +245,613 @@ const SCHEMA: HaFormSchema[] = [
       selector: { ui_color: { include_state: true, include_none: true, default_color: "none" } }
     }
   ]),
-  nodeStyleSection("Trend settings", "mdi:chart-line", [
-    { name: "shared_trend_scale", selector: { boolean: {} } },
-    { name: "trend_data_source", selector: TREND_SOURCE_SELECTOR }
-  ]),
+  {
+    type: "expandable",
+    name: "",
+    title: "Units and Trend settings",
+    icon: "mdi:chart-line",
+    expanded: false,
+    schema: [
+      {
+        type: "grid",
+        name: "",
+        schema: [
+          { name: "shared_trend_scale", selector: { boolean: {} } }
+        ]
+      },
+      {
+        type: "expandable",
+        name: "",
+        title: "Auto scaling",
+        icon: "mdi:scale-balance",
+        expanded: true,
+        schema: [
+          {
+            type: "grid",
+            name: "",
+            schema: [
+              {
+                name: "auto_scale_units",
+                selector: { boolean: {} },
+                helper: AUTO_SCALE_UNITS_HELP,
+                description: AUTO_SCALE_UNITS_HELP
+              }
+            ]
+          },
+          {
+            type: "grid",
+            name: "",
+            columns: 2,
+            schema: [
+              {
+                name: "decimals_prefixed_unit",
+                selector: { number: { mode: "box", min: 0, max: 4, step: 1 } },
+                helper: DECIMALS_PREFIXED_HELP,
+                description: DECIMALS_PREFIXED_HELP
+              },
+              {
+                name: "decimals_base_unit",
+                selector: { number: { mode: "box", min: 0, max: 4, step: 1 } },
+                helper: DECIMALS_BASE_HELP,
+                description: DECIMALS_BASE_HELP
+              }
+            ]
+          }
+        ]
+      },
+      {
+        type: "expandable",
+        name: "",
+        title: "Display format",
+        icon: "mdi:format-list-numbered",
+        expanded: true,
+        schema: [
+          {
+            type: "grid",
+            name: "",
+            columns: 2,
+            schema: [
+              {
+                name: "unit",
+                selector: { text: {} },
+                helper: UNIT_FIELD_HELP,
+                description: UNIT_FIELD_HELP
+              },
+              {
+                name: "decimals",
+                selector: { number: { mode: "box", min: 0, max: 3, step: 1 } },
+                helper: DECIMALS_DEFAULT_HELP,
+                description: DECIMALS_DEFAULT_HELP
+              }
+            ]
+          }
+        ]
+      },
+      {
+        type: "expandable",
+        name: "",
+        title: "Trend source",
+        icon: "mdi:database-search",
+        expanded: true,
+        schema: [
+          {
+            type: "grid",
+            name: "",
+            schema: [
+              {
+                name: "trend_data_source",
+                selector: TREND_SOURCE_SELECTOR,
+                helper: TREND_SOURCE_HELP,
+                description: TREND_SOURCE_HELP
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    type: "expandable",
+    name: "",
+    title: "Solar node",
+    icon: "mdi:weather-sunny",
+    expanded: false,
+    schema: [
+      {
+        type: "grid",
+        name: "",
+        schema: [
+          {
+            name: "solar_visible",
+            selector: { boolean: {} },
+            helper: SOLAR_VISIBLE_HELP,
+            description: SOLAR_VISIBLE_HELP
+          }
+        ]
+      },
+      {
+        type: "expandable",
+        name: "",
+        title: "Identity",
+        icon: "mdi:view-list-outline",
+        expanded: true,
+        schema: [
+          {
+            type: "grid",
+            name: "",
+            columns: 2,
+            schema: [
+              { name: "solar_entity", selector: { entity: { filter: { domain: "sensor" } } } },
+              { name: "solar_label", selector: { text: {} } }
+            ]
+          },
+          {
+            type: "grid",
+            name: "",
+            columns: 2,
+            schema: [
+              { name: "solar_icon", selector: { icon: {} }, context: { icon_entity: "solar_entity" } },
+              {
+                name: "solar_icon_color",
+                selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+              }
+            ]
+          }
+        ]
+      },
+      nodeSubSection("Calculation", [
+        {
+          name: "solar_auto_calculate",
+          selector: { boolean: {} },
+          helper: SOLAR_AUTO_CALC_HELP,
+          description: SOLAR_AUTO_CALC_HELP
+        }
+      ]),
+      nodeSubSection("Trend", [
+        { name: "solar_trend", selector: { boolean: {} } },
+        {
+          name: "solar_trend_color",
+          selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
+        }
+      ])
+    ]
+  },
+  {
+    type: "expandable",
+    name: "",
+    title: "Grid node",
+    icon: "mdi:transmission-tower",
+    expanded: false,
+    schema: [
+      {
+        type: "grid",
+        name: "",
+        schema: [
+          {
+            name: "grid_visible",
+            selector: { boolean: {} },
+            helper: GRID_VISIBLE_HELP,
+            description: GRID_VISIBLE_HELP
+          }
+        ]
+      },
+      {
+        type: "expandable",
+        name: "",
+        title: "Identity",
+        icon: "mdi:view-list-outline",
+        expanded: true,
+        schema: [
+          {
+            type: "grid",
+            name: "",
+            columns: 2,
+            schema: [
+              { name: "grid_entity", selector: { entity: { filter: { domain: "sensor" } } } },
+              { name: "grid_label", selector: { text: {} } }
+            ]
+          },
+          {
+            type: "grid",
+            name: "",
+            columns: 2,
+            schema: [
+              { name: "grid_icon", selector: { icon: {} }, context: { icon_entity: "grid_entity" } },
+              {
+                name: "grid_icon_color",
+                selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+              }
+            ]
+          }
+        ]
+      },
+      nodeSubSection("Trend", [
+        { name: "grid_trend", selector: { boolean: {} } },
+        {
+          name: "grid_trend_color",
+          selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
+        }
+      ]),
+      nodeSubSection("Export", [
+        {
+          name: "grid_export_highlight",
+          selector: { boolean: {} },
+          helper: GRID_EXPORT_HIGHLIGHT_HELP,
+          description: GRID_EXPORT_HIGHLIGHT_HELP
+        },
+        {
+          name: "grid_export_trend_color",
+          selector: { ui_color: { include_state: false, include_none: false, default_color: "red" } }
+        },
+        {
+          name: "grid_export_icon_highlight",
+          selector: { boolean: {} },
+          helper: GRID_EXPORT_ICON_HIGHLIGHT_HELP,
+          description: GRID_EXPORT_ICON_HIGHLIGHT_HELP
+        },
+        {
+          name: "grid_export_icon_color",
+          selector: { ui_color: { include_state: false, include_none: false, default_color: "red" } }
+        }
+      ])
+    ]
+  },
+  {
+    type: "expandable",
+    name: "",
+    title: "Grid 2 node",
+    icon: "mdi:transmission-tower",
+    expanded: false,
+    schema: [
+      {
+        type: "grid",
+        name: "",
+        schema: [
+          {
+            name: "grid_secondary_visible",
+            selector: { boolean: {} },
+            helper: GRID_SECONDARY_VISIBLE_HELP,
+            description: GRID_SECONDARY_VISIBLE_HELP
+          }
+        ]
+      },
+      {
+        type: "expandable",
+        name: "",
+        title: "Identity",
+        icon: "mdi:view-list-outline",
+        expanded: true,
+        schema: [
+          {
+            type: "grid",
+            name: "",
+            columns: 2,
+            schema: [
+              { name: "grid_secondary_entity", selector: { entity: { filter: { domain: "sensor" } } } },
+              { name: "grid_secondary_label", selector: { text: {} } }
+            ]
+          },
+          {
+            type: "grid",
+            name: "",
+            columns: 2,
+            schema: [
+              { name: "grid_secondary_icon", selector: { icon: {} }, context: { icon_entity: "grid_secondary_entity" } },
+              {
+                name: "grid_secondary_icon_color",
+                selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+              }
+            ]
+          }
+        ]
+      },
+      nodeSubSection("Trend", [
+        { name: "grid_secondary_trend", selector: { boolean: {} } },
+        {
+          name: "grid_secondary_trend_color",
+          selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
+        }
+      ]),
+      nodeSubSection("Export", [
+        {
+          name: "grid_secondary_export_highlight",
+          selector: { boolean: {} },
+          helper: GRID_EXPORT_HIGHLIGHT_HELP,
+          description: GRID_EXPORT_HIGHLIGHT_HELP
+        },
+        {
+          name: "grid_secondary_export_trend_color",
+          selector: { ui_color: { include_state: false, include_none: false, default_color: "red" } }
+        },
+        {
+          name: "grid_secondary_export_icon_highlight",
+          selector: { boolean: {} },
+          helper: GRID_EXPORT_ICON_HIGHLIGHT_HELP,
+          description: GRID_EXPORT_ICON_HIGHLIGHT_HELP
+        },
+        {
+          name: "grid_secondary_export_icon_color",
+          selector: { ui_color: { include_state: false, include_none: false, default_color: "red" } }
+        }
+      ])
+    ]
+  },
+  {
+    type: "expandable",
+    name: "",
+    title: "Home node",
+    icon: "mdi:home-lightning-bolt",
+    expanded: false,
+    schema: [
+      {
+        type: "grid",
+        name: "",
+        schema: [
+          {
+            name: "home_visible",
+            selector: { boolean: {} },
+            helper: HOME_VISIBLE_HELP,
+            description: HOME_VISIBLE_HELP
+          }
+        ]
+      },
+      {
+        type: "expandable",
+        name: "",
+        title: "Identity",
+        icon: "mdi:view-list-outline",
+        expanded: true,
+        schema: [
+          {
+            type: "grid",
+            name: "",
+            columns: 2,
+            schema: [
+              { name: "home_entity", selector: { entity: { filter: { domain: "sensor" } } } },
+              { name: "home_label", selector: { text: {} } }
+            ]
+          },
+          {
+            type: "grid",
+            name: "",
+            columns: 2,
+            schema: [
+              { name: "home_icon", selector: { icon: {} }, context: { icon_entity: "home_entity" } },
+              {
+                name: "home_icon_color",
+                selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+              }
+            ]
+          }
+        ]
+      },
+      nodeSubSection("Calculation", [
+        {
+          name: "home_auto_calculate",
+          selector: { boolean: {} },
+          helper: HOME_AUTO_CALC_HELP,
+          description: HOME_AUTO_CALC_HELP
+        }
+      ]),
+      nodeSubSection("Trend", [
+        { name: "home_trend", selector: { boolean: {} } },
+        {
+          name: "home_trend_color",
+          selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
+        }
+      ])
+    ]
+  },
+  {
+    type: "expandable",
+    name: "",
+    title: "Battery node",
+    icon: "mdi:battery",
+    expanded: false,
+    schema: [
+      {
+        type: "grid",
+        name: "",
+        schema: [
+          {
+            name: "battery_visible",
+            selector: { boolean: {} },
+            helper: BATTERY_VISIBLE_HELP,
+            description: BATTERY_VISIBLE_HELP
+          }
+        ]
+      },
+      {
+        type: "expandable",
+        name: "",
+        title: "Identity",
+        icon: "mdi:view-list-outline",
+        expanded: true,
+        schema: [
+          {
+            type: "grid",
+            name: "",
+            columns: 2,
+            schema: [
+              { name: "battery_entity", selector: { entity: { filter: { domain: "sensor" } } } },
+              { name: "battery_percentage_entity", selector: { entity: { filter: { domain: "sensor" } } } }
+            ]
+          },
+          {
+            type: "grid",
+            name: "",
+            columns: 2,
+            schema: [
+              { name: "battery_label", selector: { text: {} } },
+              { name: "battery_icon", selector: { icon: {} }, context: { icon_entity: "battery_entity" } }
+            ]
+          },
+          {
+            type: "grid",
+            name: "",
+            schema: [
+              {
+                name: "battery_icon_color",
+                selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+              }
+            ]
+          }
+        ]
+      },
+      nodeSubSection("Trend", [
+        { name: "battery_trend", selector: { boolean: {} } },
+        {
+          name: "battery_trend_color",
+          selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
+        }
+      ]),
+      {
+        type: "expandable",
+        name: "",
+        title: "Alert",
+        icon: "mdi:alert-outline",
+        expanded: true,
+        schema: [
+          {
+            type: "grid",
+            name: "",
+            columns: 2,
+            schema: [
+              { name: "battery_low_alert", selector: { boolean: {} } },
+              {
+                name: "battery_low_threshold",
+                selector: { number: { mode: "box", min: 0, max: 100, step: 1, unit_of_measurement: "%" } }
+              }
+            ]
+          },
+          {
+            type: "grid",
+            name: "",
+            schema: [
+              {
+                name: "battery_low_alert_color",
+                selector: { ui_color: { include_state: false, include_none: false, default_color: "red" } },
+                helper: BATTERY_LOW_ALERT_COLOR_HELP,
+                description: BATTERY_LOW_ALERT_COLOR_HELP
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    type: "expandable",
+    name: "",
+    title: "Battery 2 node",
+    icon: "mdi:battery-outline",
+    expanded: false,
+    schema: [
+      {
+        type: "grid",
+        name: "",
+        schema: [
+          {
+            name: "battery_secondary_visible",
+            selector: { boolean: {} },
+            helper: BATTERY_SECONDARY_VISIBLE_HELP,
+            description: BATTERY_SECONDARY_VISIBLE_HELP
+          }
+        ]
+      },
+      {
+        type: "expandable",
+        name: "",
+        title: "Identity",
+        icon: "mdi:view-list-outline",
+        expanded: true,
+        schema: [
+          {
+            type: "grid",
+            name: "",
+            columns: 2,
+            schema: [
+              { name: "battery_secondary_entity", selector: { entity: { filter: { domain: "sensor" } } } },
+              { name: "battery_secondary_percentage_entity", selector: { entity: { filter: { domain: "sensor" } } } }
+            ]
+          },
+          {
+            type: "grid",
+            name: "",
+            columns: 2,
+            schema: [
+              { name: "battery_secondary_label", selector: { text: {} } },
+              { name: "battery_secondary_icon", selector: { icon: {} }, context: { icon_entity: "battery_secondary_entity" } }
+            ]
+          },
+          {
+            type: "grid",
+            name: "",
+            columns: 2,
+            schema: [
+              {
+                name: "battery_secondary_icon_color",
+                selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+              },
+              {
+                name: "battery_dual_alignment",
+                selector: {
+                  select: {
+                    mode: "dropdown",
+                    options: ["center", "left", "right"]
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      nodeSubSection("Trend", [
+        { name: "battery_secondary_trend", selector: { boolean: {} } },
+        {
+          name: "battery_secondary_trend_color",
+          selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
+        }
+      ]),
+      {
+        type: "expandable",
+        name: "",
+        title: "Alert",
+        icon: "mdi:alert-outline",
+        expanded: true,
+        schema: [
+          {
+            type: "grid",
+            name: "",
+            columns: 2,
+            schema: [
+              { name: "battery_secondary_low_alert", selector: { boolean: {} } },
+              {
+                name: "battery_secondary_low_threshold",
+                selector: { number: { mode: "box", min: 0, max: 100, step: 1, unit_of_measurement: "%" } }
+              }
+            ]
+          },
+          {
+            type: "grid",
+            name: "",
+            schema: [
+              {
+                name: "battery_secondary_low_alert_color",
+                selector: { ui_color: { include_state: false, include_none: false, default_color: "red" } },
+                helper: BATTERY_LOW_ALERT_COLOR_HELP,
+                description: BATTERY_LOW_ALERT_COLOR_HELP
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
   subBlockSchemas("solar", "Solar sub blocks", "mdi:solar-power-variant", SOLAR_SUB_BLOCK_COUNT),
   subBlockSchemas("grid", "Grid 1 sub blocks", "mdi:transmission-tower", GRID_SUB_BLOCK_COUNT),
   subBlockSchemas("grid_secondary", "Grid 2 sub blocks", "mdi:transmission-tower", GRID_SUB_BLOCK_COUNT),
-  subBlockSchemas("home", "Home sub blocks", "mdi:flash", HOME_SUB_BLOCK_COUNT),
-  {
-    type: "grid",
-    name: "",
-    schema: [
-      { name: "unit", selector: { text: {} } },
-      { name: "decimals", selector: { number: { mode: "box", min: 0, max: 3, step: 1 } } },
-      {
-        name: "auto_scale_units",
-        selector: { boolean: {} },
-        helper: AUTO_SCALE_UNITS_HELP,
-        description: AUTO_SCALE_UNITS_HELP
-      },
-      { name: "decimals_base_unit", selector: { number: { mode: "box", min: 0, max: 4, step: 1 } } },
-      { name: "decimals_prefixed_unit", selector: { number: { mode: "box", min: 0, max: 4, step: 1 } } }
-    ]
-  }
+  subBlockSchemas("home", "Home sub blocks", "mdi:flash", HOME_SUB_BLOCK_COUNT)
 ];
 
 const LABELS: Record<string, string> = {
@@ -377,6 +901,14 @@ const LABELS: Record<string, string> = {
   grid_secondary_trend_color: "Grid 2 trend color",
   grid_trend: "Grid trend",
   grid_trend_color: "Grid trend color",
+  grid_export_highlight: "Highlight export in trend",
+  grid_export_trend_color: "Export trend color",
+  grid_export_icon_highlight: "Highlight export icon",
+  grid_export_icon_color: "Export icon color",
+  grid_secondary_export_highlight: "Highlight export in trend",
+  grid_secondary_export_trend_color: "Export trend color",
+  grid_secondary_export_icon_highlight: "Highlight export icon",
+  grid_secondary_export_icon_color: "Export icon color",
   home_icon: "Home icon",
   home_icon_color: "Home icon color",
   home_trend: "Home trend",
@@ -390,11 +922,13 @@ const LABELS: Record<string, string> = {
   battery_secondary_trend: "Battery 2 trend",
   battery_secondary_trend_color: "Battery 2 trend color",
   shared_trend_scale: "Shared trend scale",
-  trend_data_source: "Trend source (auto: stats -> history)",
+  trend_data_source: "Trend source",
   battery_low_alert: "Low battery alert",
   battery_low_threshold: "Low battery %",
+  battery_low_alert_color: "Low alert color",
   battery_secondary_low_alert: "Battery 2 low alert",
   battery_secondary_low_threshold: "Battery 2 low %",
+  battery_secondary_low_alert_color: "Low alert color",
   core_icon: "Core icon",
   core_icon_color: "Core icon color",
   flow_color: "Flow line color",
@@ -425,8 +959,18 @@ export class PowerPilzEnergyCardEditor extends LitElement implements LovelaceCar
       battery_dual_alignment: config.battery_dual_alignment ?? "center",
       home_auto_calculate: config.home_auto_calculate ?? false,
       solar_auto_calculate: config.solar_auto_calculate ?? false,
+      grid_export_highlight: config.grid_export_highlight ?? false,
+      grid_export_trend_color: config.grid_export_trend_color ?? "red",
+      grid_export_icon_highlight: config.grid_export_icon_highlight ?? false,
+      grid_export_icon_color: config.grid_export_icon_color ?? "red",
+      grid_secondary_export_highlight: config.grid_secondary_export_highlight ?? false,
+      grid_secondary_export_trend_color: config.grid_secondary_export_trend_color ?? "red",
+      grid_secondary_export_icon_highlight: config.grid_secondary_export_icon_highlight ?? false,
+      grid_secondary_export_icon_color: config.grid_secondary_export_icon_color ?? "red",
+      battery_low_alert_color: config.battery_low_alert_color ?? "red",
+      battery_secondary_low_alert_color: config.battery_secondary_low_alert_color ?? "red",
       shared_trend_scale: config.shared_trend_scale ?? false,
-      trend_data_source: normalizeTrendDataSource(config.trend_data_source, "hybrid"),
+      trend_data_source: toEditorTrendDataSource(config.trend_data_source),
       debug_performance: config.debug_performance ?? false,
       decimals: config.decimals ?? 1,
       auto_scale_units: config.auto_scale_units ?? false,
@@ -444,6 +988,10 @@ export class PowerPilzEnergyCardEditor extends LitElement implements LovelaceCar
     return html`
       <div style="margin: 0 0 8px; color: var(--secondary-text-color); font-size: 12px;">
         PowerPilz v${POWER_PILZ_VERSION}
+      </div>
+      <div style="margin: 0 0 14px; color: var(--secondary-text-color); line-height: 1.4;">
+        Highly flexible energy flow card with configurable main nodes, trends, sub-nodes, auto calculations,
+        export highlighting, and advanced unit handling.
       </div>
       <ha-form
         .hass=${this.hass}
@@ -475,11 +1023,53 @@ export class PowerPilzEnergyCardEditor extends LitElement implements LovelaceCar
 
   private computeHelper = (schema: { name?: string }): string | undefined => {
     const name = schema.name ?? "";
+    if (name === "solar_visible") {
+      return SOLAR_VISIBLE_HELP;
+    }
+    if (name === "home_visible") {
+      return HOME_VISIBLE_HELP;
+    }
+    if (name === "battery_visible") {
+      return BATTERY_VISIBLE_HELP;
+    }
+    if (name === "battery_secondary_visible") {
+      return BATTERY_SECONDARY_VISIBLE_HELP;
+    }
     if (name === "solar_auto_calculate") {
       return SOLAR_AUTO_CALC_HELP;
     }
     if (name === "home_auto_calculate") {
       return HOME_AUTO_CALC_HELP;
+    }
+    if (name === "grid_visible") {
+      return GRID_VISIBLE_HELP;
+    }
+    if (name === "grid_secondary_visible") {
+      return GRID_SECONDARY_VISIBLE_HELP;
+    }
+    if (name === "grid_export_highlight" || name === "grid_secondary_export_highlight") {
+      return GRID_EXPORT_HIGHLIGHT_HELP;
+    }
+    if (name === "grid_export_icon_highlight" || name === "grid_secondary_export_icon_highlight") {
+      return GRID_EXPORT_ICON_HIGHLIGHT_HELP;
+    }
+    if (name === "battery_low_alert_color" || name === "battery_secondary_low_alert_color") {
+      return BATTERY_LOW_ALERT_COLOR_HELP;
+    }
+    if (name === "unit") {
+      return UNIT_FIELD_HELP;
+    }
+    if (name === "decimals") {
+      return DECIMALS_DEFAULT_HELP;
+    }
+    if (name === "decimals_base_unit") {
+      return DECIMALS_BASE_HELP;
+    }
+    if (name === "decimals_prefixed_unit") {
+      return DECIMALS_PREFIXED_HELP;
+    }
+    if (name === "trend_data_source") {
+      return TREND_SOURCE_HELP;
     }
     if (name === "auto_scale_units") {
       return AUTO_SCALE_UNITS_HELP;
@@ -498,6 +1088,7 @@ export class PowerPilzEnergyCardEditor extends LitElement implements LovelaceCar
     }
     const nextConfig: EnergyCardConfig = {
       ...(value as EnergyCardConfig),
+      trend_data_source: toConfigTrendDataSource((value as EnergyCardConfig).trend_data_source),
       type: "custom:power-pilz-energy-card"
     };
     this.dispatchEvent(
