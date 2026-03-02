@@ -40,11 +40,8 @@ const CONFIG_REFRESH_DEBOUNCE_MS = 350;
 const SOLAR_SUB_BLOCK_SLOT_COUNT = 4;
 const HOME_SUB_BLOCK_SLOT_COUNT = 8;
 const GRID_SUB_BLOCK_SLOT_COUNT = 2;
-const SUB_BLOCKS_MIN_COLUMNS = 12;
-const SUB_BLOCKS_MIN_ROWS = 7;
-const SUB_BLOCKS_MIN_ROWS_REDUCED = 6;
-const SUB_BLOCKS_FALLBACK_MIN_WIDTH = 400;
-const SUB_BLOCKS_FALLBACK_MIN_HEIGHT = 300;
+const SUB_BLOCKS_COMPACT_MAX_WIDTH = 260;
+const SUB_BLOCKS_COMPACT_MAX_HEIGHT = 220;
 const DEFAULT_NEUTRAL_RGB = "var(--rgb-primary-text-color, 33, 33, 33)";
 
 interface TapActionConfig {
@@ -274,6 +271,9 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
 
   @state()
   private _showSubBlocks = false;
+
+  @state()
+  private _compactSubBlocks = false;
 
   @state()
   private _subNodeConnectorSegments: SubNodeConnectorSegment[] = [];
@@ -1307,16 +1307,19 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
             "grid-column": `${position.col}`,
             "grid-row": `${position.row}`
           };
+          const formattedValue = this.formatValue(entry.value, entry.unit, decimals);
+          const compactParts = this.splitFormattedValueAndUnit(formattedValue, entry.unit);
 
           return html`
             <div
-              class="energy-sub-value ${node}-sub sub-col-${position.col} ${entry.value === null ? "missing" : ""}"
+              class="energy-sub-value ${node}-sub sub-col-${position.col} ${this._compactSubBlocks ? "compact" : ""} ${entry.value === null ? "missing" : ""}"
               data-key=${entry.key}
               style=${styleMap(blockStyle)}
             >
               <div class="energy-sub-content">
                 <ha-icon class="energy-sub-icon" .icon=${entry.icon} style=${styleMap(entry.iconStyle)}></ha-icon>
-                <div class="energy-sub-number">${this.formatValue(entry.value, entry.unit, decimals)}</div>
+                <div class="energy-sub-number">${this._compactSubBlocks ? compactParts.value : formattedValue}</div>
+                <div class="energy-sub-unit">${compactParts.unit}</div>
                 <div class="energy-sub-label">${entry.label}</div>
               </div>
             </div>
@@ -1694,90 +1697,23 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       if (this._showSubBlocks) {
         this._showSubBlocks = false;
       }
+      if (this._compactSubBlocks) {
+        this._compactSubBlocks = false;
+      }
       return;
     }
 
-    const columns = this.findLayoutSpan("column");
-    const rows = this.findLayoutSpan("row");
-    const minRows = this.subBlocksMinRows();
-    const shouldShow =
-      columns !== null
-      && rows !== null
-      && columns >= SUB_BLOCKS_MIN_COLUMNS
-      && rows >= minRows;
-    const fallbackRect = grid.getBoundingClientRect();
-    const fallbackShouldShow =
-      fallbackRect.width >= SUB_BLOCKS_FALLBACK_MIN_WIDTH
-      && fallbackRect.height >= SUB_BLOCKS_FALLBACK_MIN_HEIGHT;
-    const resolvedShouldShow = (columns !== null && rows !== null) ? shouldShow : fallbackShouldShow;
-
-    if (resolvedShouldShow !== this._showSubBlocks) {
-      this._showSubBlocks = resolvedShouldShow;
-    }
-  }
-
-  private subBlocksMinRows(): number {
-    if (!this._config) {
-      return SUB_BLOCKS_MIN_ROWS;
+    const rect = grid.getBoundingClientRect();
+    const compact =
+      rect.width <= SUB_BLOCKS_COMPACT_MAX_WIDTH
+      || rect.height <= SUB_BLOCKS_COMPACT_MAX_HEIGHT;
+    if (compact !== this._compactSubBlocks) {
+      this._compactSubBlocks = compact;
     }
 
-    const solarVisible = this._config.solar_visible !== false;
-    const batteryVisible = this._config.battery_visible !== false;
-    const batterySecondaryVisible = this._config.battery_secondary_visible === true;
-    const anyBatteryVisible = batteryVisible || batterySecondaryVisible;
-
-    return (!solarVisible || !anyBatteryVisible)
-      ? SUB_BLOCKS_MIN_ROWS_REDUCED
-      : SUB_BLOCKS_MIN_ROWS;
-  }
-
-  private findLayoutSpan(axis: "row" | "column"): number | null {
-    let node: HTMLElement | null = this;
-    while (node) {
-      const inlineSpan = this.parseGridSpanCandidates(
-        axis === "row"
-          ? [node.style.gridRowStart, node.style.gridRowEnd, node.style.gridRow]
-          : [node.style.gridColumnStart, node.style.gridColumnEnd, node.style.gridColumn]
-      );
-      if (inlineSpan !== null) {
-        return inlineSpan;
-      }
-
-      const computed = getComputedStyle(node);
-      const computedSpan = this.parseGridSpanCandidates(
-        axis === "row"
-          ? [computed.gridRowStart, computed.gridRowEnd, computed.gridRow]
-          : [computed.gridColumnStart, computed.gridColumnEnd, computed.gridColumn]
-      );
-      if (computedSpan !== null) {
-        return computedSpan;
-      }
-
-      node = node.parentElement;
+    if (!this._showSubBlocks) {
+      this._showSubBlocks = true;
     }
-    return null;
-  }
-
-  private parseGridSpan(value: string | null | undefined): number | null {
-    if (!value) {
-      return null;
-    }
-    const match = value.match(/span\s+(\d+)/i);
-    if (!match) {
-      return null;
-    }
-    const span = Number.parseInt(match[1], 10);
-    return Number.isFinite(span) && span > 0 ? span : null;
-  }
-
-  private parseGridSpanCandidates(values: Array<string | null | undefined>): number | null {
-    for (const value of values) {
-      const parsed = this.parseGridSpan(value);
-      if (parsed !== null) {
-        return parsed;
-      }
-    }
-    return null;
   }
 
   private scheduleSubNodeConnectorDraw(): void {
@@ -3168,6 +3104,38 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     });
   }
 
+  private splitFormattedValueAndUnit(
+    formatted: string,
+    fallbackUnit: string
+  ): { value: string; unit: string } {
+    const trimmed = formatted.trim();
+    const unit = fallbackUnit.trim();
+    if (trimmed.length === 0) {
+      return { value: "--", unit };
+    }
+    if (unit.length === 0) {
+      return { value: trimmed, unit: "" };
+    }
+
+    const suffix = ` ${unit}`;
+    if (trimmed.endsWith(suffix)) {
+      return {
+        value: trimmed.slice(0, Math.max(0, trimmed.length - suffix.length)).trim(),
+        unit
+      };
+    }
+
+    const lastSpace = trimmed.lastIndexOf(" ");
+    if (lastSpace > 0) {
+      return {
+        value: trimmed.slice(0, lastSpace).trim(),
+        unit: trimmed.slice(lastSpace + 1).trim()
+      };
+    }
+
+    return { value: trimmed, unit };
+  }
+
   private formatBatteryPercentage(value: number): string {
     const rounded = Math.round(this.normalizeBatteryThreshold(value));
     return `${rounded}%`;
@@ -3489,6 +3457,29 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       width: 100%;
     }
 
+    .energy-sub-value.compact .energy-sub-icon,
+    .energy-sub-value.compact .energy-sub-label {
+      display: none;
+    }
+
+    .energy-sub-unit {
+      display: none;
+      margin-top: 0;
+      font-size: calc(var(--card-secondary-font-size) - 2px);
+      line-height: calc(var(--card-secondary-line-height) - 6px);
+      color: var(--secondary-text-color);
+      font-weight: var(--card-secondary-font-weight);
+      letter-spacing: var(--card-secondary-letter-spacing);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: clip;
+      width: 100%;
+    }
+
+    .energy-sub-value.compact .energy-sub-unit {
+      display: block;
+    }
+
     .energy-sub-value.missing .energy-sub-number {
       color: var(--disabled-text-color);
     }
@@ -3700,9 +3691,6 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
         padding: 6px 8px;
       }
 
-      .energy-sub-value {
-      }
-
     }
 
     @container (max-width: 300px) {
@@ -3735,6 +3723,11 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       }
 
       .energy-sub-label {
+        font-size: calc(var(--card-secondary-font-size) - 3px);
+        line-height: calc(var(--card-secondary-line-height) - 7px);
+      }
+
+      .energy-sub-unit {
         font-size: calc(var(--card-secondary-font-size) - 3px);
         line-height: calc(var(--card-secondary-line-height) - 7px);
       }
