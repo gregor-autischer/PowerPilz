@@ -47,6 +47,14 @@ const CONFIG_REFRESH_DEBOUNCE_MS = 350;
 const EPSILON = 0.01;
 const GRAPH_SLOT_COUNT = 4;
 const DEFAULT_TREND_COLOR = "rgb(var(--rgb-primary-text-color, 33, 33, 33))";
+const EDITOR_PREVIEW_SELECTOR = [
+  "hui-card-preview",
+  "hui-dialog-edit-card",
+  "hui-dialog-create-card",
+  "hui-card-picker",
+  "hui-card-element-editor",
+  "hui-editor-card-preview"
+].join(", ");
 
 const SLOT_DEFAULT_TREND_COLOR: Record<GraphSlot, string> = {
   1: "purple",
@@ -1467,11 +1475,50 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
   }
 
   private isEditorPreview(): boolean {
-    return this.preview || this.editMode || Boolean(this.closest("hui-card-preview"));
+    return this.preview
+      || this.editMode
+      || Boolean(this.closest(EDITOR_PREVIEW_SELECTOR))
+      || this.hasEditorLikeAncestor();
   }
 
   private shouldRunLiveRuntime(): boolean {
     return !this.isEditorPreview();
+  }
+
+  private hasEditorLikeAncestor(): boolean {
+    let node: Element | null = this;
+    while (node) {
+      const tagName = node.tagName.toLowerCase();
+      if (
+        tagName.startsWith("hui-")
+        && (
+          tagName.includes("preview")
+          || tagName.includes("editor")
+          || tagName.includes("picker")
+          || tagName.includes("dialog")
+        )
+      ) {
+        return true;
+      }
+
+      if (node instanceof HTMLElement) {
+        const className = node.className;
+        if (typeof className === "string") {
+          const normalizedClass = className.toLowerCase();
+          if (
+            normalizedClass.includes("preview")
+            || normalizedClass.includes("editor")
+            || normalizedClass.includes("card-picker")
+          ) {
+            return true;
+          }
+        }
+      }
+
+      node = node.parentElement;
+    }
+
+    return false;
   }
 
   private perfNow(): number {

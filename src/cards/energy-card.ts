@@ -43,6 +43,14 @@ const GRID_SUB_BLOCK_SLOT_COUNT = 2;
 const SUB_BLOCKS_COMPACT_MAX_WIDTH = 260;
 const SUB_BLOCKS_COMPACT_MAX_HEIGHT = 220;
 const DEFAULT_NEUTRAL_RGB = "var(--rgb-primary-text-color, 33, 33, 33)";
+const EDITOR_PREVIEW_SELECTOR = [
+  "hui-card-preview",
+  "hui-dialog-edit-card",
+  "hui-dialog-create-card",
+  "hui-card-picker",
+  "hui-card-element-editor",
+  "hui-editor-card-preview"
+].join(", ");
 
 interface TapActionConfig {
   action?: TapActionType;
@@ -2390,11 +2398,50 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
   }
 
   private isEditorPreview(): boolean {
-    return this.preview || this.editMode || Boolean(this.closest("hui-card-preview"));
+    return this.preview
+      || this.editMode
+      || Boolean(this.closest(EDITOR_PREVIEW_SELECTOR))
+      || this.hasEditorLikeAncestor();
   }
 
   private shouldRunLiveRuntime(): boolean {
     return !this.isEditorPreview();
+  }
+
+  private hasEditorLikeAncestor(): boolean {
+    let node: Element | null = this;
+    while (node) {
+      const tagName = node.tagName.toLowerCase();
+      if (
+        tagName.startsWith("hui-")
+        && (
+          tagName.includes("preview")
+          || tagName.includes("editor")
+          || tagName.includes("picker")
+          || tagName.includes("dialog")
+        )
+      ) {
+        return true;
+      }
+
+      if (node instanceof HTMLElement) {
+        const className = node.className;
+        if (typeof className === "string") {
+          const normalizedClass = className.toLowerCase();
+          if (
+            normalizedClass.includes("preview")
+            || normalizedClass.includes("editor")
+            || normalizedClass.includes("card-picker")
+          ) {
+            return true;
+          }
+        }
+      }
+
+      node = node.parentElement;
+    }
+
+    return false;
   }
 
   private perfNow(): number {
