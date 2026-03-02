@@ -68,6 +68,9 @@ interface EnergyCardConfig extends LovelaceCardConfig {
   shared_trend_scale?: boolean;
   trend_data_source?: TrendDataSource | "auto";
   debug_performance?: boolean;
+  auto_scale_units?: boolean;
+  decimals_base_unit?: number;
+  decimals_prefixed_unit?: number;
   battery_low_alert?: boolean;
   battery_low_threshold?: number;
   battery_secondary_low_alert?: boolean;
@@ -295,7 +298,10 @@ const SCHEMA: HaFormSchema[] = [
     name: "",
     schema: [
       { name: "unit", selector: { text: {} } },
-      { name: "decimals", selector: { number: { mode: "box", min: 0, max: 3, step: 1 } } }
+      { name: "decimals", selector: { number: { mode: "box", min: 0, max: 3, step: 1 } } },
+      { name: "auto_scale_units", selector: { boolean: {} } },
+      { name: "decimals_base_unit", selector: { number: { mode: "box", min: 0, max: 4, step: 1 } } },
+      { name: "decimals_prefixed_unit", selector: { number: { mode: "box", min: 0, max: 4, step: 1 } } }
     ]
   }
 ];
@@ -359,7 +365,7 @@ const LABELS: Record<string, string> = {
   battery_secondary_trend: "Battery 2 trend",
   battery_secondary_trend_color: "Battery 2 trend color",
   shared_trend_scale: "Shared trend scale",
-  trend_data_source: "Trend source (auto)",
+  trend_data_source: "Trend source (auto: stats -> history)",
   battery_low_alert: "Low battery alert",
   battery_low_threshold: "Low battery %",
   battery_secondary_low_alert: "Battery 2 low alert",
@@ -368,7 +374,10 @@ const LABELS: Record<string, string> = {
   core_icon_color: "Core icon color",
   flow_color: "Flow line color",
   unit: "Unit",
-  decimals: "Decimals"
+  decimals: "Decimals",
+  auto_scale_units: "Auto unit scaling (W<->kW, Wh<->kWh)",
+  decimals_base_unit: "Decimals (base unit)",
+  decimals_prefixed_unit: "Decimals (prefixed units)"
 };
 
 @customElement("power-pilz-energy-card-editor")
@@ -393,6 +402,10 @@ export class PowerPilzEnergyCardEditor extends LitElement implements LovelaceCar
       shared_trend_scale: config.shared_trend_scale ?? false,
       trend_data_source: normalizeTrendDataSource(config.trend_data_source, "hybrid"),
       debug_performance: config.debug_performance ?? false,
+      decimals: config.decimals ?? 1,
+      auto_scale_units: config.auto_scale_units ?? false,
+      decimals_base_unit: config.decimals_base_unit ?? config.decimals ?? 1,
+      decimals_prefixed_unit: config.decimals_prefixed_unit ?? config.decimals ?? 1,
       type: "custom:power-pilz-energy-card"
     };
   }

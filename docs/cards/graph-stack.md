@@ -26,6 +26,9 @@ All options are available in the Lovelace editor, but you can also use YAML.
 | `normalize_stack_to_percent` | boolean | `false` | Normalize cumulative result to 100% |
 | `unit` | string | entity unit | Optional unit override |
 | `decimals` | number | `1` | Decimal precision |
+| `auto_scale_units` | boolean | `false` | Auto-scale display units (`W <-> kW <-> MW`, `Wh <-> kWh ...`) |
+| `decimals_base_unit` | number | `decimals` | Decimal precision for base units (`W`, `Wh`) |
+| `decimals_prefixed_unit` | number | `decimals` | Decimal precision for prefixed units (`kW`, `MWh`, ...) |
 
 ### Per-entity options
 
@@ -49,6 +52,9 @@ legend_layout: row
 timeframe_hours: 24
 normalize_stack_to_percent: true
 line_thickness: 1.5
+auto_scale_units: true
+decimals_base_unit: 0
+decimals_prefixed_unit: 2
 entity_1: sensor.dev_home_power
 entity_1_name: Base Load
 entity_1_enabled: true

@@ -15,7 +15,7 @@ All options are available in the Lovelace editor, but you can also use YAML.
 | `type` | string | Required | `custom:power-pilz-energy-card` |
 | `name` | string | `Energy Flow` | Card title |
 | `home_entity` | string | Optional | Home consumption entity |
-| `home_auto_calculate` | boolean | `false` | Calculate home value from selected node entities (`solar + grid + grid_secondary - battery - battery_secondary`) |
+| `home_auto_calculate` | boolean | `false` | Calculate home value from selected node entities (`solar + grid + grid_secondary - battery - battery_secondary`) with unit normalization (`W <-> kW`, `Wh <-> kWh`) when possible |
 | `solar_entity` | string | Optional | Solar production entity |
 | `grid_entity` | string | Optional | Grid power entity |
 | `grid_secondary_entity` | string | Optional | Second grid power entity |
@@ -44,6 +44,9 @@ All options are available in the Lovelace editor, but you can also use YAML.
 | `flow_color` | string \| rgb array | theme neutral | Flow line color |
 | `unit` | string | entity unit | Unit override for displayed values |
 | `decimals` | number | `1` | Number precision |
+| `auto_scale_units` | boolean | `false` | Auto-scale display units (`W <-> kW <-> MW`, `Wh <-> kWh ...`) |
+| `decimals_base_unit` | number | `decimals` | Decimal precision for base units (`W`, `Wh`) |
+| `decimals_prefixed_unit` | number | `decimals` | Decimal precision for prefixed units (`kW`, `MWh`, ...) |
 | `details_navigation_path` | string | Optional | Path used by tap action |
 | `details_entity` | string | Optional | Entity used by `more-info` action |
 | `tap_action` | action object | `none` | Card tap action |
@@ -82,6 +85,9 @@ home_visible: true
 solar_visible: true
 grid_visible: true
 battery_visible: true
+auto_scale_units: true
+decimals_base_unit: 0
+decimals_prefixed_unit: 2
 solar_trend: true
 grid_trend: true
 home_trend: true

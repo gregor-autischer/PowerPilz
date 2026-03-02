@@ -36,6 +36,7 @@ import {
   type GraphSlot,
   type GraphTimeframeHours
 } from "../utils/graph";
+import { clampUnitDecimals, parseConvertibleUnit } from "../utils/unit-scaling";
 import "./editors/graph-card-editor";
 
 const DEFAULT_DECIMALS = 1;
@@ -101,6 +102,7 @@ interface GraphHoverState {
 interface GraphDrawConfig {
   slot: GraphSlot;
   currentValue: number | null;
+  unit: string;
   color: string;
   lineWidth: number;
 }
@@ -118,6 +120,9 @@ interface PowerPilzGraphCardConfig extends LovelaceCardConfig {
   shared_trend_scale?: boolean;
   debug_performance?: boolean;
   trend_data_source?: TrendDataSource | "auto";
+  auto_scale_units?: boolean;
+  decimals_base_unit?: number;
+  decimals_prefixed_unit?: number;
 
   entity?: string;
   icon?: string;
@@ -186,6 +191,7 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
       fill_area_enabled: true,
       shared_trend_scale: false,
       trend_data_source: "hybrid",
+      auto_scale_units: false,
       entity_1: entity1,
       entity_1_enabled: true,
       entity_1_show_icon: true,
@@ -206,7 +212,9 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
       entity_4_show_icon: true,
       entity_4_icon: "mdi:chart-timeline-variant",
       entity_4_trend_color: "green",
-      decimals: DEFAULT_DECIMALS
+      decimals: DEFAULT_DECIMALS,
+      decimals_base_unit: DEFAULT_DECIMALS,
+      decimals_prefixed_unit: DEFAULT_DECIMALS
     };
   }
 
@@ -243,12 +251,16 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
   private _configRefreshTimer?: number;
   private _liveRuntimeActive = false;
   private _canvasColorContext?: CanvasRenderingContext2D | null;
+  private _sharedScaleCanonical = false;
+  private _sharedScaleFactors: Partial<Record<GraphSlot, number>> = {};
 
   public setConfig(config: PowerPilzGraphCardConfig): void {
     const decimals =
       typeof config.decimals === "number" && Number.isFinite(config.decimals)
         ? Math.min(3, Math.max(0, Math.round(config.decimals)))
         : DEFAULT_DECIMALS;
+    const decimalsBaseUnit = clampUnitDecimals(config.decimals_base_unit, decimals);
+    const decimalsPrefixedUnit = clampUnitDecimals(config.decimals_prefixed_unit, decimals);
 
     const legacyEntity = this.readConfigString(config.entity);
     const legacyIcon = this.readConfigString(config.icon);
@@ -266,6 +278,9 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
       shared_trend_scale: config.shared_trend_scale ?? false,
       debug_performance: config.debug_performance ?? false,
       trend_data_source: normalizeTrendDataSource(config.trend_data_source, "hybrid"),
+      auto_scale_units: config.auto_scale_units ?? false,
+      decimals_base_unit: decimalsBaseUnit,
+      decimals_prefixed_unit: decimalsPrefixedUnit,
       entity_1: entity1,
       entity_1_name: this.readConfigString(config.entity_1_name),
       entity_1_enabled: config.entity_1_enabled ?? true,
@@ -348,6 +363,7 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
     this._drawConfigs = entries.map((entry) => ({
       slot: entry.slot,
       currentValue: entry.currentValue,
+      unit: entry.unit,
       color: entry.trendColor,
       lineWidth: lineThickness
     }));
@@ -395,9 +411,12 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
   }
 
   private renderSeriesItem(entry: GraphSeriesEntry, hoveredValue: number | null): TemplateResult {
-    const secondary = hoveredValue === null
+    const displayHoverValue = hoveredValue === null
+      ? null
+      : this.convertSharedScaleHoverValue(entry.slot, hoveredValue);
+    const secondary = displayHoverValue === null
       ? entry.secondary
-      : this.formatValue(hoveredValue, entry.unit, entry.decimals);
+      : this.formatValue(displayHoverValue, entry.unit, entry.decimals);
 
     return html`
       <div class="state-item" data-slot=${String(entry.slot)}>
@@ -489,7 +508,22 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
   }
 
   private formatValue(value: number | null, unit: string, decimals: number): string {
-    return formatGraphValue(value, unit, decimals);
+    return formatGraphValue(value, unit, decimals, {
+      enabled: this._config?.auto_scale_units === true,
+      baseDecimals: this._config?.decimals_base_unit ?? decimals,
+      prefixedDecimals: this._config?.decimals_prefixed_unit ?? decimals
+    });
+  }
+
+  private convertSharedScaleHoverValue(slot: GraphSlot, value: number): number {
+    if (!this._sharedScaleCanonical) {
+      return value;
+    }
+    const factor = this._sharedScaleFactors[slot];
+    if (typeof factor !== "number" || !Number.isFinite(factor) || factor <= 0) {
+      return value;
+    }
+    return value / factor;
   }
 
   private readConfigString(value: unknown): string | undefined {
@@ -613,11 +647,14 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
   }
 
   private computeTrendValueRange(
-    seriesBySlot: Partial<Record<GraphSlot, TrendPoint[]>>
+    seriesBySlot: Partial<Record<GraphSlot, TrendPoint[]>>,
+    canonicalFactors?: Partial<Record<GraphSlot, number>>
   ): TrendValueRange | null {
     const values: number[] = [];
-    (Object.values(seriesBySlot) as TrendPoint[][]).forEach((series) => {
-      series.forEach((point) => values.push(point.value));
+    (Object.entries(seriesBySlot) as Array<[string, TrendPoint[]]>).forEach(([slotKey, series]) => {
+      const slot = Number(slotKey) as GraphSlot;
+      const factor = canonicalFactors?.[slot] ?? 1;
+      series.forEach((point) => values.push(point.value * factor));
     });
 
     if (values.length === 0) {
@@ -631,6 +668,59 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
     }
 
     return { min, max };
+  }
+
+  private resolveSharedScaleFactors(
+    seriesBySlot: Partial<Record<GraphSlot, TrendPoint[]>>
+  ): Partial<Record<GraphSlot, number>> | null {
+    let family: "power" | "energy" | null = null;
+    const factors: Partial<Record<GraphSlot, number>> = {};
+
+    (Object.keys(seriesBySlot) as unknown[])
+      .map((value) => Number(value))
+      .filter((value): value is number => Number.isFinite(value) && value >= 1 && value <= GRAPH_SLOT_COUNT)
+      .forEach((slotNumber) => {
+        const slot = slotNumber as GraphSlot;
+        const drawConfig = this._drawConfigs.find((item) => item.slot === slot);
+        if (!drawConfig) {
+          return;
+        }
+        const parsed = parseConvertibleUnit(drawConfig.unit);
+        if (!parsed) {
+          family = null;
+          factors[slot] = NaN;
+          return;
+        }
+        if (family === null) {
+          family = parsed.family;
+        } else if (family !== parsed.family) {
+          family = null;
+          factors[slot] = NaN;
+          return;
+        }
+        factors[slot] = parsed.factor;
+      });
+
+    const slotKeys = Object.keys(seriesBySlot);
+    if (slotKeys.length === 0) {
+      return null;
+    }
+    const hasInvalidFactor = Object.values(factors).some((factor) => !Number.isFinite(factor ?? NaN));
+    if (family === null || hasInvalidFactor || Object.keys(factors).length !== slotKeys.length) {
+      return null;
+    }
+
+    return factors;
+  }
+
+  private scaleTrendSeries(points: TrendPoint[], factor: number): TrendPoint[] {
+    if (!Number.isFinite(factor) || factor === 1) {
+      return points;
+    }
+    return points.map((point) => ({
+      ts: point.ts,
+      value: point.value * factor
+    }));
   }
 
   private syncTrendResizeObserver(): void {
@@ -671,6 +761,8 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
     const drawStartedAt = this.perfNow();
     if (this._drawConfigs.length === 0) {
       this._linePointsBySlot = {};
+      this._sharedScaleCanonical = false;
+      this._sharedScaleFactors = {};
       if (this._hoverState) {
         this._hoverState = undefined;
       }
@@ -682,6 +774,8 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
     const lineCanvas = this.renderRoot.querySelector<HTMLCanvasElement>(".card-trend-canvas-line");
     if (!areaCanvas || !lineCanvas) {
       this._linePointsBySlot = {};
+      this._sharedScaleCanonical = false;
+      this._sharedScaleFactors = {};
       if (this._hoverState) {
         this._hoverState = undefined;
       }
@@ -693,6 +787,8 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
     const line = this.prepareTrendCanvas(lineCanvas);
     if (!area || !line) {
       this._linePointsBySlot = {};
+      this._sharedScaleCanonical = false;
+      this._sharedScaleFactors = {};
       if (this._hoverState) {
         this._hoverState = undefined;
       }
@@ -709,8 +805,14 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
         trendSeriesBySlot[drawConfig.slot] = points;
       }
     });
-    const sharedRange = this._config?.shared_trend_scale === true
-      ? this.computeTrendValueRange(trendSeriesBySlot)
+    const sharedScaleEnabled = this._config?.shared_trend_scale === true;
+    const sharedScaleFactors = sharedScaleEnabled
+      ? this.resolveSharedScaleFactors(trendSeriesBySlot)
+      : null;
+    this._sharedScaleCanonical = sharedScaleFactors !== null;
+    this._sharedScaleFactors = sharedScaleFactors ?? {};
+    const sharedRange = sharedScaleEnabled
+      ? this.computeTrendValueRange(trendSeriesBySlot, sharedScaleFactors ?? undefined)
       : null;
     const linePointsBySlot: Partial<Record<GraphSlot, TrendCanvasPoint[]>> = {};
     let drawnSeries = 0;
@@ -722,7 +824,11 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
         return;
       }
 
-      const coordinates = this.toTrendCoordinates(points, windowMs, sharedRange);
+      const canonicalFactor = sharedScaleFactors?.[drawConfig.slot] ?? 1;
+      const pointsForDraw = sharedScaleFactors
+        ? this.scaleTrendSeries(points, canonicalFactor)
+        : points;
+      const coordinates = this.toTrendCoordinates(pointsForDraw, windowMs, sharedRange);
       if (coordinates.length < 2) {
         return;
       }
@@ -748,7 +854,8 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
       series: drawnSeries,
       points: drawnPointCount,
       fill_area: fillAreaEnabled,
-      shared_scale: this._config?.shared_trend_scale === true
+      shared_scale: sharedScaleEnabled,
+      shared_scale_units: this._sharedScaleCanonical ? "canonical" : "raw"
     });
   }
 

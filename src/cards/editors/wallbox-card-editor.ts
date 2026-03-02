@@ -16,6 +16,9 @@ interface WallboxCardConfig extends LovelaceCardConfig {
   show_live_value?: boolean;
   show_command_button?: boolean;
   decimals?: number;
+  auto_scale_units?: boolean;
+  decimals_base_unit?: number;
+  decimals_prefixed_unit?: number;
 }
 
 type HaFormSchema = Record<string, unknown>;
@@ -55,7 +58,16 @@ const SCHEMA: HaFormSchema[] = [
       { name: "show_command_button", selector: { boolean: {} } }
     ]
   },
-  { name: "decimals", selector: { number: { mode: "box", min: 0, max: 3, step: 1 } } }
+  {
+    type: "grid",
+    name: "",
+    schema: [
+      { name: "decimals", selector: { number: { mode: "box", min: 0, max: 3, step: 1 } } },
+      { name: "auto_scale_units", selector: { boolean: {} } },
+      { name: "decimals_base_unit", selector: { number: { mode: "box", min: 0, max: 4, step: 1 } } },
+      { name: "decimals_prefixed_unit", selector: { number: { mode: "box", min: 0, max: 4, step: 1 } } }
+    ]
+  }
 ];
 
 const LABELS: Record<string, string> = {
@@ -69,7 +81,10 @@ const LABELS: Record<string, string> = {
   show_mode_selector: "Show mode selector",
   show_live_value: "Show live status and power",
   show_command_button: "Show play/pause button",
-  decimals: "Decimals"
+  decimals: "Decimals",
+  auto_scale_units: "Auto unit scaling (W<->kW, Wh<->kWh)",
+  decimals_base_unit: "Decimals (base unit)",
+  decimals_prefixed_unit: "Decimals (prefixed units)"
 };
 
 @customElement("power-pilz-wallbox-card-editor")
@@ -86,6 +101,10 @@ export class PowerPilzWallboxCardEditor extends LitElement implements LovelaceCa
       show_mode_selector: config.show_mode_selector ?? true,
       show_live_value: config.show_live_value ?? true,
       show_command_button: config.show_command_button ?? true,
+      decimals: config.decimals ?? 1,
+      auto_scale_units: config.auto_scale_units ?? false,
+      decimals_base_unit: config.decimals_base_unit ?? config.decimals ?? 1,
+      decimals_prefixed_unit: config.decimals_prefixed_unit ?? config.decimals ?? 1,
       type: "custom:power-pilz-wallbox-card"
     };
   }

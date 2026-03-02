@@ -18,6 +18,12 @@ import {
 } from "../utils/history";
 import { resolveColor as resolveCssColor, toRgbCss as toRgbCssValue } from "../utils/color";
 import { toTrendCanvasPoints } from "../utils/trend";
+import {
+  clampUnitDecimals,
+  formatValueWithUnitScaling,
+  parseConvertibleUnit,
+  resolveComparableUnitContext
+} from "../utils/unit-scaling";
 import "./editors/energy-card-editor";
 
 type FlowDirection = "none" | "forward" | "backward";
@@ -185,6 +191,9 @@ interface PowerPilzEnergyCardConfig extends LovelaceCardConfig {
   shared_trend_scale?: boolean;
   debug_performance?: boolean;
   trend_data_source?: TrendDataSource | "auto";
+  auto_scale_units?: boolean;
+  decimals_base_unit?: number;
+  decimals_prefixed_unit?: number;
   battery_low_alert?: boolean;
   battery_low_threshold?: number;
   battery_secondary_low_alert?: boolean;
@@ -241,7 +250,10 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       battery_percentage_entity: batterySocEntity,
       shared_trend_scale: false,
       trend_data_source: "hybrid",
-      decimals: DEFAULT_DECIMALS
+      auto_scale_units: false,
+      decimals: DEFAULT_DECIMALS,
+      decimals_base_unit: DEFAULT_DECIMALS,
+      decimals_prefixed_unit: DEFAULT_DECIMALS
     };
   }
 
@@ -277,7 +289,10 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
   private _configRefreshTimer?: number;
   private _liveRuntimeActive = false;
   private _trendDrawConfig: Partial<
-    Record<NodeKey, { currentValue: number | null; color: string; threshold: number | null; thresholdColor: string }>
+    Record<
+      NodeKey,
+      { currentValue: number | null; unit: string; color: string; threshold: number | null; thresholdColor: string }
+    >
   > = {};
   private _canvasColorContext?: CanvasRenderingContext2D | null;
 
@@ -288,6 +303,8 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       typeof config.decimals === "number" && Number.isFinite(config.decimals)
         ? Math.min(3, Math.max(0, Math.round(config.decimals)))
         : DEFAULT_DECIMALS;
+    const decimalsBaseUnit = clampUnitDecimals(config.decimals_base_unit, decimals);
+    const decimalsPrefixedUnit = clampUnitDecimals(config.decimals_prefixed_unit, decimals);
 
     this._config = {
       ...config,
@@ -330,6 +347,9 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       shared_trend_scale: config.shared_trend_scale ?? false,
       debug_performance: config.debug_performance ?? false,
       trend_data_source: normalizeTrendDataSource(config.trend_data_source, "hybrid"),
+      auto_scale_units: config.auto_scale_units ?? false,
+      decimals_base_unit: decimalsBaseUnit,
+      decimals_prefixed_unit: decimalsPrefixedUnit,
       battery_low_alert: config.battery_low_alert ?? false,
       battery_low_threshold: this.normalizeBatteryThreshold(config.battery_low_threshold),
       battery_secondary_low_alert: config.battery_secondary_low_alert ?? false,
@@ -389,38 +409,62 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     const batteryPercentage = readNumber(this.hass, config.battery_percentage_entity);
     const batterySecondary = batterySecondaryVisible ? readNumber(this.hass, config.battery_secondary_entity) : null;
     const batterySecondaryPercentage = readNumber(this.hass, config.battery_secondary_percentage_entity);
-    const home = config.home_auto_calculate === true
-      ? this.computeAutoHomeValueFromNodeValues({
-          solar,
-          grid,
-          grid_secondary: gridSecondary,
-          battery,
-          battery_secondary: batterySecondary
-        })
-      : homeEntityValue;
 
     const fallbackUnit = config.unit ?? "kW";
     const solarUnit = readUnit(this.hass, config.solar_entity) ?? fallbackUnit;
-    const homeUnit = config.home_auto_calculate === true
-      ? this.resolveAutoHomeUnit(config, fallbackUnit)
-      : (readUnit(this.hass, config.home_entity) ?? fallbackUnit);
     const gridUnit = readUnit(this.hass, config.grid_entity) ?? fallbackUnit;
     const gridSecondaryUnit = readUnit(this.hass, config.grid_secondary_entity) ?? fallbackUnit;
     const batteryUnit = readUnit(this.hass, config.battery_entity) ?? fallbackUnit;
     const batterySecondaryUnit = readUnit(this.hass, config.battery_secondary_entity) ?? fallbackUnit;
+    const homeUnit = config.home_auto_calculate === true
+      ? this.resolveAutoHomeUnit(config, fallbackUnit)
+      : (readUnit(this.hass, config.home_entity) ?? fallbackUnit);
+    const home = config.home_auto_calculate === true
+      ? this.computeAutoHomeValueFromNodeValues(
+          {
+            solar,
+            grid,
+            grid_secondary: gridSecondary,
+            battery,
+            battery_secondary: batterySecondary
+          },
+          {
+            solar: solarUnit,
+            grid: gridUnit,
+            grid_secondary: gridSecondaryUnit,
+            battery: batteryUnit,
+            battery_secondary: batterySecondaryUnit
+          },
+          homeUnit
+        )
+      : homeEntityValue;
+    const batteryTrendUnit = batteryPercentage !== null
+      ? (readUnit(this.hass, config.battery_percentage_entity) ?? "%")
+      : batteryUnit;
+    const batterySecondaryTrendUnit = batterySecondaryPercentage !== null
+      ? (readUnit(this.hass, config.battery_secondary_percentage_entity) ?? "%")
+      : batterySecondaryUnit;
 
     const solarFlow = this.toUnidirectionalFlow(solar);
     const homeFlow = this.toUnidirectionalFlow(home);
     const gridFlow = this.toBidirectionalFlow(grid);
     const gridSecondaryFlow = this.toBidirectionalFlow(gridSecondary);
+    const gridCombinedValue = this.sumComparableValues([
+      { value: grid, unit: gridUnit },
+      { value: gridSecondary, unit: gridSecondaryUnit }
+    ]);
     const gridCombinedFlow = (grid === null && gridSecondary === null)
       ? "none"
-      : this.toBidirectionalFlow((grid ?? 0) + (gridSecondary ?? 0));
+      : this.toBidirectionalFlow(gridCombinedValue);
     const batteryFlow = this.toBidirectionalFlow(battery);
     const batterySecondaryFlow = this.toBidirectionalFlow(batterySecondary);
+    const batteryCombinedValue = this.sumComparableValues([
+      { value: battery, unit: batteryUnit },
+      { value: batterySecondary, unit: batterySecondaryUnit }
+    ]);
     const batteryCombinedFlow = (battery === null && batterySecondary === null)
       ? "none"
-      : this.toBidirectionalFlow((battery ?? 0) + (batterySecondary ?? 0));
+      : this.toBidirectionalFlow(batteryCombinedValue);
     const tapAction = this.resolveTapAction(config);
     const interactive = !this.isEditorPreview() && tapAction.action !== "none";
 
@@ -627,7 +671,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
                     class="energy-value solar ${solar === null ? "missing" : ""}"
                     style=${styleMap(this.gridPlacementStyle(solarPlacement))}
                   >
-                    ${this.renderTrend("solar", solar, Boolean(config.solar_trend), solarTrendColor, null, "")}
+                    ${this.renderTrend("solar", solar, solarUnit, Boolean(config.solar_trend), solarTrendColor, null, "")}
                     <div class="energy-content">
                       <ha-icon
                         class="energy-icon"
@@ -647,7 +691,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
                     class="energy-value grid ${grid === null ? "missing" : ""}"
                     style=${styleMap(this.gridPlacementStyle(gridPlacement))}
                   >
-                    ${this.renderTrend("grid", grid, Boolean(config.grid_trend), gridTrendColor, null, "")}
+                    ${this.renderTrend("grid", grid, gridUnit, Boolean(config.grid_trend), gridTrendColor, null, "")}
                     <div class="energy-content">
                       <ha-icon
                         class="energy-icon"
@@ -670,6 +714,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
                     ${this.renderTrend(
                       "grid_secondary",
                       gridSecondary,
+                      gridSecondaryUnit,
                       Boolean(config.grid_secondary_trend),
                       gridSecondaryTrendColor,
                       null,
@@ -694,7 +739,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
                     class="energy-value home ${home === null ? "missing" : ""}"
                     style=${styleMap(this.gridPlacementStyle(homePlacement))}
                   >
-                    ${this.renderTrend("home", home, Boolean(config.home_trend), homeTrendColor, null, "")}
+                    ${this.renderTrend("home", home, homeUnit, Boolean(config.home_trend), homeTrendColor, null, "")}
                     <div class="energy-content">
                       <ha-icon
                         class="energy-icon"
@@ -730,6 +775,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
                     ${this.renderTrend(
                       "battery",
                       batteryTrendValue,
+                      batteryTrendUnit,
                       Boolean(config.battery_trend),
                       batteryTrendColor,
                       batteryTrendThreshold,
@@ -762,6 +808,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
                     ${this.renderTrend(
                       "battery_secondary",
                       batterySecondaryTrendValue,
+                      batterySecondaryTrendUnit,
                       Boolean(config.battery_secondary_trend),
                       batterySecondaryTrendColor,
                       batterySecondaryTrendThreshold,
@@ -1334,7 +1381,9 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
   }
 
   private computeAutoHomeValueFromNodeValues(
-    values: Partial<Record<HomeComputationRole, number | null>>
+    values: Partial<Record<HomeComputationRole, number | null>>,
+    units?: Partial<Record<HomeComputationRole, string>>,
+    outputUnit?: string
   ): number | null {
     const hasAny =
       (Object.values(values) as Array<number | null | undefined>)
@@ -1343,12 +1392,52 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       return null;
     }
 
-    const computed =
-      (values.solar ?? 0)
-      + (values.grid ?? 0)
-      + (values.grid_secondary ?? 0)
-      - (values.battery ?? 0)
-      - (values.battery_secondary ?? 0);
+    const activeUnits: Partial<Record<HomeComputationRole, string>> = {};
+    let activeRoleCount = 0;
+    if (units) {
+      (Object.keys(values) as HomeComputationRole[]).forEach((role) => {
+        const value = values[role];
+        const unit = units[role];
+        if (value !== null && value !== undefined && Number.isFinite(value)) {
+          activeRoleCount += 1;
+          if (unit) {
+            activeUnits[role] = unit;
+          }
+        }
+      });
+    }
+
+    const comparableContext = Object.keys(activeUnits).length === activeRoleCount
+      ? resolveComparableUnitContext(activeUnits)
+      : { comparable: false, family: null, canonicalUnit: null, factors: {} };
+    const factors = comparableContext.comparable ? comparableContext.factors : undefined;
+    const valueForRole = (role: HomeComputationRole): number => {
+      const value = values[role];
+      if (value === null || value === undefined || !Number.isFinite(value)) {
+        return 0;
+      }
+      const factor = factors?.[role] ?? 1;
+      return value * factor;
+    };
+
+    let computed =
+      valueForRole("solar")
+      + valueForRole("grid")
+      + valueForRole("grid_secondary")
+      - valueForRole("battery")
+      - valueForRole("battery_secondary");
+
+    if (factors && outputUnit) {
+      const parsedOutput = parseConvertibleUnit(outputUnit);
+      if (
+        parsedOutput
+        && comparableContext.family !== null
+        && parsedOutput.family === comparableContext.family
+        && parsedOutput.factor > 0
+      ) {
+        computed /= parsedOutput.factor;
+      }
+    }
 
     if (!Number.isFinite(computed)) {
       return null;
@@ -1357,9 +1446,37 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     return computed <= EPSILON ? 0 : computed;
   }
 
+  private sumComparableValues(values: Array<{ value: number | null; unit: string }>): number | null {
+    const finiteValues = values.filter(
+      (entry): entry is { value: number; unit: string } =>
+        entry.value !== null && Number.isFinite(entry.value)
+    );
+    if (finiteValues.length === 0) {
+      return null;
+    }
+
+    let family: "power" | "energy" | null = null;
+    let sumCanonical = 0;
+    for (const entry of finiteValues) {
+      const parsed = parseConvertibleUnit(entry.unit);
+      if (!parsed) {
+        return finiteValues.reduce((sum, item) => sum + item.value, 0);
+      }
+      if (family === null) {
+        family = parsed.family;
+      } else if (family !== parsed.family) {
+        return finiteValues.reduce((sum, item) => sum + item.value, 0);
+      }
+      sumCanonical += entry.value * parsed.factor;
+    }
+
+    return sumCanonical;
+  }
+
   private renderTrend(
     node: NodeKey,
     currentValue: number | null,
+    unit: string,
     enabled: boolean,
     color: string,
     threshold: number | null,
@@ -1372,6 +1489,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
 
     this._trendDrawConfig[node] = {
       currentValue,
+      unit,
       color,
       threshold,
       thresholdColor
@@ -1508,11 +1626,13 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
   }
 
   private computeTrendValueRange(
-    seriesByNode: Partial<Record<NodeKey, TrendPoint[]>>
+    seriesByNode: Partial<Record<NodeKey, TrendPoint[]>>,
+    canonicalFactors?: Partial<Record<NodeKey, number>>
   ): TrendValueRange | null {
     const values: number[] = [];
-    (Object.values(seriesByNode) as TrendPoint[][]).forEach((series) => {
-      series.forEach((point) => values.push(point.value));
+    (Object.entries(seriesByNode) as Array<[NodeKey, TrendPoint[]]>).forEach(([node, series]) => {
+      const factor = canonicalFactors?.[node] ?? 1;
+      series.forEach((point) => values.push(point.value * factor));
     });
 
     if (values.length === 0) {
@@ -1526,6 +1646,46 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     }
 
     return { min, max };
+  }
+
+  private resolveSharedTrendUnitFactors(
+    seriesByNode: Partial<Record<NodeKey, TrendPoint[]>>
+  ): Partial<Record<NodeKey, number>> | null {
+    const nodes = Object.keys(seriesByNode) as NodeKey[];
+    if (nodes.length === 0) {
+      return null;
+    }
+
+    let family: "power" | "energy" | null = null;
+    const factors: Partial<Record<NodeKey, number>> = {};
+    for (const node of nodes) {
+      const drawConfig = this._trendDrawConfig[node];
+      if (!drawConfig) {
+        return null;
+      }
+      const parsed = parseConvertibleUnit(drawConfig.unit);
+      if (!parsed) {
+        return null;
+      }
+      if (family === null) {
+        family = parsed.family;
+      } else if (family !== parsed.family) {
+        return null;
+      }
+      factors[node] = parsed.factor;
+    }
+
+    return factors;
+  }
+
+  private scaleTrendSeries(points: TrendPoint[], factor: number): TrendPoint[] {
+    if (!Number.isFinite(factor) || factor === 1) {
+      return points;
+    }
+    return points.map((point) => ({
+      ts: point.ts,
+      value: point.value * factor
+    }));
   }
 
   private updateSubBlockVisibility(): void {
@@ -1866,8 +2026,12 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
         trendSeriesByNode[node] = points;
       }
     });
-    const sharedRange = this._config?.shared_trend_scale === true
-      ? this.computeTrendValueRange(trendSeriesByNode)
+    const sharedScaleEnabled = this._config?.shared_trend_scale === true;
+    const sharedScaleFactors = sharedScaleEnabled
+      ? this.resolveSharedTrendUnitFactors(trendSeriesByNode)
+      : null;
+    const sharedRange = sharedScaleEnabled
+      ? this.computeTrendValueRange(trendSeriesByNode, sharedScaleFactors ?? undefined)
       : null;
     let drawnSeries = 0;
     let drawnPointCount = 0;
@@ -1889,7 +2053,11 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
         return;
       }
 
-      const coordinates = this.toTrendCoordinates(points, sharedRange);
+      const factor = sharedScaleFactors?.[node] ?? 1;
+      const pointsForDraw = sharedScaleFactors
+        ? this.scaleTrendSeries(points, factor)
+        : points;
+      const coordinates = this.toTrendCoordinates(pointsForDraw, sharedRange);
       if (coordinates.length < 2) {
         return;
       }
@@ -1913,7 +2081,8 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       duration_ms: this.toPerfMs(this.perfNow() - drawStartedAt),
       series: drawnSeries,
       points: drawnPointCount,
-      shared_scale: this._config?.shared_trend_scale === true
+      shared_scale: sharedScaleEnabled,
+      shared_scale_units: sharedScaleFactors ? "canonical" : "raw"
     });
   }
 
@@ -2449,6 +2618,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       const next: Partial<Record<NodeKey, TrendPoint[]>> = {};
       const nodeToEntity = new Map<NodeKey, string>();
       const nodeToComputedHomeDependencies = new Map<NodeKey, HomeComputationDependency[]>();
+      const nodeToComputedHomeUnit = new Map<NodeKey, string>();
       const fullComputedNodes = new Set<NodeKey>();
       const fullEntityIds = new Set<string>();
       const incrementalEntityIds = new Set<string>();
@@ -2464,6 +2634,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
           }
 
           nodeToComputedHomeDependencies.set(node, dependencies);
+          nodeToComputedHomeUnit.set(node, this.resolveAutoHomeUnit(config, config.unit ?? "kW"));
           const existing = this._trendSeries[node] ?? [];
           if (forceFull || existing.length === 0) {
             fullComputedNodes.add(node);
@@ -2566,7 +2737,8 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
           incrementalByEntity,
           fullEntityIds,
           incrementalEntityIds,
-          cutoffMs
+          cutoffMs,
+          nodeToComputedHomeUnit.get(node) ?? (config.unit ?? "kW")
         );
 
         if (fullComputedNodes.has(node)) {
@@ -2745,9 +2917,11 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     incrementalByEntity: Record<string, TrendPoint[]>,
     fullEntityIds: Set<string>,
     incrementalEntityIds: Set<string>,
-    cutoffMs: number
+    cutoffMs: number,
+    outputUnit: string
   ): TrendPoint[] {
     const roleSeries: Partial<Record<HomeComputationRole, TrendPoint[]>> = {};
+    const roleUnits: Partial<Record<HomeComputationRole, string>> = {};
     dependencies.forEach((dependency) => {
       const source = fullEntityIds.has(dependency.entityId)
         ? (fullByEntity[dependency.entityId] ?? [])
@@ -2757,14 +2931,20 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       roleSeries[dependency.role] = source
         .filter((point) => Number.isFinite(point.ts) && Number.isFinite(point.value) && point.ts >= cutoffMs)
         .sort((left, right) => left.ts - right.ts);
+      const unit = readUnit(this.hass, dependency.entityId);
+      if (unit) {
+        roleUnits[dependency.role] = unit;
+      }
     });
 
-    return this.computeAutoHomeTrendSeries(roleSeries, cutoffMs);
+    return this.computeAutoHomeTrendSeries(roleSeries, cutoffMs, roleUnits, outputUnit);
   }
 
   private computeAutoHomeTrendSeries(
     roleSeries: Partial<Record<HomeComputationRole, TrendPoint[]>>,
-    cutoffMs: number
+    cutoffMs: number,
+    roleUnits: Partial<Record<HomeComputationRole, string>>,
+    outputUnit: string
   ): TrendPoint[] {
     const timestamps: number[] = [];
     (Object.values(roleSeries) as TrendPoint[][]).forEach((series) => {
@@ -2796,7 +2976,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
           grid_secondary: this.interpolateTrendSeriesValue(roleSeries.grid_secondary ?? [], timestamp),
           battery: this.interpolateTrendSeriesValue(roleSeries.battery ?? [], timestamp),
           battery_secondary: this.interpolateTrendSeriesValue(roleSeries.battery_secondary ?? [], timestamp)
-        });
+        }, roleUnits, outputUnit);
         if (value === null) {
           return null;
         }
@@ -2981,12 +3161,11 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
   }
 
   private formatValue(value: number | null, unit: string, decimals: number): string {
-    if (value === null) {
-      return "--";
-    }
-
-    const sign = value < 0 ? "-" : "";
-    return `${sign}${Math.abs(value).toFixed(decimals)} ${unit}`;
+    return formatValueWithUnitScaling(value, unit, decimals, {
+      enabled: this._config?.auto_scale_units === true,
+      baseDecimals: this._config?.decimals_base_unit ?? decimals,
+      prefixedDecimals: this._config?.decimals_prefixed_unit ?? decimals
+    });
   }
 
   private formatBatteryPercentage(value: number): string {

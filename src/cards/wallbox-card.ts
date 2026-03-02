@@ -12,6 +12,7 @@ import type {
 } from "../types";
 import { getEntity, readNumber, readState, readUnit } from "../utils/entity";
 import { mushroomIconStyle } from "../utils/color";
+import { clampUnitDecimals, formatValueWithUnitScaling } from "../utils/unit-scaling";
 import "./editors/wallbox-card-editor";
 
 const EPSILON = 0.01;
@@ -41,6 +42,9 @@ interface PowerPilzWallboxCardConfig extends LovelaceCardConfig {
   show_live_value?: boolean;
   show_command_button?: boolean;
   decimals?: number;
+  auto_scale_units?: boolean;
+  decimals_base_unit?: number;
+  decimals_prefixed_unit?: number;
 }
 
 export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
@@ -73,7 +77,10 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
       status_entity: pick("sensor.dev_wallbox_status", "sensor.wallbox_status"),
       mode_entity: modeEntity,
       command_entity: commandEntity,
-      decimals: 1
+      decimals: 1,
+      auto_scale_units: false,
+      decimals_base_unit: 1,
+      decimals_prefixed_unit: 1
     };
   }
 
@@ -104,6 +111,10 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
 
   public setConfig(config: PowerPilzWallboxCardConfig): void {
     const powerEntity = config.power_entity ?? "sensor.dev_wallbox_power";
+    const decimals =
+      typeof config.decimals === "number" && Number.isFinite(config.decimals)
+        ? Math.min(3, Math.max(0, Math.round(config.decimals)))
+        : 1;
     this._config = {
       ...config,
       icon: config.icon ?? "mdi:power-plug",
@@ -111,7 +122,10 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
       show_mode_selector: config.show_mode_selector ?? true,
       show_live_value: config.show_live_value ?? true,
       show_command_button: config.show_command_button ?? true,
-      decimals: config.decimals ?? 1,
+      decimals,
+      auto_scale_units: config.auto_scale_units ?? false,
+      decimals_base_unit: clampUnitDecimals(config.decimals_base_unit, decimals),
+      decimals_prefixed_unit: clampUnitDecimals(config.decimals_prefixed_unit, decimals),
       power_entity: powerEntity
     };
   }
@@ -326,10 +340,13 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
   }
 
   private formatPower(value: number | null, unit: string, decimals: number): string {
-    if (value === null) {
-      return `-- ${unit}`;
-    }
-    return `${Math.abs(value).toFixed(decimals)} ${unit}`;
+    const normalized = value === null ? null : Math.abs(value);
+    return formatValueWithUnitScaling(normalized, unit, decimals, {
+      enabled: this._config?.auto_scale_units === true,
+      baseDecimals: this._config?.decimals_base_unit ?? decimals,
+      prefixedDecimals: this._config?.decimals_prefixed_unit ?? decimals,
+      nullWithUnit: true
+    });
   }
 
   private isCharging(status: string | undefined, power: number | null, commandEntity?: string): boolean {

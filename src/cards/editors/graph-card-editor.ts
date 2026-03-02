@@ -27,6 +27,9 @@ interface GraphCardConfig extends LovelaceCardConfig {
   shared_trend_scale?: boolean;
   trend_data_source?: TrendDataSource | "auto";
   debug_performance?: boolean;
+  auto_scale_units?: boolean;
+  decimals_base_unit?: number;
+  decimals_prefixed_unit?: number;
 
   entity?: string;
   icon?: string;
@@ -85,6 +88,10 @@ export class PowerPilzGraphCardEditor extends LitElement implements LovelaceCard
       fill_area_enabled: config.fill_area_enabled ?? true,
       shared_trend_scale: config.shared_trend_scale ?? false,
       debug_performance: config.debug_performance ?? false,
+      decimals: config.decimals ?? 1,
+      auto_scale_units: config.auto_scale_units ?? false,
+      decimals_base_unit: config.decimals_base_unit ?? config.decimals ?? 1,
+      decimals_prefixed_unit: config.decimals_prefixed_unit ?? config.decimals ?? 1,
       line_thickness: clampLineThickness(config.line_thickness),
       clip_graph_to_labels: config.clip_graph_to_labels ?? false,
       ...normalizeGraphEntityFields(config)

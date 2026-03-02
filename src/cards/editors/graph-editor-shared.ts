@@ -27,11 +27,14 @@ const BASE_LABELS: Record<string, string> = {
   hover_enabled: "Hover",
   fill_area_enabled: "Area fill",
   shared_trend_scale: "Shared scale",
-  trend_data_source: "Trend source (auto)",
+  trend_data_source: "Trend source (auto: stats -> history)",
   clip_graph_to_labels: "Clip below labels",
   line_thickness: "Line width",
   unit: "Unit",
-  decimals: "Decimals"
+  decimals: "Decimals",
+  auto_scale_units: "Auto unit scaling (W<->kW, Wh<->kWh)",
+  decimals_base_unit: "Decimals (base unit)",
+  decimals_prefixed_unit: "Decimals (prefixed units)"
 };
 
 interface GraphEditorLikeConfig extends LovelaceCardConfig {
@@ -48,6 +51,9 @@ interface GraphEditorLikeConfig extends LovelaceCardConfig {
   trend_data_source?: TrendDataSource | "auto";
   debug_performance?: boolean;
   clip_graph_to_labels?: boolean;
+  auto_scale_units?: boolean;
+  decimals_base_unit?: number;
+  decimals_prefixed_unit?: number;
   [key: string]: unknown;
 }
 
@@ -155,7 +161,10 @@ export const createGraphSchema = (includeNormalizeStackToPercent = false): HaFor
       name: "",
       schema: [
         { name: "unit", selector: { text: {} } },
-        { name: "decimals", selector: { number: { mode: "box", min: 0, max: 3, step: 1 } } }
+        { name: "decimals", selector: { number: { mode: "box", min: 0, max: 3, step: 1 } } },
+        { name: "auto_scale_units", selector: { boolean: {} } },
+        { name: "decimals_base_unit", selector: { number: { mode: "box", min: 0, max: 4, step: 1 } } },
+        { name: "decimals_prefixed_unit", selector: { number: { mode: "box", min: 0, max: 4, step: 1 } } }
       ]
     }
   ];

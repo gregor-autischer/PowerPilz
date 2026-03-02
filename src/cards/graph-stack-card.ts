@@ -36,6 +36,7 @@ import {
   type GraphSlot,
   type GraphTimeframeHours
 } from "../utils/graph";
+import { clampUnitDecimals, parseConvertibleUnit } from "../utils/unit-scaling";
 import "./editors/graph-stack-card-editor";
 
 const DEFAULT_DECIMALS = 1;
@@ -101,6 +102,7 @@ interface GraphHoverState {
 interface GraphDrawConfig {
   slot: GraphSlot;
   currentValue: number | null;
+  unit: string;
   color: string;
   lineWidth: number;
 }
@@ -119,6 +121,9 @@ interface PowerPilzGraphStackCardConfig extends LovelaceCardConfig {
   debug_performance?: boolean;
   trend_data_source?: TrendDataSource | "auto";
   normalize_stack_to_percent?: boolean;
+  auto_scale_units?: boolean;
+  decimals_base_unit?: number;
+  decimals_prefixed_unit?: number;
 
   entity?: string;
   icon?: string;
@@ -188,6 +193,7 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
       shared_trend_scale: false,
       trend_data_source: "hybrid",
       normalize_stack_to_percent: false,
+      auto_scale_units: false,
       entity_1: entity1,
       entity_1_enabled: true,
       entity_1_show_icon: true,
@@ -208,7 +214,9 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
       entity_4_show_icon: true,
       entity_4_icon: "mdi:chart-timeline-variant",
       entity_4_trend_color: "green",
-      decimals: DEFAULT_DECIMALS
+      decimals: DEFAULT_DECIMALS,
+      decimals_base_unit: DEFAULT_DECIMALS,
+      decimals_prefixed_unit: DEFAULT_DECIMALS
     };
   }
 
@@ -245,12 +253,17 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
   private _configRefreshTimer?: number;
   private _liveRuntimeActive = false;
   private _canvasColorContext?: CanvasRenderingContext2D | null;
+  private _stackCanonicalMode = false;
+  private _stackCanonicalFactors: Partial<Record<GraphSlot, number>> = {};
+  private _stackNormalizeToPercent = false;
 
   public setConfig(config: PowerPilzGraphStackCardConfig): void {
     const decimals =
       typeof config.decimals === "number" && Number.isFinite(config.decimals)
         ? Math.min(3, Math.max(0, Math.round(config.decimals)))
         : DEFAULT_DECIMALS;
+    const decimalsBaseUnit = clampUnitDecimals(config.decimals_base_unit, decimals);
+    const decimalsPrefixedUnit = clampUnitDecimals(config.decimals_prefixed_unit, decimals);
 
     const legacyEntity = this.readConfigString(config.entity);
     const legacyIcon = this.readConfigString(config.icon);
@@ -269,6 +282,9 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
       debug_performance: config.debug_performance ?? false,
       trend_data_source: normalizeTrendDataSource(config.trend_data_source, "hybrid"),
       normalize_stack_to_percent: config.normalize_stack_to_percent ?? false,
+      auto_scale_units: config.auto_scale_units ?? false,
+      decimals_base_unit: decimalsBaseUnit,
+      decimals_prefixed_unit: decimalsPrefixedUnit,
       entity_1: entity1,
       entity_1_name: this.readConfigString(config.entity_1_name),
       entity_1_enabled: config.entity_1_enabled ?? true,
@@ -353,6 +369,7 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
     this._drawConfigs = entries.map((entry) => ({
       slot: entry.slot,
       currentValue: entry.currentValue,
+      unit: entry.unit,
       color: entry.trendColor,
       lineWidth: lineThickness
     }));
@@ -400,9 +417,12 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
   }
 
   private renderSeriesItem(entry: GraphSeriesEntry, hoveredValue: number | null): TemplateResult {
-    const secondary = hoveredValue === null
+    const displayHoverValue = hoveredValue === null
+      ? null
+      : this.convertStackedHoverValue(entry.slot, hoveredValue);
+    const secondary = displayHoverValue === null
       ? entry.secondary
-      : this.formatValue(hoveredValue, entry.unit, entry.decimals);
+      : this.formatValue(displayHoverValue, entry.unit, entry.decimals);
 
     return html`
       <div class="state-item" data-slot=${String(entry.slot)}>
@@ -462,20 +482,32 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
   }
 
   private withStackedCurrentValues(entries: GraphSeriesEntry[], normalizeToPercent: boolean): GraphSeriesEntry[] {
-    const total = entries.reduce((sum, entry) => sum + (entry.currentValue ?? 0), 0);
-    const totalValid = Number.isFinite(total) && Math.abs(total) > EPSILON;
-    let running = 0;
+    const stackFactors = this.resolveStackUnitFactors(entries);
+    const totalRaw = entries.reduce((sum, entry) => sum + (entry.currentValue ?? 0), 0);
+    const totalCanonical = stackFactors
+      ? entries.reduce((sum, entry) => sum + ((entry.currentValue ?? 0) * (stackFactors[entry.slot] ?? 1)), 0)
+      : totalRaw;
+    const totalForPercent = stackFactors ? totalCanonical : totalRaw;
+    const totalValid = Number.isFinite(totalForPercent) && Math.abs(totalForPercent) > EPSILON;
+    let runningRaw = 0;
+    let runningCanonical = 0;
     let hasAnyValue = false;
+
     return entries.map((entry) => {
       if (entry.currentValue !== null && Number.isFinite(entry.currentValue)) {
-        running += entry.currentValue;
+        runningRaw += entry.currentValue;
+        if (stackFactors) {
+          runningCanonical += entry.currentValue * (stackFactors[entry.slot] ?? 1);
+        }
         hasAnyValue = true;
       }
 
       const stackedValue = hasAnyValue
         ? normalizeToPercent
-          ? (totalValid ? (running / total) * 100 : 0)
-          : running
+          ? (totalValid ? ((stackFactors ? runningCanonical : runningRaw) / totalForPercent) * 100 : 0)
+          : stackFactors
+            ? runningCanonical / (stackFactors[entry.slot] ?? 1)
+            : runningRaw
         : null;
       const unit = normalizeToPercent ? "%" : entry.unit;
       return {
@@ -519,7 +551,45 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
   }
 
   private formatValue(value: number | null, unit: string, decimals: number): string {
-    return formatGraphValue(value, unit, decimals);
+    return formatGraphValue(value, unit, decimals, {
+      enabled: this._config?.auto_scale_units === true,
+      baseDecimals: this._config?.decimals_base_unit ?? decimals,
+      prefixedDecimals: this._config?.decimals_prefixed_unit ?? decimals
+    });
+  }
+
+  private resolveStackUnitFactors(entries: Array<Pick<GraphSeriesEntry, "slot" | "unit">>): Partial<Record<GraphSlot, number>> | null {
+    if (entries.length === 0) {
+      return null;
+    }
+
+    let family: "power" | "energy" | null = null;
+    const factors: Partial<Record<GraphSlot, number>> = {};
+    for (const entry of entries) {
+      const parsed = parseConvertibleUnit(entry.unit);
+      if (!parsed) {
+        return null;
+      }
+      if (family === null) {
+        family = parsed.family;
+      } else if (family !== parsed.family) {
+        return null;
+      }
+      factors[entry.slot] = parsed.factor;
+    }
+
+    return Object.keys(factors).length === entries.length ? factors : null;
+  }
+
+  private convertStackedHoverValue(slot: GraphSlot, value: number): number {
+    if (!this._stackCanonicalMode || this._stackNormalizeToPercent) {
+      return value;
+    }
+    const factor = this._stackCanonicalFactors[slot];
+    if (typeof factor !== "number" || !Number.isFinite(factor) || factor <= 0) {
+      return value;
+    }
+    return value / factor;
   }
 
   private readConfigString(value: unknown): string | undefined {
@@ -680,6 +750,9 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
     const drawStartedAt = this.perfNow();
     if (this._drawConfigs.length === 0) {
       this._linePointsBySlot = {};
+      this._stackCanonicalMode = false;
+      this._stackCanonicalFactors = {};
+      this._stackNormalizeToPercent = false;
       if (this._hoverState) {
         this._hoverState = undefined;
       }
@@ -691,6 +764,9 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
     const lineCanvas = this.renderRoot.querySelector<HTMLCanvasElement>(".card-trend-canvas-line");
     if (!areaCanvas || !lineCanvas) {
       this._linePointsBySlot = {};
+      this._stackCanonicalMode = false;
+      this._stackCanonicalFactors = {};
+      this._stackNormalizeToPercent = false;
       if (this._hoverState) {
         this._hoverState = undefined;
       }
@@ -702,6 +778,9 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
     const line = this.prepareTrendCanvas(lineCanvas);
     if (!area || !line) {
       this._linePointsBySlot = {};
+      this._stackCanonicalMode = false;
+      this._stackCanonicalFactors = {};
+      this._stackNormalizeToPercent = false;
       if (this._hoverState) {
         this._hoverState = undefined;
       }
@@ -712,9 +791,13 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
     const fillAreaEnabled = this._config?.fill_area_enabled !== false;
     const normalizeToPercent = this._config?.normalize_stack_to_percent === true;
     const sharedScaleEnabled = this._config?.shared_trend_scale === true;
+    const stackUnitFactors = this.resolveStackUnitFactors(this._drawConfigs);
+    this._stackCanonicalMode = stackUnitFactors !== null;
+    this._stackCanonicalFactors = stackUnitFactors ?? {};
+    this._stackNormalizeToPercent = normalizeToPercent;
     const windowMs = this.trendWindowMs(this._config);
     const linePointsBySlot: Partial<Record<GraphSlot, TrendCanvasPoint[]>> = {};
-    const stackedSeriesBySlotRaw = this.buildStackedTrendSeries(windowMs);
+    const stackedSeriesBySlotRaw = this.buildStackedTrendSeries(windowMs, stackUnitFactors ?? undefined);
     const stackedSeriesBySlot = normalizeToPercent
       ? this.normalizeStackedSeriesToPercent(stackedSeriesBySlotRaw)
       : stackedSeriesBySlotRaw;
@@ -757,11 +840,15 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
       points: drawnPointCount,
       fill_area: fillAreaEnabled,
       shared_scale: sharedScaleEnabled,
-      normalize_percent: normalizeToPercent
+      normalize_percent: normalizeToPercent,
+      stack_units: this._stackCanonicalMode ? "canonical" : "raw"
     });
   }
 
-  private buildStackedTrendSeries(windowMs: number): Partial<Record<GraphSlot, TrendPoint[]>> {
+  private buildStackedTrendSeries(
+    windowMs: number,
+    canonicalFactors?: Partial<Record<GraphSlot, number>>
+  ): Partial<Record<GraphSlot, TrendPoint[]>> {
     const seriesBySlot: Partial<Record<GraphSlot, TrendPoint[]>> = {};
     const sourceOrder = [...this._drawConfigs].sort((left, right) => left.slot - right.slot);
 
@@ -776,10 +863,17 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
       if (normalizedCurrent.length === 0) {
         return;
       }
+      const factor = canonicalFactors?.[drawConfig.slot] ?? 1;
+      const currentForStack = factor === 1
+        ? normalizedCurrent
+        : normalizedCurrent.map((point) => ({
+            ts: point.ts,
+            value: point.value * factor
+          }));
 
       const stacked = cumulative
-        ? this.sumTrendSeries(cumulative, normalizedCurrent)
-        : normalizedCurrent;
+        ? this.sumTrendSeries(cumulative, currentForStack)
+        : currentForStack;
       seriesBySlot[drawConfig.slot] = stacked;
       cumulative = stacked;
     });

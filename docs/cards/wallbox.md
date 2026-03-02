@@ -24,6 +24,9 @@ All options are available in the Lovelace editor, but you can also use YAML.
 | `show_live_value` | boolean | `true` | Show/hide status + power text |
 | `show_command_button` | boolean | `true` | Show/hide play/pause button |
 | `decimals` | number | `1` | Decimal precision for power value |
+| `auto_scale_units` | boolean | `false` | Auto-scale display units (`W <-> kW <-> MW`, `Wh <-> kWh ...`) |
+| `decimals_base_unit` | number | `decimals` | Decimal precision for base units (`W`, `Wh`) |
+| `decimals_prefixed_unit` | number | `decimals` | Decimal precision for prefixed units (`kW`, `MWh`, ...) |
 | `start_service` | string | Optional | Override start service (`domain.service`) |
 | `stop_service` | string | Optional | Override stop service (`domain.service`) |
 | `start_service_data` | object | Optional | Service data payload for start |
@@ -41,4 +44,7 @@ command_entity: input_boolean.dev_wallbox_enabled
 show_mode_selector: true
 show_live_value: true
 show_command_button: true
+auto_scale_units: true
+decimals_base_unit: 0
+decimals_prefixed_unit: 2
 ```

@@ -1,4 +1,5 @@
 import type { HomeAssistant } from "../types";
+import { formatValueWithUnitScaling, type UnitFormatOptions } from "./unit-scaling";
 
 export type GraphLegendLayout = "row" | "column";
 export type GraphSlot = 1 | 2 | 3 | 4;
@@ -193,7 +194,18 @@ export const resolveEntityName = (
   return `Entity ${index}`;
 };
 
-export const formatGraphValue = (value: number | null, unit: string, decimals: number): string => {
+export const formatGraphValue = (
+  value: number | null,
+  unit: string,
+  decimals: number,
+  unitScaling?: UnitFormatOptions
+): string => {
+  if (unitScaling) {
+    return formatValueWithUnitScaling(value, unit, decimals, {
+      ...unitScaling,
+      nullWithUnit: true
+    });
+  }
   if (value === null) {
     return unit ? `-- ${unit}` : "--";
   }
