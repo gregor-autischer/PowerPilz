@@ -142,6 +142,7 @@ interface PowerPilzEnergyCardConfig extends LovelaceCardConfig {
   battery_dual_alignment?: "center" | "left" | "right";
   home_entity?: string;
   home_auto_calculate?: boolean;
+  solar_auto_calculate?: boolean;
   consumption_entity?: string;
   solar_entity?: string;
   production_entity?: string;
@@ -249,6 +250,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       battery_dual_alignment: "center",
       home_entity: homeEntity,
       home_auto_calculate: false,
+      solar_auto_calculate: false,
       solar_entity: solarEntity,
       grid_entity: gridEntity,
       battery_entity: batteryEntity,
@@ -326,6 +328,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       battery_dual_alignment: this.normalizeBatteryDualAlignment(config.battery_dual_alignment),
       home_entity: homeEntity,
       home_auto_calculate: config.home_auto_calculate ?? false,
+      solar_auto_calculate: config.solar_auto_calculate ?? false,
       solar_entity: config.solar_entity ?? config.production_entity,
       solar_sub_enabled: config.solar_sub_enabled ?? false,
       solar_sub_label: config.solar_sub_label ?? "Solar Sub",
@@ -408,9 +411,13 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     const batteryVisible = config.battery_visible !== false;
     const batterySecondaryVisible = batteryVisible && config.battery_secondary_visible === true;
     const batteryDualAlignment = this.normalizeBatteryDualAlignment(config.battery_dual_alignment);
+    const solarSubBlocks = solarVisible ? this.collectSubBlocks("solar", config) : [];
+    const gridSubBlocks = gridVisible ? this.collectSubBlocks("grid", config) : [];
+    const gridSecondarySubBlocks = gridSecondaryVisible ? this.collectSubBlocks("grid_secondary", config) : [];
+    const homeSubBlocks = homeVisible ? this.collectSubBlocks("home", config) : [];
 
     const homeEntityValue = readNumber(this.hass, config.home_entity);
-    const solar = solarVisible ? readNumber(this.hass, config.solar_entity) : null;
+    const solarEntityValue = solarVisible ? readNumber(this.hass, config.solar_entity) : null;
     const grid = gridVisible ? readNumber(this.hass, config.grid_entity) : null;
     const gridSecondary = gridSecondaryVisible ? readNumber(this.hass, config.grid_secondary_entity) : null;
     const battery = batteryVisible ? readNumber(this.hass, config.battery_entity) : null;
@@ -419,13 +426,19 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     const batterySecondaryPercentage = readNumber(this.hass, config.battery_secondary_percentage_entity);
 
     const fallbackUnit = config.unit ?? "kW";
-    const solarUnit = readUnit(this.hass, config.solar_entity) ?? fallbackUnit;
+    const solarEntityUnit = readUnit(this.hass, config.solar_entity) ?? fallbackUnit;
     const gridUnit = readUnit(this.hass, config.grid_entity) ?? fallbackUnit;
     const gridSecondaryUnit = readUnit(this.hass, config.grid_secondary_entity) ?? fallbackUnit;
     const batteryUnit = readUnit(this.hass, config.battery_entity) ?? fallbackUnit;
     const batterySecondaryUnit = readUnit(this.hass, config.battery_secondary_entity) ?? fallbackUnit;
+    const solarUnit = config.solar_auto_calculate === true
+      ? this.resolveAutoSolarUnit(config, solarSubBlocks, fallbackUnit)
+      : solarEntityUnit;
+    const solar = config.solar_auto_calculate === true
+      ? this.computeAutoSolarValueFromSubBlocks(solarSubBlocks, solarUnit)
+      : solarEntityValue;
     const homeUnit = config.home_auto_calculate === true
-      ? this.resolveAutoHomeUnit(config, fallbackUnit)
+      ? this.resolveAutoHomeUnit(config, fallbackUnit, solarUnit)
       : (readUnit(this.hass, config.home_entity) ?? fallbackUnit);
     const home = config.home_auto_calculate === true
       ? this.computeAutoHomeValueFromNodeValues(
@@ -481,10 +494,6 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     const gridSecondaryIconStyle = this.iconColorStyle(config.grid_secondary_icon_color);
     const homeIconStyle = this.iconColorStyle(config.home_icon_color);
     const coreIconStyle = this.iconShapeStyle(config.core_icon_color);
-    const solarSubBlocks = solarVisible ? this.collectSubBlocks("solar", config) : [];
-    const gridSubBlocks = gridVisible ? this.collectSubBlocks("grid", config) : [];
-    const gridSecondarySubBlocks = gridSecondaryVisible ? this.collectSubBlocks("grid_secondary", config) : [];
-    const homeSubBlocks = homeVisible ? this.collectSubBlocks("home", config) : [];
     const homeSubIndexes = new Set(homeSubBlocks.map((entry) => entry.index));
     const solarSubIndexes = new Set(solarSubBlocks.map((entry) => entry.index));
     const homeHas7And8 = homeSubIndexes.has(7) && homeSubIndexes.has(8);
@@ -1345,6 +1354,68 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     return trimmed.length > 0 ? trimmed : undefined;
   }
 
+  private resolveAutoSolarUnit(
+    config: PowerPilzEnergyCardConfig,
+    subBlocks: EnergySubBlockEntry[],
+    fallbackUnit: string
+  ): string {
+    const preferredUnit = config.unit;
+    if (preferredUnit && preferredUnit.trim().length > 0) {
+      return preferredUnit;
+    }
+
+    const subBlockUnit = subBlocks
+      .map((entry) => entry.unit)
+      .find((unit) => typeof unit === "string" && unit.trim().length > 0);
+    if (subBlockUnit) {
+      return subBlockUnit;
+    }
+
+    const solarEntityUnit = readUnit(this.hass, config.solar_entity);
+    if (solarEntityUnit && solarEntityUnit.trim().length > 0) {
+      return solarEntityUnit;
+    }
+
+    return fallbackUnit;
+  }
+
+  private computeAutoSolarValueFromSubBlocks(subBlocks: EnergySubBlockEntry[], outputUnit: string): number | null {
+    const finiteEntries = subBlocks.filter(
+      (entry): entry is EnergySubBlockEntry & { value: number } =>
+        entry.value !== null && Number.isFinite(entry.value)
+    );
+    if (finiteEntries.length === 0) {
+      return null;
+    }
+
+    const rawSum = finiteEntries.reduce((sum, entry) => sum + entry.value, 0);
+    let family: "power" | "energy" | null = null;
+    let canonicalSum = 0;
+    for (const entry of finiteEntries) {
+      const parsed = parseConvertibleUnit(entry.unit);
+      if (!parsed) {
+        return rawSum <= EPSILON ? 0 : rawSum;
+      }
+      if (family === null) {
+        family = parsed.family;
+      } else if (family !== parsed.family) {
+        return rawSum <= EPSILON ? 0 : rawSum;
+      }
+      canonicalSum += entry.value * parsed.factor;
+    }
+
+    let computed = canonicalSum;
+    const parsedOutput = parseConvertibleUnit(outputUnit);
+    if (parsedOutput && family !== null && parsedOutput.family === family && parsedOutput.factor > 0) {
+      computed /= parsedOutput.factor;
+    }
+
+    if (!Number.isFinite(computed)) {
+      return null;
+    }
+    return computed <= EPSILON ? 0 : computed;
+  }
+
   private homeComputationDependencies(config: PowerPilzEnergyCardConfig): HomeComputationDependency[] {
     const dependencies: HomeComputationDependency[] = [];
     const addDependency = (role: HomeComputationRole, entityId: string | undefined): void => {
@@ -1374,10 +1445,23 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     return dependencies;
   }
 
-  private resolveAutoHomeUnit(config: PowerPilzEnergyCardConfig, fallbackUnit: string): string {
+  private resolveAutoHomeUnit(
+    config: PowerPilzEnergyCardConfig,
+    fallbackUnit: string,
+    solarUnitOverride?: string
+  ): string {
     const preferredUnit = config.unit;
     if (preferredUnit && preferredUnit.trim().length > 0) {
       return preferredUnit;
+    }
+
+    if (
+      config.solar_auto_calculate === true
+      && config.solar_visible !== false
+      && solarUnitOverride
+      && solarUnitOverride.trim().length > 0
+    ) {
+      return solarUnitOverride;
     }
 
     const dependencies = this.homeComputationDependencies(config);

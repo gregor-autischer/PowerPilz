@@ -16,6 +16,7 @@ interface EnergyCardConfig extends LovelaceCardConfig {
   battery_dual_alignment?: "center" | "left" | "right";
   home_entity?: string;
   home_auto_calculate?: boolean;
+  solar_auto_calculate?: boolean;
   solar_entity?: string;
   grid_entity?: string;
   grid_secondary_entity?: string;
@@ -160,11 +161,24 @@ const TREND_SOURCE_SELECTOR = {
   }
 } as const;
 
+const SOLAR_AUTO_CALC_HELP =
+  "When enabled, the solar main node shows the sum of all enabled solar sub-node entities instead of the solar entity.";
+const HOME_AUTO_CALC_HELP =
+  "When enabled, the home main node is calculated as solar + grid + grid 2 - battery - battery 2 using compatible unit conversion.";
+const AUTO_SCALE_UNITS_HELP =
+  "Automatically formats values with metric prefixes (for example W/kW/MW and Wh/kWh/MWh).";
+
 const SCHEMA: HaFormSchema[] = [
   { name: "name", selector: { text: {} } },
   nodeStyleSection("Solar node", "mdi:weather-sunny", [
     { name: "solar_visible", selector: { boolean: {} } },
     { name: "solar_entity", selector: { entity: { filter: { domain: "sensor" } } } },
+    {
+      name: "solar_auto_calculate",
+      selector: { boolean: {} },
+      helper: SOLAR_AUTO_CALC_HELP,
+      description: SOLAR_AUTO_CALC_HELP
+    },
     { name: "solar_label", selector: { text: {} } },
     { name: "solar_icon", selector: { icon: {} }, context: { icon_entity: "solar_entity" } },
     {
@@ -210,7 +224,12 @@ const SCHEMA: HaFormSchema[] = [
   nodeStyleSection("Home node", "mdi:home-lightning-bolt", [
     { name: "home_visible", selector: { boolean: {} } },
     { name: "home_entity", selector: { entity: { filter: { domain: "sensor" } } } },
-    { name: "home_auto_calculate", selector: { boolean: {} } },
+    {
+      name: "home_auto_calculate",
+      selector: { boolean: {} },
+      helper: HOME_AUTO_CALC_HELP,
+      description: HOME_AUTO_CALC_HELP
+    },
     { name: "home_label", selector: { text: {} } },
     { name: "home_icon", selector: { icon: {} }, context: { icon_entity: "home_entity" } },
     {
@@ -299,7 +318,12 @@ const SCHEMA: HaFormSchema[] = [
     schema: [
       { name: "unit", selector: { text: {} } },
       { name: "decimals", selector: { number: { mode: "box", min: 0, max: 3, step: 1 } } },
-      { name: "auto_scale_units", selector: { boolean: {} } },
+      {
+        name: "auto_scale_units",
+        selector: { boolean: {} },
+        helper: AUTO_SCALE_UNITS_HELP,
+        description: AUTO_SCALE_UNITS_HELP
+      },
       { name: "decimals_base_unit", selector: { number: { mode: "box", min: 0, max: 4, step: 1 } } },
       { name: "decimals_prefixed_unit", selector: { number: { mode: "box", min: 0, max: 4, step: 1 } } }
     ]
@@ -316,6 +340,7 @@ const LABELS: Record<string, string> = {
   battery_secondary_visible: "Show battery 2",
   battery_dual_alignment: "Battery 2 alignment",
   home_auto_calculate: "Auto-calc home",
+  solar_auto_calculate: "Auto-calc solar",
   home_entity: "Home sensor",
   solar_entity: "Solar sensor",
   grid_entity: "Grid sensor",
@@ -375,7 +400,7 @@ const LABELS: Record<string, string> = {
   flow_color: "Flow line color",
   unit: "Unit",
   decimals: "Decimals",
-  auto_scale_units: "Auto unit scaling (W<->kW, Wh<->kWh)",
+  auto_scale_units: "Auto unit scaling",
   decimals_base_unit: "Decimals (base unit)",
   decimals_prefixed_unit: "Decimals (prefixed units)"
 };
@@ -399,6 +424,7 @@ export class PowerPilzEnergyCardEditor extends LitElement implements LovelaceCar
       battery_secondary_visible: config.battery_secondary_visible ?? false,
       battery_dual_alignment: config.battery_dual_alignment ?? "center",
       home_auto_calculate: config.home_auto_calculate ?? false,
+      solar_auto_calculate: config.solar_auto_calculate ?? false,
       shared_trend_scale: config.shared_trend_scale ?? false,
       trend_data_source: normalizeTrendDataSource(config.trend_data_source, "hybrid"),
       debug_performance: config.debug_performance ?? false,
@@ -424,6 +450,7 @@ export class PowerPilzEnergyCardEditor extends LitElement implements LovelaceCar
         .data=${this._config}
         .schema=${SCHEMA}
         .computeLabel=${this.computeLabel}
+        .computeHelper=${this.computeHelper}
         @value-changed=${this.valueChanged}
       ></ha-form>
     `;
@@ -444,6 +471,20 @@ export class PowerPilzEnergyCardEditor extends LitElement implements LovelaceCar
       return fieldLabels[field] ?? field;
     }
     return LABELS[name] ?? name;
+  };
+
+  private computeHelper = (schema: { name?: string }): string | undefined => {
+    const name = schema.name ?? "";
+    if (name === "solar_auto_calculate") {
+      return SOLAR_AUTO_CALC_HELP;
+    }
+    if (name === "home_auto_calculate") {
+      return HOME_AUTO_CALC_HELP;
+    }
+    if (name === "auto_scale_units") {
+      return AUTO_SCALE_UNITS_HELP;
+    }
+    return undefined;
   };
 
   private valueChanged = (event: CustomEvent<{ value: unknown }>): void => {

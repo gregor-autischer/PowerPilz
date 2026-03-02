@@ -17,6 +17,7 @@ All options are available in the Lovelace editor, but you can also use YAML.
 | `home_entity` | string | Optional | Home consumption entity |
 | `home_auto_calculate` | boolean | `false` | Calculate home value from selected node entities (`solar + grid + grid_secondary - battery - battery_secondary`) with unit normalization (`W <-> kW`, `Wh <-> kWh`) when possible |
 | `solar_entity` | string | Optional | Solar production entity |
+| `solar_auto_calculate` | boolean | `false` | Calculate solar value from enabled solar sub-node entities with unit normalization (`W <-> kW`, `Wh <-> kWh`) when possible |
 | `grid_entity` | string | Optional | Grid power entity |
 | `grid_secondary_entity` | string | Optional | Second grid power entity |
 | `battery_entity` | string | Optional | Battery power entity |
@@ -78,6 +79,7 @@ name: House Energy
 home_entity: sensor.dev_home_power
 home_auto_calculate: false
 solar_entity: sensor.dev_solar_power
+solar_auto_calculate: false
 grid_entity: sensor.dev_grid_power
 battery_entity: sensor.dev_battery_power
 battery_percentage_entity: sensor.dev_battery_soc
