@@ -1366,7 +1366,7 @@ const Zr = "important", Wi = " !" + Zr, R = Vi(class extends Ui {
     canonicalUnit: i,
     factors: r
   };
-}, Le = "0.1.20";
+}, Le = "0.2.0";
 var hs = Object.defineProperty, us = Object.getOwnPropertyDescriptor, Kt = (e, t, r, n) => {
   for (var i = n > 1 ? void 0 : n ? us(t, r) : t, s = e.length - 1, o; s >= 0; s--)
     (o = e[s]) && (i = (n ? o(t, r, i) : o(i)) || i);
