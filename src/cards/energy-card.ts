@@ -1389,7 +1389,10 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
 
       vertical(coreCenter.y, splitY, coreCenter.x, batteryTrunkFlow);
       entries.forEach((entry) => {
-        horizontal(coreCenter.x, entry.center.x, splitY, entry.direction);
+        const horizontalDirection = entry.center.x < coreCenter.x - EPSILON
+          ? this.reverseFlowDirection(entry.direction)
+          : entry.direction;
+        horizontal(coreCenter.x, entry.center.x, splitY, horizontalDirection);
         vertical(splitY, entry.center.y, entry.center.x, entry.direction);
       });
     }

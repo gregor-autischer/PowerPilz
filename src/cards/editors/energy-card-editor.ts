@@ -265,14 +265,26 @@ const GRID_SECONDARY_VISIBLE_HELP =
   "When enabled, the second grid node is shown. When disabled, the second grid node is hidden.";
 const SOLAR_VISIBLE_HELP =
   "When enabled, the main solar node is shown. When disabled, the solar node is hidden.";
+const SOLAR_FLOW_DIRECTION_HELP =
+  "Flow direction: + value animates from Solar to Center. 0 or - value shows no solar flow.";
 const HOME_VISIBLE_HELP =
   "When enabled, the main home node is shown. When disabled, the home node is hidden.";
+const HOME_FLOW_DIRECTION_HELP =
+  "Flow direction: + value animates from Center to Home. 0 or - value shows no home flow.";
 const BATTERY_VISIBLE_HELP =
   "When enabled, the main battery node is shown. When disabled, the battery node is hidden.";
+const BATTERY_FLOW_DIRECTION_HELP =
+  "Flow direction: + value animates from Center to Battery (charging). - value animates Battery to Center (discharging).";
 const BATTERY_SECONDARY_VISIBLE_HELP =
   "When enabled, the second battery node is shown. When disabled, the second battery node is hidden.";
+const BATTERY_SECONDARY_FLOW_DIRECTION_HELP =
+  "Flow direction: + value animates from Center to Battery 2 (charging). - value animates Battery 2 to Center (discharging).";
 const BATTERY_LOW_ALERT_COLOR_HELP =
   "Color used for battery low-threshold alert styling (icon and low trend section).";
+const GRID_FLOW_DIRECTION_HELP =
+  "Flow direction: + value animates from Grid to Center (import). - value animates from Center to Grid (export).";
+const GRID_SECONDARY_FLOW_DIRECTION_HELP =
+  "Flow direction: + value animates from Grid 2 to Center (import). - value animates from Center to Grid 2 (export).";
 const SUB_NODE_IDENTITY_VALUE_RENDER_HELP =
   "In default mode, this sub-node renders the entity as numeric value + unit.";
 const SUB_NODE_STATE_MODE_HELP =
@@ -440,7 +452,12 @@ const SCHEMA: HaFormSchema[] = [
             name: "",
             columns: 2,
             schema: [
-              { name: "solar_entity", selector: { entity: { filter: { domain: "sensor" } } } },
+              {
+                name: "solar_entity",
+                selector: { entity: { filter: { domain: "sensor" } } },
+                helper: SOLAR_FLOW_DIRECTION_HELP,
+                description: SOLAR_FLOW_DIRECTION_HELP
+              },
               { name: "solar_label", selector: { text: {} } }
             ]
           },
@@ -506,7 +523,12 @@ const SCHEMA: HaFormSchema[] = [
             name: "",
             columns: 2,
             schema: [
-              { name: "grid_entity", selector: { entity: { filter: { domain: "sensor" } } } },
+              {
+                name: "grid_entity",
+                selector: { entity: { filter: { domain: "sensor" } } },
+                helper: GRID_FLOW_DIRECTION_HELP,
+                description: GRID_FLOW_DIRECTION_HELP
+              },
               { name: "grid_label", selector: { text: {} } }
             ]
           },
@@ -586,7 +608,12 @@ const SCHEMA: HaFormSchema[] = [
             name: "",
             columns: 2,
             schema: [
-              { name: "grid_secondary_entity", selector: { entity: { filter: { domain: "sensor" } } } },
+              {
+                name: "grid_secondary_entity",
+                selector: { entity: { filter: { domain: "sensor" } } },
+                helper: GRID_SECONDARY_FLOW_DIRECTION_HELP,
+                description: GRID_SECONDARY_FLOW_DIRECTION_HELP
+              },
               { name: "grid_secondary_label", selector: { text: {} } }
             ]
           },
@@ -666,7 +693,12 @@ const SCHEMA: HaFormSchema[] = [
             name: "",
             columns: 2,
             schema: [
-              { name: "home_entity", selector: { entity: { filter: { domain: "sensor" } } } },
+              {
+                name: "home_entity",
+                selector: { entity: { filter: { domain: "sensor" } } },
+                helper: HOME_FLOW_DIRECTION_HELP,
+                description: HOME_FLOW_DIRECTION_HELP
+              },
               { name: "home_label", selector: { text: {} } }
             ]
           },
@@ -732,7 +764,12 @@ const SCHEMA: HaFormSchema[] = [
             name: "",
             columns: 2,
             schema: [
-              { name: "battery_entity", selector: { entity: { filter: { domain: "sensor" } } } },
+              {
+                name: "battery_entity",
+                selector: { entity: { filter: { domain: "sensor" } } },
+                helper: BATTERY_FLOW_DIRECTION_HELP,
+                description: BATTERY_FLOW_DIRECTION_HELP
+              },
               { name: "battery_percentage_entity", selector: { entity: { filter: { domain: "sensor" } } } }
             ]
           },
@@ -830,7 +867,12 @@ const SCHEMA: HaFormSchema[] = [
             name: "",
             columns: 2,
             schema: [
-              { name: "battery_secondary_entity", selector: { entity: { filter: { domain: "sensor" } } } },
+              {
+                name: "battery_secondary_entity",
+                selector: { entity: { filter: { domain: "sensor" } } },
+                helper: BATTERY_SECONDARY_FLOW_DIRECTION_HELP,
+                description: BATTERY_SECONDARY_FLOW_DIRECTION_HELP
+              },
               { name: "battery_secondary_percentage_entity", selector: { entity: { filter: { domain: "sensor" } } } }
             ]
           },
@@ -1085,6 +1127,27 @@ export class PowerPilzEnergyCardEditor extends LitElement implements LovelaceCar
 
   private computeHelper = (schema: { name?: string }): string | undefined => {
     const name = schema.name ?? "";
+    if (name === "solar_entity") {
+      return SOLAR_FLOW_DIRECTION_HELP;
+    }
+    if (name === "grid_entity") {
+      return GRID_FLOW_DIRECTION_HELP;
+    }
+    if (name === "grid_secondary_entity") {
+      return GRID_SECONDARY_FLOW_DIRECTION_HELP;
+    }
+    if (name === "home_entity") {
+      return HOME_FLOW_DIRECTION_HELP;
+    }
+    if (name === "battery_entity") {
+      return BATTERY_FLOW_DIRECTION_HELP;
+    }
+    if (name === "battery_secondary_entity") {
+      return BATTERY_SECONDARY_FLOW_DIRECTION_HELP;
+    }
+    if (/^(solar|home|grid|grid_secondary)_sub_\d+_icon_color$/.test(name)) {
+      return SUB_NODE_IDENTITY_VALUE_RENDER_HELP;
+    }
     if (/^(home|grid|grid_secondary)_sub_\d+_state_mode$/.test(name)) {
       return SUB_NODE_STATE_MODE_HELP;
     }
