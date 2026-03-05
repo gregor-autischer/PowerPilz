@@ -470,6 +470,12 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       batterySecondary,
       batterySecondaryEntityUnit
     );
+    const batteryHasPercentageSource =
+      Boolean(this.readConfigString(config.battery_percentage_entity))
+      || this.isPercentageUnit(batteryEntityUnit);
+    const batterySecondaryHasPercentageSource =
+      Boolean(this.readConfigString(config.battery_secondary_percentage_entity))
+      || this.isPercentageUnit(batterySecondaryEntityUnit);
     const solarUnit = config.solar_auto_calculate === true
       ? this.resolveAutoSolarUnit(config, solarSubBlocksForAutoCalc, fallbackUnit)
       : solarEntityUnit;
@@ -498,10 +504,10 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
           homeUnit
         )
       : homeEntityValue;
-    const batteryTrendUnit = batteryDisplayPercentage !== null
+    const batteryTrendUnit = batteryHasPercentageSource
       ? (batteryPercentageEntityUnit ?? "%")
       : batteryUnit;
-    const batterySecondaryTrendUnit = batterySecondaryDisplayPercentage !== null
+    const batterySecondaryTrendUnit = batterySecondaryHasPercentageSource
       ? (batterySecondaryPercentageEntityUnit ?? "%")
       : batterySecondaryUnit;
 
@@ -695,15 +701,19 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       ? GRID_EXPORT_THRESHOLD
       : null;
     const batteryTrendThreshold = batteryLowAlertEnabled
-      && batteryDisplayPercentage !== null
+      && batteryHasPercentageSource
       ? batteryLowThreshold
       : null;
-    const batteryTrendValue = batteryDisplayPercentage ?? battery;
+    const batteryTrendValue = batteryHasPercentageSource
+      ? batteryDisplayPercentage
+      : battery;
     const batterySecondaryTrendThreshold = batterySecondaryLowAlertEnabled
-      && batterySecondaryDisplayPercentage !== null
+      && batterySecondaryHasPercentageSource
       ? batterySecondaryLowThreshold
       : null;
-    const batterySecondaryTrendValue = batterySecondaryDisplayPercentage ?? batterySecondary;
+    const batterySecondaryTrendValue = batterySecondaryHasPercentageSource
+      ? batterySecondaryDisplayPercentage
+      : batterySecondary;
 
     const flowSegments = this.buildFlowSegments(
       homePlacement,
