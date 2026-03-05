@@ -95,28 +95,81 @@ type HaFormSchema = Record<string, unknown>;
 const SOLAR_SUB_BLOCK_COUNT = 4;
 const HOME_SUB_BLOCK_COUNT = 8;
 const GRID_SUB_BLOCK_COUNT = 2;
+const SUB_NODE_STATE_MODE_PREFIXES = new Set(["solar", "home", "grid", "grid_secondary"]);
 
 const subBlockFields = (prefix: "solar" | "home" | "grid" | "grid_secondary", index: number): HaFormSchema[] => {
   const slot = `${prefix}_sub_${index}`;
+  const supportsStateMode = SUB_NODE_STATE_MODE_PREFIXES.has(prefix);
+
   return [
-    { name: `${slot}_enabled`, selector: { boolean: {} } },
     {
       type: "grid",
       name: "",
       schema: [
-        { name: `${slot}_entity`, selector: { entity: { filter: { domain: "sensor" } } } },
-        { name: `${slot}_label`, selector: { text: {} } },
+        { name: `${slot}_enabled`, selector: { boolean: {} } }
+      ]
+    },
+    {
+      type: "expandable",
+      name: "",
+      title: "Identity",
+      icon: "mdi:view-list-outline",
+      expanded: true,
+      schema: [
         {
-          name: `${slot}_icon`,
-          selector: { icon: {} },
-          context: { icon_entity: `${slot}_entity` }
+          type: "grid",
+          name: "",
+          columns: 2,
+          schema: [
+            { name: `${slot}_entity`, selector: { entity: { filter: { domain: "sensor" } } } },
+            { name: `${slot}_label`, selector: { text: {} } }
+          ]
         },
         {
-          name: `${slot}_icon_color`,
-          selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+          type: "grid",
+          name: "",
+          columns: 2,
+          schema: [
+            {
+              name: `${slot}_icon`,
+              selector: { icon: {} },
+              context: { icon_entity: `${slot}_entity` }
+            },
+            {
+              name: `${slot}_icon_color`,
+              selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } },
+              helper: SUB_NODE_IDENTITY_VALUE_RENDER_HELP,
+              description: SUB_NODE_IDENTITY_VALUE_RENDER_HELP
+            }
+          ]
         }
       ]
-    }
+    },
+    ...(supportsStateMode
+      ? [
+          {
+            type: "expandable",
+            name: "",
+            title: "Display mode",
+            icon: "mdi:form-dropdown",
+            expanded: true,
+            schema: [
+              {
+                type: "grid",
+                name: "",
+                schema: [
+                  {
+                    name: `${slot}_state_mode`,
+                    selector: { boolean: {} },
+                    helper: prefix === "solar" ? SOLAR_SUB_NODE_STATE_MODE_HELP : SUB_NODE_STATE_MODE_HELP,
+                    description: prefix === "solar" ? SOLAR_SUB_NODE_STATE_MODE_HELP : SUB_NODE_STATE_MODE_HELP
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      : [])
   ];
 };
 
@@ -199,7 +252,7 @@ const toConfigTrendDataSource = (value: unknown): TrendDataSource | "auto" => {
 };
 
 const SOLAR_AUTO_CALC_HELP =
-  "When enabled, the solar main node shows the sum of all enabled solar sub-node entities instead of the solar entity.";
+  "When enabled, the solar main node shows the sum of enabled solar sub-node entities instead of the solar entity. Solar sub-nodes with State mode enabled are excluded from this sum.";
 const HOME_AUTO_CALC_HELP =
   "When enabled, the home main node is calculated as solar + grid + grid 2 - battery - battery 2 using compatible unit conversion.";
 const GRID_EXPORT_HIGHLIGHT_HELP =
@@ -220,6 +273,12 @@ const BATTERY_SECONDARY_VISIBLE_HELP =
   "When enabled, the second battery node is shown. When disabled, the second battery node is hidden.";
 const BATTERY_LOW_ALERT_COLOR_HELP =
   "Color used for battery low-threshold alert styling (icon and low trend section).";
+const SUB_NODE_IDENTITY_VALUE_RENDER_HELP =
+  "In default mode, this sub-node renders the entity as numeric value + unit.";
+const SUB_NODE_STATE_MODE_HELP =
+  "When enabled, this sub-node displays the entity state text (for example AUS/WW/HZ) instead of numeric value + unit.";
+const SOLAR_SUB_NODE_STATE_MODE_HELP =
+  "When enabled, this solar sub-node displays entity state text instead of numeric value + unit and is excluded from Solar auto-calc.";
 const AUTO_SCALE_UNITS_HELP =
   "Automatically formats values with metric prefixes (for example W/kW/MW and Wh/kWh/MWh).";
 const UNIT_FIELD_HELP =
@@ -1006,7 +1065,9 @@ export class PowerPilzEnergyCardEditor extends LitElement implements LovelaceCar
 
   private computeLabel = (schema: { name?: string }): string => {
     const name = schema.name ?? "";
-    const subMatch = name.match(/^(solar|home|grid|grid_secondary)_sub_(\d+)_(enabled|entity|label|icon|icon_color)$/);
+    const subMatch = name.match(
+      /^(solar|home|grid|grid_secondary)_sub_(\d+)_(enabled|entity|label|icon|icon_color|state_mode)$/
+    );
     if (subMatch) {
       const [, , , field] = subMatch;
       const fieldLabels: Record<string, string> = {
@@ -1014,7 +1075,8 @@ export class PowerPilzEnergyCardEditor extends LitElement implements LovelaceCar
         entity: "Entity",
         label: "Label",
         icon: "Icon",
-        icon_color: "Color"
+        icon_color: "Color",
+        state_mode: "State mode"
       };
       return fieldLabels[field] ?? field;
     }
@@ -1023,6 +1085,12 @@ export class PowerPilzEnergyCardEditor extends LitElement implements LovelaceCar
 
   private computeHelper = (schema: { name?: string }): string | undefined => {
     const name = schema.name ?? "";
+    if (/^(home|grid|grid_secondary)_sub_\d+_state_mode$/.test(name)) {
+      return SUB_NODE_STATE_MODE_HELP;
+    }
+    if (/^solar_sub_\d+_state_mode$/.test(name)) {
+      return SOLAR_SUB_NODE_STATE_MODE_HELP;
+    }
     if (name === "solar_visible") {
       return SOLAR_VISIBLE_HELP;
     }

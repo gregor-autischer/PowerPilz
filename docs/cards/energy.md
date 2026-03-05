@@ -17,7 +17,7 @@ All options are available in the Lovelace editor, but you can also use YAML.
 | `home_entity` | string | Optional | Home consumption entity |
 | `home_auto_calculate` | boolean | `false` | Calculate home value from selected node entities (`solar + grid + grid_secondary - battery - battery_secondary`) with unit normalization (`W <-> kW`, `Wh <-> kWh`) when possible |
 | `solar_entity` | string | Optional | Solar production entity |
-| `solar_auto_calculate` | boolean | `false` | Calculate solar value from enabled solar sub-node entities with unit normalization (`W <-> kW`, `Wh <-> kWh`) when possible |
+| `solar_auto_calculate` | boolean | `false` | Calculate solar value from enabled solar sub-node entities with unit normalization (`W <-> kW`, `Wh <-> kWh`) when possible. Solar sub-nodes with `state_mode` enabled are excluded |
 | `grid_entity` | string | Optional | Grid power entity |
 | `grid_secondary_entity` | string | Optional | Second grid power entity |
 | `battery_entity` | string | Optional | Battery power entity |
@@ -73,13 +73,17 @@ Energy sub-nodes are configured with repeated fields:
 | `solar_sub_<n>_label` | `n=1..4` | Solar sub-node label |
 | `solar_sub_<n>_icon` | `n=1..4` | Solar sub-node icon |
 | `solar_sub_<n>_icon_color` | `n=1..4` | Solar sub-node icon color |
+| `solar_sub_<n>_state_mode` | `n=1..4` | Show raw entity state text instead of numeric value + unit; excluded from solar auto-calc |
 | `home_sub_<n>_enabled` | `n=1..8` | Enable home sub-node |
 | `home_sub_<n>_entity` | `n=1..8` | Home sub-node entity |
 | `home_sub_<n>_label` | `n=1..8` | Home sub-node label |
 | `home_sub_<n>_icon` | `n=1..8` | Home sub-node icon |
 | `home_sub_<n>_icon_color` | `n=1..8` | Home sub-node icon color |
+| `home_sub_<n>_state_mode` | `n=1..8` | Show raw entity state text instead of numeric value + unit |
 | `grid_sub_<n>_*` | `n=1..2` | Grid 1 sub-node options (same fields as above) |
+| `grid_sub_<n>_state_mode` | `n=1..2` | Show raw entity state text instead of numeric value + unit |
 | `grid_secondary_sub_<n>_*` | `n=1..2` | Grid 2 sub-node options (same fields as above) |
+| `grid_secondary_sub_<n>_state_mode` | `n=1..2` | Show raw entity state text instead of numeric value + unit |
 
 ## Example YAML
 

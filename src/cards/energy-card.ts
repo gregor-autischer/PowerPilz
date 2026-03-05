@@ -9,7 +9,7 @@ import type {
   LovelaceGridOptions,
   LovelaceLayoutOptions
 } from "../types";
-import { readNumber, readUnit } from "../utils/entity";
+import { readNumber, readState, readUnit } from "../utils/entity";
 import {
   fetchHistoryTrendPointsBatch,
   mergeHistoryTrendPoints,
@@ -106,6 +106,8 @@ interface EnergySubBlockEntry {
   label: string;
   value: number | null;
   unit: string;
+  stateMode: boolean;
+  stateText?: string;
 }
 
 interface SubNodeConnectorSegment {
@@ -434,6 +436,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     const batterySecondaryVisible = batteryVisible && config.battery_secondary_visible === true;
     const batteryDualAlignment = this.normalizeBatteryDualAlignment(config.battery_dual_alignment);
     const solarSubBlocks = solarVisible ? this.collectSubBlocks("solar", config) : [];
+    const solarSubBlocksForAutoCalc = solarSubBlocks.filter((entry) => !entry.stateMode);
     const gridSubBlocks = gridVisible ? this.collectSubBlocks("grid", config) : [];
     const gridSecondarySubBlocks = gridSecondaryVisible ? this.collectSubBlocks("grid_secondary", config) : [];
     const homeSubBlocks = homeVisible ? this.collectSubBlocks("home", config) : [];
@@ -451,13 +454,27 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     const solarEntityUnit = readUnit(this.hass, config.solar_entity) ?? fallbackUnit;
     const gridUnit = readUnit(this.hass, config.grid_entity) ?? fallbackUnit;
     const gridSecondaryUnit = readUnit(this.hass, config.grid_secondary_entity) ?? fallbackUnit;
-    const batteryUnit = readUnit(this.hass, config.battery_entity) ?? fallbackUnit;
-    const batterySecondaryUnit = readUnit(this.hass, config.battery_secondary_entity) ?? fallbackUnit;
+    const batteryEntityUnit = readUnit(this.hass, config.battery_entity);
+    const batteryPercentageEntityUnit = readUnit(this.hass, config.battery_percentage_entity);
+    const batterySecondaryEntityUnit = readUnit(this.hass, config.battery_secondary_entity);
+    const batterySecondaryPercentageEntityUnit = readUnit(this.hass, config.battery_secondary_percentage_entity);
+    const batteryUnit = batteryEntityUnit ?? fallbackUnit;
+    const batterySecondaryUnit = batterySecondaryEntityUnit ?? fallbackUnit;
+    const batteryDisplayPercentage = this.resolveBatteryPercentage(
+      batteryPercentage,
+      battery,
+      batteryEntityUnit
+    );
+    const batterySecondaryDisplayPercentage = this.resolveBatteryPercentage(
+      batterySecondaryPercentage,
+      batterySecondary,
+      batterySecondaryEntityUnit
+    );
     const solarUnit = config.solar_auto_calculate === true
-      ? this.resolveAutoSolarUnit(config, solarSubBlocks, fallbackUnit)
+      ? this.resolveAutoSolarUnit(config, solarSubBlocksForAutoCalc, fallbackUnit)
       : solarEntityUnit;
     const solar = config.solar_auto_calculate === true
-      ? this.computeAutoSolarValueFromSubBlocks(solarSubBlocks, solarUnit)
+      ? this.computeAutoSolarValueFromSubBlocks(solarSubBlocksForAutoCalc, solarUnit)
       : solarEntityValue;
     const homeUnit = config.home_auto_calculate === true
       ? this.resolveAutoHomeUnit(config, fallbackUnit, solarUnit)
@@ -481,11 +498,11 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
           homeUnit
         )
       : homeEntityValue;
-    const batteryTrendUnit = batteryPercentage !== null
-      ? (readUnit(this.hass, config.battery_percentage_entity) ?? "%")
+    const batteryTrendUnit = batteryDisplayPercentage !== null
+      ? (batteryPercentageEntityUnit ?? "%")
       : batteryUnit;
-    const batterySecondaryTrendUnit = batterySecondaryPercentage !== null
-      ? (readUnit(this.hass, config.battery_secondary_percentage_entity) ?? "%")
+    const batterySecondaryTrendUnit = batterySecondaryDisplayPercentage !== null
+      ? (batterySecondaryPercentageEntityUnit ?? "%")
       : batterySecondaryUnit;
 
     const solarFlow = this.toUnidirectionalFlow(solar);
@@ -617,25 +634,32 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       config.battery_secondary_low_alert_color,
       defaultAlertColor
     );
-    const batteryIsLow = batteryLowAlertEnabled && batteryPercentage !== null && batteryPercentage <= batteryLowThreshold;
+    const batteryIsLow =
+      batteryLowAlertEnabled
+      && batteryDisplayPercentage !== null
+      && batteryDisplayPercentage <= batteryLowThreshold;
     const batteryIconStyle = this.iconColorStyle(
       batteryIsLow
         ? batteryLowAlertColor
         : config.battery_icon_color
     );
-    const batteryIcon = this.batteryIcon(batteryPercentage, battery, config.battery_icon);
+    const batteryIcon = this.batteryIcon(
+      batteryDisplayPercentage,
+      this.isPercentageUnit(batteryEntityUnit) ? null : battery,
+      config.battery_icon
+    );
     const batterySecondaryIsLow =
       batterySecondaryLowAlertEnabled
-      && batterySecondaryPercentage !== null
-      && batterySecondaryPercentage <= batterySecondaryLowThreshold;
+      && batterySecondaryDisplayPercentage !== null
+      && batterySecondaryDisplayPercentage <= batterySecondaryLowThreshold;
     const batterySecondaryIconStyle = this.iconColorStyle(
       batterySecondaryIsLow
         ? batterySecondaryLowAlertColor
         : config.battery_secondary_icon_color
     );
     const batterySecondaryIcon = this.batteryIcon(
-      batterySecondaryPercentage,
-      batterySecondary,
+      batterySecondaryDisplayPercentage,
+      this.isPercentageUnit(batterySecondaryEntityUnit) ? null : batterySecondary,
       config.battery_secondary_icon
     );
     const gridExportsToGrid = grid !== null && Number.isFinite(grid) && grid < 0;
@@ -671,15 +695,15 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       ? GRID_EXPORT_THRESHOLD
       : null;
     const batteryTrendThreshold = batteryLowAlertEnabled
-      && (Boolean(config.battery_percentage_entity) || batteryPercentage !== null)
+      && batteryDisplayPercentage !== null
       ? batteryLowThreshold
       : null;
-    const batteryTrendValue = batteryPercentage ?? battery;
+    const batteryTrendValue = batteryDisplayPercentage ?? battery;
     const batterySecondaryTrendThreshold = batterySecondaryLowAlertEnabled
-      && (Boolean(config.battery_secondary_percentage_entity) || batterySecondaryPercentage !== null)
+      && batterySecondaryDisplayPercentage !== null
       ? batterySecondaryLowThreshold
       : null;
-    const batterySecondaryTrendValue = batterySecondaryPercentage ?? batterySecondary;
+    const batterySecondaryTrendValue = batterySecondaryDisplayPercentage ?? batterySecondary;
 
     const flowSegments = this.buildFlowSegments(
       homePlacement,
@@ -861,13 +885,13 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
                     <div class="energy-content">
                       <div class="battery-top-row">
                         <ha-icon class="energy-icon" .icon=${batteryIcon} style=${styleMap(batteryIconStyle)}></ha-icon>
-                        ${batteryPercentage !== null
+                        ${batteryDisplayPercentage !== null
                           ? html`
                               <div
                                 class="battery-percentage ${batteryIsLow ? "alert" : ""}"
                                 style=${styleMap(batteryIsLow ? { color: batteryLowAlertColor } : {})}
                               >
-                                ${this.formatBatteryPercentage(batteryPercentage)}
+                                ${this.formatBatteryPercentage(batteryDisplayPercentage)}
                               </div>
                             `
                           : nothing}
@@ -901,13 +925,13 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
                           .icon=${batterySecondaryIcon}
                           style=${styleMap(batterySecondaryIconStyle)}
                         ></ha-icon>
-                        ${batterySecondaryPercentage !== null
+                        ${batterySecondaryDisplayPercentage !== null
                           ? html`
                               <div
                                 class="battery-percentage ${batterySecondaryIsLow ? "alert" : ""}"
                                 style=${styleMap(batterySecondaryIsLow ? { color: batterySecondaryLowAlertColor } : {})}
                               >
-                                ${this.formatBatteryPercentage(batterySecondaryPercentage)}
+                                ${this.formatBatteryPercentage(batterySecondaryDisplayPercentage)}
                               </div>
                             `
                           : nothing}
@@ -999,6 +1023,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       if (!enabled || !entityId) {
         continue;
       }
+      const stateMode = config[`${node}_sub_${index}_state_mode`] === true;
 
       entries.push({
         key: `${node}_${index}`,
@@ -1007,7 +1032,9 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
         iconStyle: this.iconColorStyle(config[`${node}_sub_${index}_icon_color`] as string | number[] | undefined),
         label: this.readConfigString(config[`${node}_sub_${index}_label`]) ?? `${defaultLabelPrefix} ${index}`,
         value: readNumber(this.hass, entityId),
-        unit: readUnit(this.hass, entityId) ?? config.unit ?? "kW"
+        unit: readUnit(this.hass, entityId) ?? config.unit ?? "kW",
+        stateMode,
+        stateText: stateMode ? readState(this.hass, entityId) : undefined
       });
     }
 
@@ -1043,7 +1070,8 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
         iconStyle: this.iconColorStyle(legacyColor),
         label: legacyLabel,
         value: readNumber(this.hass, legacyEntity),
-        unit: readUnit(this.hass, legacyEntity) ?? config.unit ?? "kW"
+        unit: readUnit(this.hass, legacyEntity) ?? config.unit ?? "kW",
+        stateMode: false
       }
     ];
   }
@@ -1390,19 +1418,29 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
             "grid-column": `${position.col}`,
             "grid-row": `${position.row}`
           };
-          const formattedValue = this.formatValue(entry.value, entry.unit, decimals);
-          const compactParts = this.splitFormattedValueAndUnit(formattedValue, entry.unit);
+          const stateText = entry.stateText?.trim() ?? "";
+          const stateModeEnabled = entry.stateMode;
+          const stateMissing = stateText.length === 0;
+          const formattedValue = stateModeEnabled
+            ? (stateMissing ? "--" : stateText)
+            : this.formatValue(entry.value, entry.unit, decimals);
+          const compactParts = stateModeEnabled
+            ? { value: formattedValue, unit: "" }
+            : this.splitFormattedValueAndUnit(formattedValue, entry.unit);
+          const missing = stateModeEnabled ? stateMissing : entry.value === null;
 
           return html`
             <div
-              class="energy-sub-value ${node}-sub sub-col-${position.col} ${this._compactSubBlocks ? "compact" : ""} ${entry.value === null ? "missing" : ""}"
+              class="energy-sub-value ${node}-sub sub-col-${position.col} ${this._compactSubBlocks ? "compact" : ""} ${missing ? "missing" : ""}"
               data-key=${entry.key}
               style=${styleMap(blockStyle)}
             >
               <div class="energy-sub-content">
                 <ha-icon class="energy-sub-icon" .icon=${entry.icon} style=${styleMap(entry.iconStyle)}></ha-icon>
                 <div class="energy-sub-number">${this._compactSubBlocks ? compactParts.value : formattedValue}</div>
-                <div class="energy-sub-unit">${compactParts.unit}</div>
+                ${stateModeEnabled
+                  ? nothing
+                  : html`<div class="energy-sub-unit">${compactParts.unit}</div>`}
                 <div class="energy-sub-label">${entry.label}</div>
               </div>
             </div>
@@ -3365,6 +3403,27 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       return 20;
     }
     return Math.max(0, Math.min(100, value));
+  }
+
+  private resolveBatteryPercentage(
+    percentageValue: number | null,
+    batteryValue: number | null,
+    batteryUnit?: string
+  ): number | null {
+    if (percentageValue !== null) {
+      return percentageValue;
+    }
+    if (!this.isPercentageUnit(batteryUnit)) {
+      return null;
+    }
+    return batteryValue;
+  }
+
+  private isPercentageUnit(unit?: string): boolean {
+    if (!unit) {
+      return false;
+    }
+    return unit.trim() === "%";
   }
 
   private normalizeBatteryDualAlignment(value?: unknown): "center" | "left" | "right" {
