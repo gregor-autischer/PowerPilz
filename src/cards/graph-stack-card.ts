@@ -491,12 +491,21 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
 
   private withStackedCurrentValues(entries: GraphSeriesEntry[], normalizeToPercent: boolean): GraphSeriesEntry[] {
     const stackFactors = this.resolveStackUnitFactors(entries);
-    const totalRaw = entries.reduce((sum, entry) => sum + (entry.currentValue ?? 0), 0);
+    const totalRaw = entries.reduce((sum, entry) => (
+      entry.currentValue !== null && Number.isFinite(entry.currentValue)
+        ? sum + entry.currentValue
+        : sum
+    ), 0);
     const totalCanonical = stackFactors
-      ? entries.reduce((sum, entry) => sum + ((entry.currentValue ?? 0) * (stackFactors[entry.slot] ?? 1)), 0)
+      ? entries.reduce((sum, entry) => (
+        entry.currentValue !== null && Number.isFinite(entry.currentValue)
+          ? sum + (entry.currentValue * (stackFactors[entry.slot] ?? 1))
+          : sum
+      ), 0)
       : totalRaw;
     const totalForPercent = stackFactors ? totalCanonical : totalRaw;
     const totalValid = Number.isFinite(totalForPercent) && Math.abs(totalForPercent) > EPSILON;
+    const totalSlot = entries[entries.length - 1]?.slot;
     let runningRaw = 0;
     let runningCanonical = 0;
     let hasAnyValue = false;
@@ -512,7 +521,13 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
 
       const stackedValue = hasAnyValue
         ? normalizeToPercent
-          ? (totalValid ? ((stackFactors ? runningCanonical : runningRaw) / totalForPercent) * 100 : 0)
+          ? (
+            !totalValid
+              ? 0
+              : entry.slot === totalSlot
+                ? 100
+                : Math.max(0, Math.min(100, ((stackFactors ? runningCanonical : runningRaw) / totalForPercent) * 100))
+          )
           : stackFactors
             ? runningCanonical / (stackFactors[entry.slot] ?? 1)
             : runningRaw
@@ -810,7 +825,7 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
       ? this.normalizeStackedSeriesToPercent(stackedSeriesBySlotRaw)
       : stackedSeriesBySlotRaw;
     const stackedRange = normalizeToPercent
-      ? (sharedScaleEnabled ? { min: 0, max: 100 } : null)
+      ? { min: 0, max: 100 }
       : (sharedScaleEnabled ? this.computeStackedValueRange(stackedSeriesBySlot) : null);
     let drawnSeries = 0;
     let drawnPointCount = 0;

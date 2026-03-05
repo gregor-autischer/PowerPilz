@@ -6256,15 +6256,16 @@ let K = class extends U {
     return r;
   }
   withStackedCurrentValues(e, t) {
-    const r = this.resolveStackUnitFactors(e), n = e.reduce((d, h) => d + (h.currentValue ?? 0), 0), i = r ? e.reduce((d, h) => d + (h.currentValue ?? 0) * (r[h.slot] ?? 1), 0) : n, s = r ? i : n, o = Number.isFinite(s) && Math.abs(s) > ae;
-    let a = 0, l = 0, c = !1;
-    return e.map((d) => {
-      d.currentValue !== null && Number.isFinite(d.currentValue) && (a += d.currentValue, r && (l += d.currentValue * (r[d.slot] ?? 1)), c = !0);
-      const h = c ? t ? o ? (r ? l : a) / s * 100 : 0 : r ? l / (r[d.slot] ?? 1) : a : null, _ = t ? "%" : d.unit;
+    var h;
+    const r = this.resolveStackUnitFactors(e), n = e.reduce((_, u) => u.currentValue !== null && Number.isFinite(u.currentValue) ? _ + u.currentValue : _, 0), i = r ? e.reduce((_, u) => u.currentValue !== null && Number.isFinite(u.currentValue) ? _ + u.currentValue * (r[u.slot] ?? 1) : _, 0) : n, s = r ? i : n, o = Number.isFinite(s) && Math.abs(s) > ae, a = (h = e[e.length - 1]) == null ? void 0 : h.slot;
+    let l = 0, c = 0, d = !1;
+    return e.map((_) => {
+      _.currentValue !== null && Number.isFinite(_.currentValue) && (l += _.currentValue, r && (c += _.currentValue * (r[_.slot] ?? 1)), d = !0);
+      const u = d ? t ? o ? _.slot === a ? 100 : Math.max(0, Math.min(100, (r ? c : l) / s * 100)) : 0 : r ? c / (r[_.slot] ?? 1) : l : null, m = t ? "%" : _.unit;
       return {
-        ...d,
-        unit: _,
-        secondary: this.formatValue(h, _, d.decimals)
+        ..._,
+        unit: m,
+        secondary: this.formatValue(u, m, _.decimals)
       };
     });
   }
@@ -6420,7 +6421,7 @@ let K = class extends U {
     }
     const s = ((y = this._config) == null ? void 0 : y.fill_area_enabled) !== !1, o = ((b = this._config) == null ? void 0 : b.normalize_stack_to_percent) === !0, a = ((v = this._config) == null ? void 0 : v.shared_trend_scale) === !0, l = this.resolveStackUnitFactors(this._drawConfigs);
     this._stackCanonicalMode = l !== null, this._stackCanonicalFactors = l ?? {}, this._stackNormalizeToPercent = o;
-    const c = this.trendWindowMs(this._config), d = {}, h = this.buildStackedTrendSeries(c, l ?? void 0), _ = o ? this.normalizeStackedSeriesToPercent(h) : h, u = o ? a ? { min: 0, max: 100 } : null : a ? this.computeStackedValueRange(_) : null;
+    const c = this.trendWindowMs(this._config), d = {}, h = this.buildStackedTrendSeries(c, l ?? void 0), _ = o ? this.normalizeStackedSeriesToPercent(h) : h, u = o ? { min: 0, max: 100 } : a ? this.computeStackedValueRange(_) : null;
     let m = 0, S = 0;
     [...this._drawConfigs].sort((w, x) => x.slot - w.slot).forEach((w) => {
       const x = _[w.slot] ?? [];
