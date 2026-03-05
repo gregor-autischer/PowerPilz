@@ -1366,7 +1366,7 @@ const yn = "important", ls = " !" + yn, R = os(class extends as {
     canonicalUnit: i,
     factors: r
   };
-}, De = "0.2.0";
+}, De = "0.2.1";
 var Rs = Object.defineProperty, zs = Object.getOwnPropertyDescriptor, _r = (e, t, r, n) => {
   for (var i = n > 1 ? void 0 : n ? zs(t, r) : t, s = e.length - 1, o; s >= 0; s--)
     (o = e[s]) && (i = (n ? o(t, r, i) : o(i)) || i);
