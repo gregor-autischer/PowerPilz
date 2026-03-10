@@ -53,6 +53,14 @@ resources:
     type: module
 ```
 
+### Video guide (German)
+
+If you prefer a walkthrough, this video explains the Energy card setup step by step (in German):
+
+- **Mushroom Dashboard für Energie in Home Assistant? Das geht jetzt - mit PowerPilz!**  
+  https://youtu.be/u9PQqn1xABs
+
+
 ### Manual
 
 1. Download `power-pilz.js` from the latest release.
