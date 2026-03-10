@@ -40,11 +40,6 @@ Steps:
 6. Search for `PowerPilz` in HACS Frontend and click `Download`.
 7. Reload browser when prompted.
 
-Notes:
-
-- Use the same repository URL above. No special `build` URL is required in HACS.
-- The `build` branch is only used internally to generate tagged releases and release assets.
-
 If resource auto-registration is disabled or you use YAML dashboards, add:
 
 ```yaml
@@ -55,19 +50,14 @@ resources:
 
 ### Video guide (German)
 
-If you prefer a walkthrough, this video explains the Energy card setup step by step (in German):
+If you prefer a walkthrough, this video explains the Energy card setup step by step (**in German**):
 
-- **Mushroom Dashboard für Energie in Home Assistant? Das geht jetzt - mit PowerPilz!**  
-  https://youtu.be/u9PQqn1xABs
+<p align="center">
+  <a href="https://youtu.be/u9PQqn1xABs">
+    <img src="https://img.youtube.com/vi/u9PQqn1xABs/maxresdefault.jpg" alt="Mushroom Dashboard für Energie in Home Assistant? Das geht jetzt - mit PowerPilz! (German)" width="720">
+  </a>
+</p>
 
-
-### Manual
-
-1. Download `power-pilz.js` from the latest release.
-2. Put `power-pilz.js` in your Home Assistant `config/www` folder.
-3. Add resource to dashboard:
-   - URL: `/local/power-pilz.js`
-   - Type: `JavaScript Module`
 
 ## Usage
 
