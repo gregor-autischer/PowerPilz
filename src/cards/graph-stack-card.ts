@@ -1336,9 +1336,13 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
       return;
     }
 
+    const configForEvent = this._config.entity
+      ? this._config
+      : { ...this._config, entity: this._config.entity_1 };
+
     this.dispatchEvent(
       new CustomEvent("hass-action", {
-        detail: { config: this._config, action },
+        detail: { config: configForEvent, action },
         bubbles: true,
         composed: true
       })
