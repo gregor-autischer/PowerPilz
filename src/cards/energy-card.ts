@@ -24,10 +24,10 @@ import {
   parseConvertibleUnit,
   resolveComparableUnitContext
 } from "../utils/unit-scaling";
+import { bindActionHandler, type ActionHandlerCleanup } from "../utils/action-handler";
 import "./editors/energy-card-editor";
 
 type FlowDirection = "none" | "forward" | "backward";
-type TapActionType = "none" | "navigate" | "more-info";
 type NodeKey = "solar" | "grid" | "grid_secondary" | "home" | "battery" | "battery_secondary";
 type HomeComputationRole = Exclude<NodeKey, "home">;
 
@@ -54,10 +54,9 @@ const EDITOR_PREVIEW_SELECTOR = [
   "hui-editor-card-preview"
 ].join(", ");
 
-interface TapActionConfig {
-  action?: TapActionType;
-  navigation_path?: string;
-  entity?: string;
+interface ActionConfig {
+  action?: string;
+  [key: string]: unknown;
 }
 
 interface TrendPoint {
@@ -222,8 +221,9 @@ interface PowerPilzEnergyCardConfig extends LovelaceCardConfig {
   unit?: string;
   decimals?: number;
   details_navigation_path?: string;
-  details_entity?: string;
-  tap_action?: TapActionConfig;
+  tap_action?: ActionConfig;
+  hold_action?: ActionConfig;
+  double_tap_action?: ActionConfig;
 }
 
 @customElement("power-pilz-energy-card")
@@ -302,6 +302,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
   @state()
   private _subNodeConnectorSegments: SubNodeConnectorSegment[] = [];
 
+  private _actionHandler?: ActionHandlerCleanup;
   private _trendRefreshTimer?: number;
   private _trendRefreshInFlight = false;
   private _lastTrendRefresh = 0;
@@ -531,8 +532,8 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     const batteryCombinedFlow = (battery === null && batterySecondary === null)
       ? "none"
       : this.toBidirectionalFlow(batteryCombinedValue);
-    const tapAction = this.resolveTapAction(config);
-    const interactive = !this.isEditorPreview() && tapAction.action !== "none";
+    const hasAction = this.hasConfiguredAction(config);
+    const interactive = !this.isEditorPreview() && hasAction;
 
     const solarIconStyle = this.iconColorStyle(config.solar_icon_color);
     const homeIconStyle = this.iconColorStyle(config.home_icon_color);
@@ -738,7 +739,6 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
         class=${interactive ? "interactive" : ""}
         tabindex=${interactive ? 0 : -1}
         role=${interactive ? "button" : "article"}
-        @click=${this.handleCardClick}
         @keydown=${this.handleCardKeyDown}
       >
         <div class="energy-flow-container">
@@ -2507,10 +2507,44 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
   public disconnectedCallback(): void {
     this.teardownVisibilityObserver();
     this.stopLiveRuntime();
+    this.destroyActionHandler();
     super.disconnectedCallback();
   }
 
+  private destroyActionHandler(): void {
+    if (this._actionHandler) {
+      this._actionHandler.destroy();
+      this._actionHandler = undefined;
+    }
+  }
+
+  private setupActionHandler(): void {
+    const card = this.renderRoot.querySelector<HTMLElement>("ha-card");
+    if (!card || !this._config) return;
+
+    this.destroyActionHandler();
+
+    if (!this.hasConfiguredAction(this._config) || this.isEditorPreview()) return;
+
+    const hasHold = Boolean(this._config.hold_action?.action && this._config.hold_action.action !== "none");
+    const hasDoubleTap = Boolean(this._config.double_tap_action?.action && this._config.double_tap_action.action !== "none");
+
+    this._actionHandler = bindActionHandler(
+      card,
+      {
+        onTap: () => this.fireAction("tap"),
+        onHold: () => this.fireAction("hold"),
+        onDoubleTap: () => this.fireAction("double_tap")
+      },
+      { hasHold, hasDoubleTap }
+    );
+  }
+
   protected updated(changedProps: Map<string, unknown>): void {
+    if (changedProps.has("_config")) {
+      this.setupActionHandler();
+    }
+
     const previousConfig = changedProps.get("_config") as PowerPilzEnergyCardConfig | undefined;
     const shouldRefreshOnConfigChange =
       changedProps.has("_config")
@@ -3232,88 +3266,46 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     return true;
   }
 
-  private handleCardClick = (): void => {
-    this.executeTapAction();
-  };
-
   private handleCardKeyDown = (event: KeyboardEvent): void => {
     if (event.key !== "Enter" && event.key !== " ") {
       return;
     }
     event.preventDefault();
-    this.executeTapAction();
+    this.fireAction("tap");
   };
 
-  private executeTapAction(): void {
-    if (this.isEditorPreview()) {
-      return;
-    }
-
-    if (!this._config) {
-      return;
-    }
-
-    const tapAction = this.resolveTapAction(this._config);
-    if (tapAction.action === "none") {
-      return;
-    }
-
-    if (tapAction.action === "navigate") {
-      if (tapAction.navigation_path) {
-        this.navigateToPath(tapAction.navigation_path);
-      }
-      return;
-    }
-
-    if (tapAction.action === "more-info") {
-      const entityId =
-        tapAction.entity
-        ?? this._config.details_entity
-        ?? this._config.home_entity
-        ?? this._config.grid_entity
-        ?? this._config.solar_entity
-        ?? this._config.battery_entity;
-      if (entityId) {
-        this.fireEvent("hass-more-info", { entityId });
-      }
-    }
-  }
-
-  private resolveTapAction(config: PowerPilzEnergyCardConfig): Required<TapActionConfig> {
-    const source = config.tap_action;
-    if (source) {
-      const action: TapActionType = source.action ?? (source.navigation_path ? "navigate" : "none");
-      return {
-        action,
-        navigation_path: source.navigation_path ?? "",
-        entity: source.entity ?? ""
-      };
-    }
-
+  private hasConfiguredAction(config: PowerPilzEnergyCardConfig): boolean {
+    // Legacy support: details_navigation_path still counts as an action
     if (config.details_navigation_path) {
-      return {
-        action: "navigate",
-        navigation_path: config.details_navigation_path,
-        entity: ""
-      };
+      return true;
+    }
+    return [config.tap_action, config.hold_action, config.double_tap_action].some(
+      (action) => action && action.action && action.action !== "none"
+    );
+  }
+
+  private fireAction(action: "tap" | "hold" | "double_tap"): void {
+    if (this.isEditorPreview() || !this._config) {
+      return;
     }
 
-    return {
-      action: "none",
-      navigation_path: "",
-      entity: ""
-    };
-  }
+    const actionKey = `${action}_action` as "tap_action" | "hold_action" | "double_tap_action";
+    let actionConfig = this._config[actionKey];
+    let configForEvent: PowerPilzEnergyCardConfig = this._config;
 
-  private navigateToPath(path: string): void {
-    window.history.pushState(null, "", path);
-    window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
-  }
+    // Legacy fallback: details_navigation_path -> tap navigate
+    if (!actionConfig && action === "tap" && this._config.details_navigation_path) {
+      actionConfig = { action: "navigate", navigation_path: this._config.details_navigation_path };
+      configForEvent = { ...this._config, tap_action: actionConfig };
+    }
 
-  private fireEvent(type: string, detail: Record<string, unknown>): void {
+    if (!actionConfig || !actionConfig.action || actionConfig.action === "none") {
+      return;
+    }
+
     this.dispatchEvent(
-      new CustomEvent(type, {
-        detail,
+      new CustomEvent("hass-action", {
+        detail: { config: configForEvent, action },
         bubbles: true,
         composed: true
       })

@@ -24,7 +24,7 @@ export const TREND_DEFAULTS: Record<number, string> = {
 // --- Helper texts ---
 
 const HOVER_HELP =
-  "When enabled, hovering over the graph shows a tooltip with the value at that point. Disabling hover allows tap actions to be configured.";
+  "When enabled, hovering over the graph shows a tooltip with the value at that point.";
 const AREA_FILL_HELP =
   "When enabled, the area below each trend line is filled with a semi-transparent gradient.";
 const SHARED_SCALE_HELP =
@@ -45,12 +45,6 @@ const PERCENT_REFERENCE_SLOT_HELP =
   "The entity whose value represents 100%. Defaults to the last enabled entity in the stack.";
 const PERCENT_REFERENCE_AUTO_HELP =
   "When enabled, the 100% total is auto-calculated by summing all other entities. Useful when you don't have a total meter.";
-const TAP_ACTION_TYPE_HELP =
-  "Action to perform when the card is tapped. Only available when hover is disabled.";
-const TAP_ACTION_NAV_PATH_HELP =
-  "The Home Assistant path to navigate to (e.g. /energy or /dashboard-solar). Used when tap action is set to Navigate.";
-const TAP_ACTION_ENTITY_HELP =
-  "The entity whose detail dialog is opened on tap. Used when tap action is set to More info. Defaults to Entity 1 if not set.";
 const AUTO_SCALE_UNITS_HELP =
   "Automatically formats values with metric prefixes (e.g. W/kW/MW and Wh/kWh/MWh).";
 const UNIT_HELP =
@@ -81,9 +75,9 @@ const BASE_LABELS: Record<string, string> = {
   normalize_stack_to_percent: "Normalize to 100%",
   percent_reference_slot: "100% reference entity",
   percent_reference_auto: "Auto-calculate reference",
-  tap_action_type: "Tap action",
-  tap_action_navigation_path: "Navigation path",
-  tap_action_entity: "More-info entity"
+  tap_action: "Tap behavior",
+  hold_action: "Hold behavior",
+  double_tap_action: "Double tap behavior"
 };
 
 // --- Shared config interface ---
@@ -179,18 +173,10 @@ const entitySchema = (index: number): HaFormSchema => ({
 
 // --- Schema builder ---
 
-export interface GraphSchemaOptions {
-  includeNormalizeStackToPercent?: boolean;
-  percentEnabled?: boolean;
-  hoverEnabled?: boolean;
-}
-
 export const createGraphSchema = (
   includeNormalizeStackToPercent = false,
-  percentEnabled = false,
-  options?: GraphSchemaOptions
+  percentEnabled = false
 ): HaFormSchema[] => {
-  const hoverEnabled = options?.hoverEnabled ?? true;
 
   // --- Graph settings section ---
   const graphSettingsSection: HaFormSchema = {
@@ -382,59 +368,19 @@ export const createGraphSchema = (
     });
   }
 
-  // --- Tap action section (when hover is off) ---
-  const tapActionSection: HaFormSchema[] = [];
-  if (!hoverEnabled) {
-    tapActionSection.push({
-      type: "expandable",
-      name: "",
-      title: "Tap action",
-      icon: "mdi:gesture-tap",
-      expanded: true,
-      schema: [
-        {
-          type: "grid",
-          name: "",
-          schema: [
-            {
-              name: "tap_action_type",
-              selector: {
-                select: {
-                  mode: "dropdown",
-                  options: [
-                    { label: "None", value: "none" },
-                    { label: "More info", value: "more-info" },
-                    { label: "Navigate", value: "navigate" }
-                  ]
-                }
-              },
-              helper: TAP_ACTION_TYPE_HELP,
-              description: TAP_ACTION_TYPE_HELP
-            }
-          ]
-        },
-        {
-          type: "grid",
-          name: "",
-          columns: 2,
-          schema: [
-            {
-              name: "tap_action_navigation_path",
-              selector: { text: {} },
-              helper: TAP_ACTION_NAV_PATH_HELP,
-              description: TAP_ACTION_NAV_PATH_HELP
-            },
-            {
-              name: "tap_action_entity",
-              selector: { entity: {} },
-              helper: TAP_ACTION_ENTITY_HELP,
-              description: TAP_ACTION_ENTITY_HELP
-            }
-          ]
-        }
-      ]
-    });
-  }
+  // --- Actions section ---
+  const actionsSection: HaFormSchema = {
+    type: "expandable",
+    name: "",
+    title: "Actions",
+    icon: "mdi:gesture-tap",
+    expanded: false,
+    schema: [
+      { name: "tap_action", selector: { ui_action: {} } },
+      { name: "hold_action", selector: { ui_action: {} } },
+      { name: "double_tap_action", selector: { ui_action: {} } }
+    ]
+  };
 
   // --- Units and format section ---
   const unitsSection: HaFormSchema = {
@@ -521,8 +467,8 @@ export const createGraphSchema = (
     displayOptionsSection,
     ...stackedPercentSection,
     ...Array.from({ length: GRAPH_SLOT_COUNT }, (_, index) => entitySchema(index + 1)),
-    ...tapActionSection,
-    unitsSection
+    unitsSection,
+    actionsSection
   ];
 };
 

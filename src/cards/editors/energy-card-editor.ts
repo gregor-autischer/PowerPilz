@@ -952,7 +952,19 @@ const SCHEMA: HaFormSchema[] = [
   subBlockSchemas("solar", "Solar sub blocks", "mdi:solar-power-variant", SOLAR_SUB_BLOCK_COUNT),
   subBlockSchemas("grid", "Grid 1 sub blocks", "mdi:transmission-tower", GRID_SUB_BLOCK_COUNT),
   subBlockSchemas("grid_secondary", "Grid 2 sub blocks", "mdi:transmission-tower", GRID_SUB_BLOCK_COUNT),
-  subBlockSchemas("home", "Home sub blocks", "mdi:flash", HOME_SUB_BLOCK_COUNT)
+  subBlockSchemas("home", "Home sub blocks", "mdi:flash", HOME_SUB_BLOCK_COUNT),
+  {
+    type: "expandable",
+    name: "",
+    title: "Actions",
+    icon: "mdi:gesture-tap",
+    expanded: false,
+    schema: [
+      { name: "tap_action", selector: { ui_action: {} } },
+      { name: "hold_action", selector: { ui_action: {} } },
+      { name: "double_tap_action", selector: { ui_action: {} } }
+    ]
+  }
 ];
 
 const LABELS: Record<string, string> = {
@@ -1037,7 +1049,10 @@ const LABELS: Record<string, string> = {
   decimals: "Decimals",
   auto_scale_units: "Auto unit scaling",
   decimals_base_unit: "Decimals (base unit)",
-  decimals_prefixed_unit: "Decimals (prefixed units)"
+  decimals_prefixed_unit: "Decimals (prefixed units)",
+  tap_action: "Tap behavior",
+  hold_action: "Hold behavior",
+  double_tap_action: "Double tap behavior"
 };
 
 @customElement("power-pilz-energy-card-editor")

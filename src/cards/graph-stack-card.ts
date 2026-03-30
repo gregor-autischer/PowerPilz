@@ -37,14 +37,12 @@ import {
   type GraphTimeframeHours
 } from "../utils/graph";
 import { clampUnitDecimals, parseConvertibleUnit } from "../utils/unit-scaling";
+import { bindActionHandler, type ActionHandlerCleanup } from "../utils/action-handler";
 import "./editors/graph-stack-card-editor";
 
-type TapActionType = "none" | "navigate" | "more-info";
-
-interface TapActionConfig {
-  action?: TapActionType;
-  navigation_path?: string;
-  entity?: string;
+interface ActionConfig {
+  action?: string;
+  [key: string]: unknown;
 }
 
 const DEFAULT_DECIMALS = 1;
@@ -142,7 +140,9 @@ interface PowerPilzGraphStackCardConfig extends LovelaceCardConfig {
   auto_scale_units?: boolean;
   decimals_base_unit?: number;
   decimals_prefixed_unit?: number;
-  tap_action?: TapActionConfig;
+  tap_action?: ActionConfig;
+  hold_action?: ActionConfig;
+  double_tap_action?: ActionConfig;
 
   entity?: string;
   icon?: string;
@@ -261,6 +261,7 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
   private _hoverState?: GraphHoverState;
 
   private _drawConfigs: GraphDrawConfig[] = [];
+  private _actionHandler?: ActionHandlerCleanup;
   private _linePointsBySlot: Partial<Record<GraphSlot, TrendCanvasPoint[]>> = {};
   private _trendRefreshTimer?: number;
   private _trendRefreshInFlight = false;
@@ -373,8 +374,8 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
     const displayEntries = this.withStackedCurrentValues(entries, normalizeToPercent, config);
     const legendLayout = this.normalizeLegendLayout(config.legend_layout);
     const hoverEnabled = config.hover_enabled !== false;
-    const tapAction = this.resolveTapAction(config);
-    const interactive = !hoverEnabled && !this.isEditorPreview() && tapAction.action !== "none";
+    const hasAction = this.hasConfiguredAction(config);
+    const interactive = !this.isEditorPreview() && hasAction;
     const hoverState = this._hoverState;
     const graphTopInset = (config.clip_graph_to_labels ?? false) ? this._graphTopInset : 0;
     const graphStyle = graphTopInset > 0 ? { top: `${graphTopInset}px` } : {};
@@ -400,14 +401,13 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
         class=${interactive ? "interactive" : ""}
         tabindex=${interactive ? 0 : -1}
         role=${interactive ? "button" : "article"}
-        @click=${this.handleCardClick}
         @keydown=${this.handleCardKeyDown}
       >
         <div
           class="container"
-          @pointermove=${hoverEnabled ? this.handlePointerMove : nothing}
-          @pointerleave=${hoverEnabled ? this.handlePointerLeave : nothing}
-          @pointercancel=${hoverEnabled ? this.handlePointerLeave : nothing}
+          @pointermove=${this.handlePointerMove}
+          @pointerleave=${this.handlePointerLeave}
+          @pointercancel=${this.handlePointerLeave}
         >
           <div class="card-trend" style=${styleMap(graphStyle)} aria-hidden="true">
             <canvas class="card-trend-canvas-area"></canvas>
@@ -1311,77 +1311,34 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
     this.clearHoverState();
   };
 
-  private handleCardClick = (): void => {
-    this.executeTapAction();
-  };
-
   private handleCardKeyDown = (event: KeyboardEvent): void => {
     if (event.key !== "Enter" && event.key !== " ") {
       return;
     }
     event.preventDefault();
-    this.executeTapAction();
+    this.fireAction("tap");
   };
 
-  private executeTapAction(): void {
+  private hasConfiguredAction(config: PowerPilzGraphStackCardConfig): boolean {
+    return [config.tap_action, config.hold_action, config.double_tap_action].some(
+      (action) => action && action.action && action.action !== "none"
+    );
+  }
+
+  private fireAction(action: "tap" | "hold" | "double_tap"): void {
     if (this.isEditorPreview() || !this._config) {
       return;
     }
 
-    if (this._config.hover_enabled !== false) {
+    const actionKey = `${action}_action` as "tap_action" | "hold_action" | "double_tap_action";
+    const actionConfig = this._config[actionKey];
+    if (!actionConfig || !actionConfig.action || actionConfig.action === "none") {
       return;
     }
 
-    const tapAction = this.resolveTapAction(this._config);
-    if (tapAction.action === "none") {
-      return;
-    }
-
-    if (tapAction.action === "navigate") {
-      if (tapAction.navigation_path) {
-        this.navigateToPath(tapAction.navigation_path);
-      }
-      return;
-    }
-
-    if (tapAction.action === "more-info") {
-      const entityId =
-        tapAction.entity
-        ?? this._config.entity_1
-        ?? this._config.entity;
-      if (entityId) {
-        this.fireEvent("hass-more-info", { entityId });
-      }
-    }
-  }
-
-  private resolveTapAction(config: PowerPilzGraphStackCardConfig): Required<TapActionConfig> {
-    const source = config.tap_action;
-    if (source) {
-      const action: TapActionType = source.action ?? (source.navigation_path ? "navigate" : "none");
-      return {
-        action,
-        navigation_path: source.navigation_path ?? "",
-        entity: source.entity ?? ""
-      };
-    }
-
-    return {
-      action: "none",
-      navigation_path: "",
-      entity: ""
-    };
-  }
-
-  private navigateToPath(path: string): void {
-    window.history.pushState(null, "", path);
-    window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
-  }
-
-  private fireEvent(type: string, detail: Record<string, unknown>): void {
     this.dispatchEvent(
-      new CustomEvent(type, {
-        detail,
+      new CustomEvent("hass-action", {
+        detail: { config: this._config, action },
         bubbles: true,
         composed: true
       })
@@ -1561,10 +1518,44 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
     this.clearHoverState();
     this.teardownVisibilityObserver();
     this.stopLiveRuntime();
+    this.destroyActionHandler();
     super.disconnectedCallback();
   }
 
+  private destroyActionHandler(): void {
+    if (this._actionHandler) {
+      this._actionHandler.destroy();
+      this._actionHandler = undefined;
+    }
+  }
+
+  private setupActionHandler(): void {
+    const card = this.renderRoot.querySelector<HTMLElement>("ha-card");
+    if (!card || !this._config) return;
+
+    this.destroyActionHandler();
+
+    if (!this.hasConfiguredAction(this._config) || this.isEditorPreview()) return;
+
+    const hasHold = Boolean(this._config.hold_action?.action && this._config.hold_action.action !== "none");
+    const hasDoubleTap = Boolean(this._config.double_tap_action?.action && this._config.double_tap_action.action !== "none");
+
+    this._actionHandler = bindActionHandler(
+      card,
+      {
+        onTap: () => this.fireAction("tap"),
+        onHold: () => this.fireAction("hold"),
+        onDoubleTap: () => this.fireAction("double_tap")
+      },
+      { hasHold, hasDoubleTap }
+    );
+  }
+
   protected updated(changedProps: Map<string, unknown>): void {
+    if (changedProps.has("_config")) {
+      this.setupActionHandler();
+    }
+
     const previousConfig = changedProps.get("_config") as PowerPilzGraphStackCardConfig | undefined;
     const shouldRefreshOnConfigChange =
       changedProps.has("_config")
