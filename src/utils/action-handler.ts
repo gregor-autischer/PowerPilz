@@ -2,6 +2,9 @@
  * Lightweight action handler for detecting tap, hold, and double-tap
  * on a target element. Follows the same timing as HA's built-in
  * actionHandler directive (500ms hold, 250ms double-tap window).
+ *
+ * Uses `click` for tap/double-tap (reliable across all browsers and
+ * touch/mouse) and `pointerdown` timer for hold detection.
  */
 
 const HOLD_THRESHOLD_MS = 500;
@@ -28,7 +31,7 @@ export const bindActionHandler = (
   options: ActionHandlerOptions
 ): ActionHandlerCleanup => {
   let holdTimer: ReturnType<typeof setTimeout> | undefined;
-  let singleTapTimer: ReturnType<typeof setTimeout> | undefined;
+  let doubleTapTimer: ReturnType<typeof setTimeout> | undefined;
   let isHeld = false;
   let pendingTap = false;
 
@@ -38,6 +41,8 @@ export const bindActionHandler = (
       holdTimer = undefined;
     }
   };
+
+  // --- Hold detection via pointerdown/pointerup ---
 
   const handlePointerDown = (event: PointerEvent): void => {
     if (event.button !== 0) return;
@@ -53,45 +58,48 @@ export const bindActionHandler = (
 
   const handlePointerUp = (): void => {
     clearHold();
-    if (isHeld) {
-      isHeld = false;
-      return;
-    }
-
-    if (options.hasDoubleTap) {
-      if (pendingTap) {
-        pendingTap = false;
-        if (singleTapTimer !== undefined) {
-          clearTimeout(singleTapTimer);
-          singleTapTimer = undefined;
-        }
-        callbacks.onDoubleTap();
-      } else {
-        pendingTap = true;
-        singleTapTimer = setTimeout(() => {
-          pendingTap = false;
-          singleTapTimer = undefined;
-          callbacks.onTap();
-        }, DOUBLE_TAP_WINDOW_MS);
-      }
-    } else {
-      // No double-tap configured: fire tap immediately (no 250ms delay)
-      callbacks.onTap();
-    }
   };
 
   const handlePointerCancel = (): void => {
     clearHold();
     isHeld = false;
-    pendingTap = false;
-    if (singleTapTimer !== undefined) {
-      clearTimeout(singleTapTimer);
-      singleTapTimer = undefined;
+  };
+
+  // --- Tap and double-tap detection via click ---
+
+  const handleClick = (event: Event): void => {
+    // Suppress click after hold
+    if (isHeld) {
+      isHeld = false;
+      event.stopPropagation();
+      return;
+    }
+
+    if (options.hasDoubleTap) {
+      if (pendingTap) {
+        // Second click within window -> double-tap
+        pendingTap = false;
+        if (doubleTapTimer !== undefined) {
+          clearTimeout(doubleTapTimer);
+          doubleTapTimer = undefined;
+        }
+        callbacks.onDoubleTap();
+      } else {
+        // First click -> wait for potential second
+        pendingTap = true;
+        doubleTapTimer = setTimeout(() => {
+          pendingTap = false;
+          doubleTapTimer = undefined;
+          callbacks.onTap();
+        }, DOUBLE_TAP_WINDOW_MS);
+      }
+    } else {
+      // No double-tap: fire tap immediately
+      callbacks.onTap();
     }
   };
 
   const handleContextMenu = (event: Event): void => {
-    // Prevent context menu while hold timer is active or hold already fired
     if (isHeld || holdTimer !== undefined) {
       event.preventDefault();
     }
@@ -101,18 +109,20 @@ export const bindActionHandler = (
   element.addEventListener("pointerup", handlePointerUp);
   element.addEventListener("pointercancel", handlePointerCancel);
   element.addEventListener("pointerleave", handlePointerCancel);
+  element.addEventListener("click", handleClick);
   element.addEventListener("contextmenu", handleContextMenu);
 
   return {
     destroy: () => {
       clearHold();
-      if (singleTapTimer !== undefined) {
-        clearTimeout(singleTapTimer);
+      if (doubleTapTimer !== undefined) {
+        clearTimeout(doubleTapTimer);
       }
       element.removeEventListener("pointerdown", handlePointerDown);
       element.removeEventListener("pointerup", handlePointerUp);
       element.removeEventListener("pointercancel", handlePointerCancel);
       element.removeEventListener("pointerleave", handlePointerCancel);
+      element.removeEventListener("click", handleClick);
       element.removeEventListener("contextmenu", handleContextMenu);
     }
   };
