@@ -3303,15 +3303,15 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       return;
     }
 
-    // HA's handleAction reads config.entity for more-info — ensure it's set
-    if (!configForEvent.entity) {
-      configForEvent = {
-        ...configForEvent,
-        entity: (this._config.home_entity
-          ?? this._config.grid_entity
-          ?? this._config.solar_entity
-          ?? this._config.battery_entity) as string
-      };
+    if (actionConfig.action === "more-info" && !configForEvent.entity) {
+      this.dispatchEvent(
+        new CustomEvent("hass-notification", {
+          detail: { message: "PowerPilz: Set 'Action entity' in the card editor for more-info to work." },
+          bubbles: true,
+          composed: true
+        })
+      );
+      return;
     }
 
     this.dispatchEvent(

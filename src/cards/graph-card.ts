@@ -1028,14 +1028,20 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
       return;
     }
 
-    // HA's handleAction reads config.entity for more-info — ensure it's set
-    const configForEvent = this._config.entity
-      ? this._config
-      : { ...this._config, entity: this._config.entity_1 };
+    if (actionConfig.action === "more-info" && !this._config.entity) {
+      this.dispatchEvent(
+        new CustomEvent("hass-notification", {
+          detail: { message: "PowerPilz: Set 'Action entity' in the card editor for more-info to work." },
+          bubbles: true,
+          composed: true
+        })
+      );
+      return;
+    }
 
     this.dispatchEvent(
       new CustomEvent("hass-action", {
-        detail: { config: configForEvent, action },
+        detail: { config: this._config, action },
         bubbles: true,
         composed: true
       })
