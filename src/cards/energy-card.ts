@@ -3303,18 +3303,6 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       return;
     }
 
-    // HA's handleAction reads `config.entity` for more-info — inject primary entity if missing
-    if (!configForEvent.entity) {
-      const fallbackEntity =
-        this._config.home_entity
-        ?? this._config.grid_entity
-        ?? this._config.solar_entity
-        ?? this._config.battery_entity;
-      if (fallbackEntity) {
-        configForEvent = { ...configForEvent, entity: fallbackEntity };
-      }
-    }
-
     this.dispatchEvent(
       new CustomEvent("hass-action", {
         detail: { config: configForEvent, action },

@@ -45,6 +45,8 @@ const PERCENT_REFERENCE_SLOT_HELP =
   "The entity whose value represents 100%. Defaults to the last enabled entity in the stack.";
 const PERCENT_REFERENCE_AUTO_HELP =
   "When enabled, the 100% total is auto-calculated by summing all other entities. Useful when you don't have a total meter.";
+const ACTION_ENTITY_HELP =
+  "Default entity used by more-info actions. Required when tap/hold/double-tap is set to 'More info'.";
 const AUTO_SCALE_UNITS_HELP =
   "Automatically formats values with metric prefixes (e.g. W/kW/MW and Wh/kWh/MWh).";
 const UNIT_HELP =
@@ -75,6 +77,7 @@ const BASE_LABELS: Record<string, string> = {
   normalize_stack_to_percent: "Normalize to 100%",
   percent_reference_slot: "100% reference entity",
   percent_reference_auto: "Auto-calculate reference",
+  entity: "Action entity",
   tap_action: "Tap behavior",
   hold_action: "Hold behavior",
   double_tap_action: "Double tap behavior"
@@ -376,6 +379,12 @@ export const createGraphSchema = (
     icon: "mdi:gesture-tap",
     expanded: false,
     schema: [
+      {
+        name: "entity",
+        selector: { entity: {} },
+        helper: ACTION_ENTITY_HELP,
+        description: ACTION_ENTITY_HELP
+      },
       { name: "tap_action", selector: { ui_action: {} } },
       { name: "hold_action", selector: { ui_action: {} } },
       { name: "double_tap_action", selector: { ui_action: {} } }

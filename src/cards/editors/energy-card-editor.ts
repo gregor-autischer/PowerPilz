@@ -960,6 +960,12 @@ const SCHEMA: HaFormSchema[] = [
     icon: "mdi:gesture-tap",
     expanded: false,
     schema: [
+      {
+        name: "entity",
+        selector: { entity: {} },
+        helper: "Default entity used by more-info actions. Required when tap/hold/double-tap is set to 'More info'.",
+        description: "Default entity used by more-info actions. Required when tap/hold/double-tap is set to 'More info'."
+      },
       { name: "tap_action", selector: { ui_action: {} } },
       { name: "hold_action", selector: { ui_action: {} } },
       { name: "double_tap_action", selector: { ui_action: {} } }
@@ -1050,6 +1056,7 @@ const LABELS: Record<string, string> = {
   auto_scale_units: "Auto unit scaling",
   decimals_base_unit: "Decimals (base unit)",
   decimals_prefixed_unit: "Decimals (prefixed units)",
+  entity: "Action entity",
   tap_action: "Tap behavior",
   hold_action: "Hold behavior",
   double_tap_action: "Double tap behavior"
