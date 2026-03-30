@@ -129,6 +129,8 @@ interface PowerPilzGraphStackCardConfig extends LovelaceCardConfig {
   debug_performance?: boolean;
   trend_data_source?: TrendDataSource | "auto";
   normalize_stack_to_percent?: boolean;
+  percent_reference_slot?: number;
+  percent_reference_auto?: boolean;
   auto_scale_units?: boolean;
   decimals_base_unit?: number;
   decimals_prefixed_unit?: number;
@@ -359,7 +361,7 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
     const lineThickness = this.normalizeLineThickness(config.line_thickness);
     const normalizeToPercent = config.normalize_stack_to_percent === true;
     const entries = this.collectSeriesEntries(config, decimals);
-    const displayEntries = this.withStackedCurrentValues(entries, normalizeToPercent);
+    const displayEntries = this.withStackedCurrentValues(entries, normalizeToPercent, config);
     const legendLayout = this.normalizeLegendLayout(config.legend_layout);
     const hoverEnabled = config.hover_enabled !== false;
     const hoverState = this._hoverState;
@@ -489,49 +491,102 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
     return entries;
   }
 
-  private withStackedCurrentValues(entries: GraphSeriesEntry[], normalizeToPercent: boolean): GraphSeriesEntry[] {
+  private resolvePercentReference(
+    entries: Array<{ slot: GraphSlot }>,
+    config: PowerPilzGraphStackCardConfig
+  ): { refSlot: GraphSlot | undefined; auto: boolean } {
+    const raw = config.percent_reference_slot;
+    const parsed = typeof raw === "number" ? raw : typeof raw === "string" && raw.length > 0 ? Number(raw) : NaN;
+    const slot = Number.isFinite(parsed) && parsed >= 1 && parsed <= GRAPH_SLOT_COUNT
+      ? parsed as GraphSlot
+      : undefined;
+    const validSlot = slot !== undefined && entries.some((e) => e.slot === slot) ? slot : undefined;
+    return { refSlot: validSlot, auto: config.percent_reference_auto === true };
+  }
+
+  private withStackedCurrentValues(
+    entries: GraphSeriesEntry[],
+    normalizeToPercent: boolean,
+    config: PowerPilzGraphStackCardConfig
+  ): GraphSeriesEntry[] {
     const stackFactors = this.resolveStackUnitFactors(entries);
-    const totalRaw = entries.reduce((sum, entry) => (
-      entry.currentValue !== null && Number.isFinite(entry.currentValue)
-        ? sum + entry.currentValue
-        : sum
-    ), 0);
-    const totalCanonical = stackFactors
-      ? entries.reduce((sum, entry) => (
-        entry.currentValue !== null && Number.isFinite(entry.currentValue)
-          ? sum + (entry.currentValue * (stackFactors[entry.slot] ?? 1))
-          : sum
-      ), 0)
-      : totalRaw;
-    const totalForPercent = stackFactors ? totalCanonical : totalRaw;
+    const { refSlot, auto: autoRef } = normalizeToPercent
+      ? this.resolvePercentReference(entries, config)
+      : { refSlot: undefined, auto: false };
+
+    const getValue = (entry: GraphSeriesEntry): number => {
+      if (entry.currentValue === null || !Number.isFinite(entry.currentValue)) return 0;
+      return stackFactors
+        ? entry.currentValue * (stackFactors[entry.slot] ?? 1)
+        : entry.currentValue;
+    };
+
+    // Determine the 100% reference total
+    let totalForPercent: number;
+    let totalSlot: GraphSlot | undefined;
+    if (normalizeToPercent && refSlot !== undefined && !autoRef) {
+      // Manual reference: use the reference entity's value as 100%
+      const refEntry = entries.find((e) => e.slot === refSlot);
+      totalForPercent = refEntry ? getValue(refEntry) : 0;
+      totalSlot = refSlot;
+    } else if (normalizeToPercent && autoRef) {
+      // Auto reference: sum all entities except the reference slot
+      totalForPercent = entries.reduce((sum, entry) => (
+        entry.slot !== refSlot ? sum + getValue(entry) : sum
+      ), 0);
+      totalSlot = refSlot;
+    } else {
+      // Legacy fallback: sum of all entities
+      totalForPercent = entries.reduce((sum, entry) => sum + getValue(entry), 0);
+      totalSlot = entries[entries.length - 1]?.slot;
+    }
+
     const totalValid = Number.isFinite(totalForPercent) && Math.abs(totalForPercent) > EPSILON;
-    const totalSlot = entries[entries.length - 1]?.slot;
+
     let runningRaw = 0;
     let runningCanonical = 0;
     let hasAnyValue = false;
 
     return entries.map((entry) => {
+      // Skip reference entity in cumulative stacking when it represents the total
+      const isRefEntity = refSlot !== undefined && entry.slot === refSlot && !autoRef;
+
       if (entry.currentValue !== null && Number.isFinite(entry.currentValue)) {
-        runningRaw += entry.currentValue;
-        if (stackFactors) {
-          runningCanonical += entry.currentValue * (stackFactors[entry.slot] ?? 1);
+        if (!isRefEntity) {
+          runningRaw += entry.currentValue;
+          if (stackFactors) {
+            runningCanonical += entry.currentValue * (stackFactors[entry.slot] ?? 1);
+          }
         }
         hasAnyValue = true;
       }
 
-      const stackedValue = hasAnyValue
-        ? normalizeToPercent
-          ? (
-            !totalValid
-              ? 0
-              : entry.slot === totalSlot
-                ? 100
-                : Math.max(0, Math.min(100, ((stackFactors ? runningCanonical : runningRaw) / totalForPercent) * 100))
-          )
-          : stackFactors
-            ? runningCanonical / (stackFactors[entry.slot] ?? 1)
-            : runningRaw
-        : null;
+      let stackedValue: number | null;
+      if (!hasAnyValue) {
+        stackedValue = null;
+      } else if (normalizeToPercent) {
+        if (!totalValid) {
+          stackedValue = 0;
+        } else if (isRefEntity) {
+          // Reference entity always shows 100%
+          stackedValue = 100;
+        } else if (refSlot !== undefined || autoRef) {
+          // With explicit reference: show individual entity share (not cumulative)
+          const entityValue = getValue(entry);
+          stackedValue = Math.max(0, Math.min(100, (entityValue / totalForPercent) * 100));
+        } else {
+          // Legacy cumulative behavior
+          const running = stackFactors ? runningCanonical : runningRaw;
+          stackedValue = entry.slot === totalSlot
+            ? 100
+            : Math.max(0, Math.min(100, (running / totalForPercent) * 100));
+        }
+      } else {
+        stackedValue = stackFactors
+          ? runningCanonical / (stackFactors[entry.slot] ?? 1)
+          : runningRaw;
+      }
+
       const unit = normalizeToPercent ? "%" : entry.unit;
       return {
         ...entry,
@@ -605,7 +660,10 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
   }
 
   private convertStackedHoverValue(slot: GraphSlot, value: number): number {
-    if (!this._stackCanonicalMode || this._stackNormalizeToPercent) {
+    if (this._stackNormalizeToPercent) {
+      return Math.max(0, Math.min(100, value));
+    }
+    if (!this._stackCanonicalMode) {
       return value;
     }
     const factor = this._stackCanonicalFactors[slot];
@@ -820,9 +878,13 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
     this._stackNormalizeToPercent = normalizeToPercent;
     const windowMs = this.trendWindowMs(this._config);
     const linePointsBySlot: Partial<Record<GraphSlot, TrendCanvasPoint[]>> = {};
-    const stackedSeriesBySlotRaw = this.buildStackedTrendSeries(windowMs, stackUnitFactors ?? undefined);
+    const percentRef = normalizeToPercent ? this.resolvePercentReference(
+      this._drawConfigs,
+      this._config!
+    ) : { refSlot: undefined, auto: false };
+    const stackedSeriesBySlotRaw = this.buildStackedTrendSeries(windowMs, stackUnitFactors ?? undefined, percentRef.refSlot, percentRef.auto);
     const stackedSeriesBySlot = normalizeToPercent
-      ? this.normalizeStackedSeriesToPercent(stackedSeriesBySlotRaw)
+      ? this.normalizeStackedSeriesToPercent(stackedSeriesBySlotRaw, percentRef.refSlot, percentRef.auto)
       : stackedSeriesBySlotRaw;
     const stackedRange = normalizeToPercent
       ? { min: 0, max: 100 }
@@ -870,10 +932,13 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
 
   private buildStackedTrendSeries(
     windowMs: number,
-    canonicalFactors?: Partial<Record<GraphSlot, number>>
+    canonicalFactors?: Partial<Record<GraphSlot, number>>,
+    percentRefSlot?: GraphSlot,
+    percentRefAuto?: boolean
   ): Partial<Record<GraphSlot, TrendPoint[]>> {
     const seriesBySlot: Partial<Record<GraphSlot, TrendPoint[]>> = {};
     const sourceOrder = [...this._drawConfigs].sort((left, right) => left.slot - right.slot);
+    const excludeFromStack = percentRefSlot !== undefined && !percentRefAuto;
 
     let cumulative: TrendPoint[] | null = null;
     sourceOrder.forEach((drawConfig) => {
@@ -893,6 +958,13 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
             ts: point.ts,
             value: point.value * factor
           }));
+
+      // When a manual reference entity is set, keep its raw series separate
+      // so it doesn't inflate the cumulative stack
+      if (excludeFromStack && drawConfig.slot === percentRefSlot) {
+        seriesBySlot[drawConfig.slot] = currentForStack;
+        return;
+      }
 
       const stacked = cumulative
         ? this.sumTrendSeries(cumulative, currentForStack)
@@ -1032,7 +1104,9 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
   }
 
   private normalizeStackedSeriesToPercent(
-    seriesBySlot: Partial<Record<GraphSlot, TrendPoint[]>>
+    seriesBySlot: Partial<Record<GraphSlot, TrendPoint[]>>,
+    refSlot?: GraphSlot,
+    autoRef?: boolean
   ): Partial<Record<GraphSlot, TrendPoint[]>> {
     const normalized: Partial<Record<GraphSlot, TrendPoint[]>> = {};
     const slots = (Object.keys(seriesBySlot) as unknown[])
@@ -1043,8 +1117,27 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
       return normalized;
     }
 
-    const totalSlot = slots[slots.length - 1];
-    const totalSeries = seriesBySlot[totalSlot] ?? [];
+    // Determine which series represents the 100% total
+    let totalSeries: TrendPoint[];
+    let totalSlot: GraphSlot;
+
+    if (refSlot !== undefined && !autoRef) {
+      // Manual reference: use the reference entity's raw series as total
+      totalSeries = seriesBySlot[refSlot] ?? [];
+      totalSlot = refSlot;
+    } else if (autoRef) {
+      // Auto reference: the highest cumulative slot (excluding refSlot) is the total
+      const cumulativeSlots = refSlot !== undefined
+        ? slots.filter((s) => s !== refSlot)
+        : slots;
+      totalSlot = cumulativeSlots[cumulativeSlots.length - 1] ?? slots[slots.length - 1];
+      totalSeries = seriesBySlot[totalSlot] ?? [];
+    } else {
+      // Legacy: last slot's cumulative series
+      totalSlot = slots[slots.length - 1];
+      totalSeries = seriesBySlot[totalSlot] ?? [];
+    }
+
     if (totalSeries.length < 1) {
       return normalized;
     }
@@ -1065,10 +1158,16 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
           return { ts: point.ts, value: 100 };
         }
 
+        // Reference entity (manual mode) is pinned to 100%
+        if (refSlot !== undefined && slot === refSlot && !autoRef) {
+          return { ts: point.ts, value: 100 };
+        }
+
         const percent = (point.value / total) * 100;
+        // Allow values above 100% to be visible but capped at a safe rendering max
         return {
           ts: point.ts,
-          value: Math.max(0, Math.min(100, percent))
+          value: Math.max(0, percent)
         };
       });
     });

@@ -28,6 +28,8 @@ interface GraphStackCardConfig extends LovelaceCardConfig {
   trend_data_source?: TrendDataSource | "auto";
   debug_performance?: boolean;
   normalize_stack_to_percent?: boolean;
+  percent_reference_slot?: number;
+  percent_reference_auto?: boolean;
   auto_scale_units?: boolean;
   decimals_base_unit?: number;
   decimals_prefixed_unit?: number;
@@ -69,8 +71,6 @@ interface GraphStackCardConfig extends LovelaceCardConfig {
   entity_4_icon_color?: string | number[];
   entity_4_trend_color?: string | number[];
 }
-const SCHEMA = createGraphSchema(true);
-
 @customElement("power-pilz-graph-stack-card-editor")
 export class PowerPilzGraphStackCardEditor extends LitElement implements LovelaceCardEditor {
   @property({ attribute: false })
@@ -90,6 +90,8 @@ export class PowerPilzGraphStackCardEditor extends LitElement implements Lovelac
       shared_trend_scale: config.shared_trend_scale ?? false,
       debug_performance: config.debug_performance ?? false,
       normalize_stack_to_percent: config.normalize_stack_to_percent ?? false,
+      percent_reference_slot: config.percent_reference_slot,
+      percent_reference_auto: config.percent_reference_auto ?? false,
       decimals: config.decimals ?? 1,
       auto_scale_units: config.auto_scale_units ?? false,
       decimals_base_unit: config.decimals_base_unit ?? config.decimals ?? 1,
@@ -107,6 +109,8 @@ export class PowerPilzGraphStackCardEditor extends LitElement implements Lovelac
       return nothing;
     }
 
+    const schema = createGraphSchema(true, this._config.normalize_stack_to_percent ?? false);
+
     return html`
       <div style="margin: 0 0 8px; color: var(--secondary-text-color); font-size: 12px;">
         PowerPilz v${POWER_PILZ_VERSION}
@@ -114,7 +118,7 @@ export class PowerPilzGraphStackCardEditor extends LitElement implements Lovelac
       <ha-form
         .hass=${this.hass}
         .data=${this._config}
-        .schema=${SCHEMA}
+        .schema=${schema}
         .computeLabel=${this.computeLabel}
         @value-changed=${this.valueChanged}
       ></ha-form>
@@ -123,7 +127,9 @@ export class PowerPilzGraphStackCardEditor extends LitElement implements Lovelac
 
   private computeLabel = (schema: { name?: string }): string => {
     return computeGraphEditorLabel(schema, {
-      normalize_stack_to_percent: "Normalize to 100%"
+      normalize_stack_to_percent: "Normalize to 100%",
+      percent_reference_slot: "100% reference entity",
+      percent_reference_auto: "Auto-calculate reference (sum of others)"
     });
   };
 

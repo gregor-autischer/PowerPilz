@@ -92,7 +92,7 @@ const entitySchema = (index: number): HaFormSchema => ({
   ]
 });
 
-export const createGraphSchema = (includeNormalizeStackToPercent = false): HaFormSchema[] => {
+export const createGraphSchema = (includeNormalizeStackToPercent = false, percentEnabled = false): HaFormSchema[] => {
   const toggles: HaFormSchema[] = [
     { name: "hover_enabled", selector: { boolean: {} } },
     { name: "fill_area_enabled", selector: { boolean: {} } },
@@ -101,6 +101,27 @@ export const createGraphSchema = (includeNormalizeStackToPercent = false): HaFor
 
   if (includeNormalizeStackToPercent) {
     toggles.push({ name: "normalize_stack_to_percent", selector: { boolean: {} } });
+  }
+
+  if (includeNormalizeStackToPercent && percentEnabled) {
+    toggles.push(
+      {
+        name: "percent_reference_slot",
+        selector: {
+          select: {
+            mode: "dropdown",
+            options: [
+              { label: "Last entity (default)", value: "" },
+              { label: "Entity 1", value: "1" },
+              { label: "Entity 2", value: "2" },
+              { label: "Entity 3", value: "3" },
+              { label: "Entity 4", value: "4" }
+            ]
+          }
+        }
+      },
+      { name: "percent_reference_auto", selector: { boolean: {} } }
+    );
   }
 
   toggles.push(
