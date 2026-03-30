@@ -21,24 +21,72 @@ export const TREND_DEFAULTS: Record<number, string> = {
   4: "green"
 };
 
+// --- Helper texts ---
+
+const HOVER_HELP =
+  "When enabled, hovering over the graph shows a tooltip with the value at that point. Disabling hover allows tap actions to be configured.";
+const AREA_FILL_HELP =
+  "When enabled, the area below each trend line is filled with a semi-transparent gradient.";
+const SHARED_SCALE_HELP =
+  "When enabled, all entities share the same Y-axis scale. When disabled, each entity auto-scales independently.";
+const CLIP_BELOW_LABELS_HELP =
+  "When enabled, the graph area is clipped so it does not extend behind the legend labels.";
+const LINE_WIDTH_HELP =
+  "Thickness of the trend lines in pixels.";
+const TREND_SOURCE_HELP =
+  "Controls where trend data is fetched from. Hybrid prefers statistics and falls back to history automatically.";
+const TIMEFRAME_HELP =
+  "The time window shown in the graph.";
+const LAYOUT_HELP =
+  "Controls whether entity legend items are displayed in a row or column layout.";
+const NORMALIZE_PERCENT_HELP =
+  "When enabled, all entity values are normalized as percentages of a reference total, so the graph always fills 0–100%.";
+const PERCENT_REFERENCE_SLOT_HELP =
+  "The entity whose value represents 100%. Defaults to the last enabled entity in the stack.";
+const PERCENT_REFERENCE_AUTO_HELP =
+  "When enabled, the 100% total is auto-calculated by summing all other entities. Useful when you don't have a total meter.";
+const TAP_ACTION_TYPE_HELP =
+  "Action to perform when the card is tapped. Only available when hover is disabled.";
+const TAP_ACTION_NAV_PATH_HELP =
+  "The Home Assistant path to navigate to (e.g. /energy or /dashboard-solar). Used when tap action is set to Navigate.";
+const TAP_ACTION_ENTITY_HELP =
+  "The entity whose detail dialog is opened on tap. Used when tap action is set to More info. Defaults to Entity 1 if not set.";
+const AUTO_SCALE_UNITS_HELP =
+  "Automatically formats values with metric prefixes (e.g. W/kW/MW and Wh/kWh/MWh).";
+const UNIT_HELP =
+  "Optional unit override. Used when entities have no unit_of_measurement attribute.";
+const DECIMALS_HELP =
+  "Default decimal precision for displayed values.";
+const DECIMALS_BASE_HELP =
+  "Decimal precision for base units (W, Wh) when auto unit scaling is enabled.";
+const DECIMALS_PREFIXED_HELP =
+  "Decimal precision for prefixed units (kW, MW, kWh, MWh) when auto unit scaling is enabled.";
+
+// --- Label maps ---
+
 const BASE_LABELS: Record<string, string> = {
   legend_layout: "Layout",
   timeframe_hours: "Range",
   hover_enabled: "Hover",
   fill_area_enabled: "Area fill",
   shared_trend_scale: "Shared scale",
-  trend_data_source: "Trend source (auto: stats -> history)",
+  trend_data_source: "Trend source",
   clip_graph_to_labels: "Clip below labels",
   line_thickness: "Line width",
   unit: "Unit",
   decimals: "Decimals",
-  auto_scale_units: "Auto unit scaling (W<->kW, Wh<->kWh)",
+  auto_scale_units: "Auto unit scaling",
   decimals_base_unit: "Decimals (base unit)",
   decimals_prefixed_unit: "Decimals (prefixed units)",
+  normalize_stack_to_percent: "Normalize to 100%",
+  percent_reference_slot: "100% reference entity",
+  percent_reference_auto: "Auto-calculate reference",
   tap_action_type: "Tap action",
   tap_action_navigation_path: "Navigation path",
   tap_action_entity: "More-info entity"
 };
+
+// --- Shared config interface ---
 
 interface GraphEditorLikeConfig extends LovelaceCardConfig {
   entity?: string;
@@ -60,6 +108,8 @@ interface GraphEditorLikeConfig extends LovelaceCardConfig {
   [key: string]: unknown;
 }
 
+// --- Entity schema ---
+
 const entitySchema = (index: number): HaFormSchema => ({
   type: "expandable",
   name: "",
@@ -67,33 +117,67 @@ const entitySchema = (index: number): HaFormSchema => ({
   icon: "mdi:chart-line",
   expanded: index === 1,
   schema: [
-    { name: `entity_${index}_enabled`, selector: { boolean: {} } },
     {
       type: "grid",
       name: "",
       schema: [
-        { name: `entity_${index}`, selector: { entity: { filter: { domain: "sensor" } } } },
-        { name: `entity_${index}_name`, selector: { text: {} } },
-        { name: `entity_${index}_show_icon`, selector: { boolean: {} } },
-        { name: `entity_${index}_icon`, selector: { icon: {} }, context: { icon_entity: `entity_${index}` } },
+        { name: `entity_${index}_enabled`, selector: { boolean: {} } }
+      ]
+    },
+    {
+      type: "expandable",
+      name: "",
+      title: "Identity",
+      icon: "mdi:view-list-outline",
+      expanded: true,
+      schema: [
         {
-          name: `entity_${index}_icon_color`,
-          selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
-        },
+          type: "grid",
+          name: "",
+          columns: 2,
+          schema: [
+            { name: `entity_${index}`, selector: { entity: { filter: { domain: "sensor" } } } },
+            { name: `entity_${index}_name`, selector: { text: {} } }
+          ]
+        }
+      ]
+    },
+    {
+      type: "expandable",
+      name: "",
+      title: "Appearance",
+      icon: "mdi:palette-outline",
+      expanded: true,
+      schema: [
         {
-          name: `entity_${index}_trend_color`,
-          selector: {
-            ui_color: {
-              include_state: true,
-              include_none: false,
-              default_color: TREND_DEFAULTS[index] ?? "purple"
+          type: "grid",
+          name: "",
+          columns: 2,
+          schema: [
+            { name: `entity_${index}_show_icon`, selector: { boolean: {} } },
+            { name: `entity_${index}_icon`, selector: { icon: {} }, context: { icon_entity: `entity_${index}` } },
+            {
+              name: `entity_${index}_icon_color`,
+              selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+            },
+            {
+              name: `entity_${index}_trend_color`,
+              selector: {
+                ui_color: {
+                  include_state: true,
+                  include_none: false,
+                  default_color: TREND_DEFAULTS[index] ?? "purple"
+                }
+              }
             }
-          }
+          ]
         }
       ]
     }
   ]
 });
+
+// --- Schema builder ---
 
 export interface GraphSchemaOptions {
   includeNormalizeStackToPercent?: boolean;
@@ -108,139 +192,341 @@ export const createGraphSchema = (
 ): HaFormSchema[] => {
   const hoverEnabled = options?.hoverEnabled ?? true;
 
-  const toggles: HaFormSchema[] = [
-    { name: "hover_enabled", selector: { boolean: {} } },
-    { name: "fill_area_enabled", selector: { boolean: {} } },
-    { name: "shared_trend_scale", selector: { boolean: {} } }
-  ];
-
-  if (includeNormalizeStackToPercent) {
-    toggles.push({ name: "normalize_stack_to_percent", selector: { boolean: {} } });
-  }
-
-  if (includeNormalizeStackToPercent && percentEnabled) {
-    toggles.push(
+  // --- Graph settings section ---
+  const graphSettingsSection: HaFormSchema = {
+    type: "expandable",
+    name: "",
+    title: "Graph settings",
+    icon: "mdi:chart-line",
+    expanded: false,
+    schema: [
       {
-        name: "percent_reference_slot",
-        selector: {
-          select: {
-            mode: "dropdown",
-            options: [
-              { label: "Last entity (default)", value: "" },
-              { label: "Entity 1", value: "1" },
-              { label: "Entity 2", value: "2" },
-              { label: "Entity 3", value: "3" },
-              { label: "Entity 4", value: "4" }
-            ]
+        type: "grid",
+        name: "",
+        columns: 2,
+        schema: [
+          {
+            name: "legend_layout",
+            selector: {
+              select: {
+                mode: "dropdown",
+                options: ["row", "column"]
+              }
+            },
+            helper: LAYOUT_HELP,
+            description: LAYOUT_HELP
+          },
+          {
+            name: "timeframe_hours",
+            selector: {
+              select: {
+                mode: "dropdown",
+                options: [
+                  { label: "6 hours", value: 6 },
+                  { label: "12 hours", value: 12 },
+                  { label: "24 hours", value: 24 },
+                  { label: "48 hours", value: 48 },
+                  { label: "3 days", value: 72 },
+                  { label: "7 days", value: 168 },
+                  { label: "14 days", value: 336 },
+                  { label: "30 days", value: 720 }
+                ]
+              }
+            },
+            helper: TIMEFRAME_HELP,
+            description: TIMEFRAME_HELP
           }
-        }
+        ]
       },
-      { name: "percent_reference_auto", selector: { boolean: {} } }
-    );
-  }
-
-  if (!hoverEnabled) {
-    toggles.push(
       {
-        name: "tap_action_type",
-        selector: {
-          select: {
-            mode: "dropdown",
-            options: [
-              { label: "None", value: "none" },
-              { label: "More info", value: "more-info" },
-              { label: "Navigate", value: "navigate" }
-            ]
+        type: "grid",
+        name: "",
+        schema: [
+          {
+            name: "trend_data_source",
+            selector: {
+              select: {
+                mode: "dropdown",
+                options: [
+                  { label: "Hybrid (auto fallback)", value: "hybrid" },
+                  { label: "Statistics (fastest)", value: "statistics" },
+                  { label: "History (raw)", value: "history" }
+                ]
+              }
+            },
+            helper: TREND_SOURCE_HELP,
+            description: TREND_SOURCE_HELP
           }
-        }
+        ]
       }
-    );
-  }
+    ]
+  };
 
-  toggles.push(
-    { name: "clip_graph_to_labels", selector: { boolean: {} } },
-    { name: "line_thickness", selector: { number: { mode: "box", min: 0.5, max: 6, step: 0.1 } } }
-  );
-
-  const tapActionFields: HaFormSchema[] = [];
-  if (!hoverEnabled) {
-    tapActionFields.push({
+  // --- Display options section ---
+  const displayOptionsSchema: HaFormSchema[] = [
+    {
       type: "grid",
       name: "",
+      columns: 2,
       schema: [
-        { name: "tap_action_navigation_path", selector: { text: {} } },
-        { name: "tap_action_entity", selector: { entity: {} } }
+        {
+          name: "hover_enabled",
+          selector: { boolean: {} },
+          helper: HOVER_HELP,
+          description: HOVER_HELP
+        },
+        {
+          name: "fill_area_enabled",
+          selector: { boolean: {} },
+          helper: AREA_FILL_HELP,
+          description: AREA_FILL_HELP
+        },
+        {
+          name: "shared_trend_scale",
+          selector: { boolean: {} },
+          helper: SHARED_SCALE_HELP,
+          description: SHARED_SCALE_HELP
+        },
+        {
+          name: "clip_graph_to_labels",
+          selector: { boolean: {} },
+          helper: CLIP_BELOW_LABELS_HELP,
+          description: CLIP_BELOW_LABELS_HELP
+        }
+      ]
+    },
+    {
+      type: "grid",
+      name: "",
+      columns: 2,
+      schema: [
+        {
+          name: "line_thickness",
+          selector: { number: { mode: "box", min: 0.5, max: 6, step: 0.1 } },
+          helper: LINE_WIDTH_HELP,
+          description: LINE_WIDTH_HELP
+        }
+      ]
+    }
+  ];
+
+  const displayOptionsSection: HaFormSchema = {
+    type: "expandable",
+    name: "",
+    title: "Display options",
+    icon: "mdi:tune-variant",
+    expanded: false,
+    schema: displayOptionsSchema
+  };
+
+  // --- Stacked percent section (stack card only) ---
+  const stackedPercentSection: HaFormSchema[] = [];
+  if (includeNormalizeStackToPercent) {
+    const percentSchema: HaFormSchema[] = [
+      {
+        type: "grid",
+        name: "",
+        schema: [
+          {
+            name: "normalize_stack_to_percent",
+            selector: { boolean: {} },
+            helper: NORMALIZE_PERCENT_HELP,
+            description: NORMALIZE_PERCENT_HELP
+          }
+        ]
+      }
+    ];
+
+    if (percentEnabled) {
+      percentSchema.push(
+        {
+          type: "grid",
+          name: "",
+          columns: 2,
+          schema: [
+            {
+              name: "percent_reference_slot",
+              selector: {
+                select: {
+                  mode: "dropdown",
+                  options: [
+                    { label: "Last entity (default)", value: "" },
+                    { label: "Entity 1", value: "1" },
+                    { label: "Entity 2", value: "2" },
+                    { label: "Entity 3", value: "3" },
+                    { label: "Entity 4", value: "4" }
+                  ]
+                }
+              },
+              helper: PERCENT_REFERENCE_SLOT_HELP,
+              description: PERCENT_REFERENCE_SLOT_HELP
+            },
+            {
+              name: "percent_reference_auto",
+              selector: { boolean: {} },
+              helper: PERCENT_REFERENCE_AUTO_HELP,
+              description: PERCENT_REFERENCE_AUTO_HELP
+            }
+          ]
+        }
+      );
+    }
+
+    stackedPercentSection.push({
+      type: "expandable",
+      name: "",
+      title: "Stacked percent",
+      icon: "mdi:percent-outline",
+      expanded: false,
+      schema: percentSchema
+    });
+  }
+
+  // --- Tap action section (when hover is off) ---
+  const tapActionSection: HaFormSchema[] = [];
+  if (!hoverEnabled) {
+    tapActionSection.push({
+      type: "expandable",
+      name: "",
+      title: "Tap action",
+      icon: "mdi:gesture-tap",
+      expanded: true,
+      schema: [
+        {
+          type: "grid",
+          name: "",
+          schema: [
+            {
+              name: "tap_action_type",
+              selector: {
+                select: {
+                  mode: "dropdown",
+                  options: [
+                    { label: "None", value: "none" },
+                    { label: "More info", value: "more-info" },
+                    { label: "Navigate", value: "navigate" }
+                  ]
+                }
+              },
+              helper: TAP_ACTION_TYPE_HELP,
+              description: TAP_ACTION_TYPE_HELP
+            }
+          ]
+        },
+        {
+          type: "grid",
+          name: "",
+          columns: 2,
+          schema: [
+            {
+              name: "tap_action_navigation_path",
+              selector: { text: {} },
+              helper: TAP_ACTION_NAV_PATH_HELP,
+              description: TAP_ACTION_NAV_PATH_HELP
+            },
+            {
+              name: "tap_action_entity",
+              selector: { entity: {} },
+              helper: TAP_ACTION_ENTITY_HELP,
+              description: TAP_ACTION_ENTITY_HELP
+            }
+          ]
+        }
       ]
     });
   }
 
+  // --- Units and format section ---
+  const unitsSection: HaFormSchema = {
+    type: "expandable",
+    name: "",
+    title: "Units and format",
+    icon: "mdi:format-list-numbered",
+    expanded: false,
+    schema: [
+      {
+        type: "expandable",
+        name: "",
+        title: "Display format",
+        icon: "mdi:decimal",
+        expanded: true,
+        schema: [
+          {
+            type: "grid",
+            name: "",
+            columns: 2,
+            schema: [
+              {
+                name: "unit",
+                selector: { text: {} },
+                helper: UNIT_HELP,
+                description: UNIT_HELP
+              },
+              {
+                name: "decimals",
+                selector: { number: { mode: "box", min: 0, max: 3, step: 1 } },
+                helper: DECIMALS_HELP,
+                description: DECIMALS_HELP
+              }
+            ]
+          }
+        ]
+      },
+      {
+        type: "expandable",
+        name: "",
+        title: "Auto scaling",
+        icon: "mdi:scale-balance",
+        expanded: true,
+        schema: [
+          {
+            type: "grid",
+            name: "",
+            schema: [
+              {
+                name: "auto_scale_units",
+                selector: { boolean: {} },
+                helper: AUTO_SCALE_UNITS_HELP,
+                description: AUTO_SCALE_UNITS_HELP
+              }
+            ]
+          },
+          {
+            type: "grid",
+            name: "",
+            columns: 2,
+            schema: [
+              {
+                name: "decimals_base_unit",
+                selector: { number: { mode: "box", min: 0, max: 4, step: 1 } },
+                helper: DECIMALS_BASE_HELP,
+                description: DECIMALS_BASE_HELP
+              },
+              {
+                name: "decimals_prefixed_unit",
+                selector: { number: { mode: "box", min: 0, max: 4, step: 1 } },
+                helper: DECIMALS_PREFIXED_HELP,
+                description: DECIMALS_PREFIXED_HELP
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  };
+
+  // --- Assemble final schema ---
   return [
-    {
-      type: "grid",
-      name: "",
-      schema: [
-        {
-          name: "legend_layout",
-          selector: {
-            select: {
-              mode: "dropdown",
-              options: ["row", "column"]
-            }
-          }
-        },
-        {
-          name: "timeframe_hours",
-          selector: {
-            select: {
-              mode: "dropdown",
-              options: [
-                { label: "6 hours", value: 6 },
-                { label: "12 hours", value: 12 },
-                { label: "24 hours", value: 24 },
-                { label: "48 hours", value: 48 },
-                { label: "3 days", value: 72 },
-                { label: "7 days", value: 168 },
-                { label: "14 days", value: 336 },
-                { label: "30 days", value: 720 }
-              ]
-            }
-          }
-        },
-        {
-          name: "trend_data_source",
-          selector: {
-            select: {
-              mode: "dropdown",
-              options: [
-                { label: "Hybrid (auto fallback)", value: "hybrid" },
-                { label: "Statistics (fastest)", value: "statistics" },
-                { label: "History (raw)", value: "history" }
-              ]
-            }
-          }
-        }
-      ]
-    },
-    {
-      type: "grid",
-      name: "",
-      schema: toggles
-    },
+    graphSettingsSection,
+    displayOptionsSection,
+    ...stackedPercentSection,
     ...Array.from({ length: GRAPH_SLOT_COUNT }, (_, index) => entitySchema(index + 1)),
-    ...tapActionFields,
-    {
-      type: "grid",
-      name: "",
-      schema: [
-        { name: "unit", selector: { text: {} } },
-        { name: "decimals", selector: { number: { mode: "box", min: 0, max: 3, step: 1 } } },
-        { name: "auto_scale_units", selector: { boolean: {} } },
-        { name: "decimals_base_unit", selector: { number: { mode: "box", min: 0, max: 4, step: 1 } } },
-        { name: "decimals_prefixed_unit", selector: { number: { mode: "box", min: 0, max: 4, step: 1 } } }
-      ]
-    }
+    ...tapActionSection,
+    unitsSection
   ];
 };
+
+// --- Utility functions ---
 
 export const readOptionalString = (value: unknown): string | undefined => {
   if (typeof value !== "string") {
