@@ -14,6 +14,12 @@ import {
   type GraphTimeframeHours
 } from "./graph-editor-shared";
 
+interface TapActionConfig {
+  action?: string;
+  navigation_path?: string;
+  entity?: string;
+}
+
 interface GraphCardConfig extends LovelaceCardConfig {
   type: "custom:power-pilz-graph-card";
   legend_layout?: GraphLegendLayout;
@@ -30,6 +36,7 @@ interface GraphCardConfig extends LovelaceCardConfig {
   auto_scale_units?: boolean;
   decimals_base_unit?: number;
   decimals_prefixed_unit?: number;
+  tap_action?: TapActionConfig;
 
   entity?: string;
   icon?: string;
@@ -67,8 +74,12 @@ interface GraphCardConfig extends LovelaceCardConfig {
   entity_4_show_icon?: boolean;
   entity_4_icon_color?: string | number[];
   entity_4_trend_color?: string | number[];
+
+  // Flat tap action fields for ha-form binding
+  tap_action_type?: string;
+  tap_action_navigation_path?: string;
+  tap_action_entity?: string;
 }
-const SCHEMA = createGraphSchema(false);
 
 @customElement("power-pilz-graph-card-editor")
 export class PowerPilzGraphCardEditor extends LitElement implements LovelaceCardEditor {
@@ -79,6 +90,7 @@ export class PowerPilzGraphCardEditor extends LitElement implements LovelaceCard
   private _config?: GraphCardConfig;
 
   public setConfig(config: GraphCardConfig): void {
+    const tap = config.tap_action;
     const next: GraphCardConfig = {
       ...config,
       type: "custom:power-pilz-graph-card",
@@ -94,6 +106,9 @@ export class PowerPilzGraphCardEditor extends LitElement implements LovelaceCard
       decimals_prefixed_unit: config.decimals_prefixed_unit ?? config.decimals ?? 1,
       line_thickness: clampLineThickness(config.line_thickness),
       clip_graph_to_labels: config.clip_graph_to_labels ?? false,
+      tap_action_type: config.tap_action_type ?? tap?.action ?? "none",
+      tap_action_navigation_path: config.tap_action_navigation_path ?? tap?.navigation_path ?? "",
+      tap_action_entity: config.tap_action_entity ?? tap?.entity ?? "",
       ...normalizeGraphEntityFields(config)
     };
 
@@ -105,6 +120,9 @@ export class PowerPilzGraphCardEditor extends LitElement implements LovelaceCard
       return nothing;
     }
 
+    const hoverEnabled = this._config.hover_enabled ?? true;
+    const schema = createGraphSchema(false, false, { hoverEnabled });
+
     return html`
       <div style="margin: 0 0 8px; color: var(--secondary-text-color); font-size: 12px;">
         PowerPilz v${POWER_PILZ_VERSION}
@@ -112,7 +130,7 @@ export class PowerPilzGraphCardEditor extends LitElement implements LovelaceCard
       <ha-form
         .hass=${this.hass}
         .data=${this._config}
-        .schema=${SCHEMA}
+        .schema=${schema}
         .computeLabel=${this.computeLabel}
         @value-changed=${this.valueChanged}
       ></ha-form>
@@ -132,9 +150,27 @@ export class PowerPilzGraphCardEditor extends LitElement implements LovelaceCard
     if (!value || typeof value !== "object" || Array.isArray(value)) {
       return;
     }
+    const raw = value as GraphCardConfig;
+    const tapActionType = raw.tap_action_type ?? "none";
+    const tapActionNavigationPath = raw.tap_action_navigation_path ?? "";
+    const tapActionEntity = raw.tap_action_entity ?? "";
+
+    const {
+      tap_action_type: _tapType,
+      tap_action_navigation_path: _tapPath,
+      tap_action_entity: _tapEntity,
+      ...rest
+    } = raw;
     const nextConfig: GraphCardConfig = {
-      ...(value as GraphCardConfig),
-      type: "custom:power-pilz-graph-card"
+      ...rest,
+      type: "custom:power-pilz-graph-card",
+      tap_action: tapActionType !== "none"
+        ? {
+            action: tapActionType,
+            navigation_path: tapActionNavigationPath || undefined,
+            entity: tapActionEntity || undefined
+          }
+        : undefined
     };
     this.dispatchEvent(
       new CustomEvent("config-changed", {

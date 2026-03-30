@@ -3,7 +3,7 @@ import { formatValueWithUnitScaling, type UnitFormatOptions } from "./unit-scali
 
 export type GraphLegendLayout = "row" | "column";
 export type GraphSlot = 1 | 2 | 3 | 4;
-export type GraphTimeframeHours = 6 | 12 | 24;
+export type GraphTimeframeHours = 6 | 12 | 24 | 48 | 72 | 168 | 336 | 720;
 
 type ColorValue = string | number[] | undefined;
 
@@ -164,7 +164,7 @@ export const normalizeTimeframeHours = (
       : typeof value === "string"
         ? Number.parseInt(value, 10)
         : NaN;
-  if (parsed === 6 || parsed === 12 || parsed === 24) {
+  if (parsed === 6 || parsed === 12 || parsed === 24 || parsed === 48 || parsed === 72 || parsed === 168 || parsed === 336 || parsed === 720) {
     return parsed;
   }
   return fallbackHours;

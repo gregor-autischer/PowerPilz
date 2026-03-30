@@ -39,6 +39,14 @@ import {
 import { clampUnitDecimals, parseConvertibleUnit } from "../utils/unit-scaling";
 import "./editors/graph-card-editor";
 
+type TapActionType = "none" | "navigate" | "more-info";
+
+interface TapActionConfig {
+  action?: TapActionType;
+  navigation_path?: string;
+  entity?: string;
+}
+
 const DEFAULT_DECIMALS = 1;
 const DEFAULT_TIMEFRAME_HOURS = 24;
 const TREND_REFRESH_MS = 5 * 60 * 1000;
@@ -131,6 +139,7 @@ interface PowerPilzGraphCardConfig extends LovelaceCardConfig {
   auto_scale_units?: boolean;
   decimals_base_unit?: number;
   decimals_prefixed_unit?: number;
+  tap_action?: TapActionConfig;
 
   entity?: string;
   icon?: string;
@@ -356,6 +365,8 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
     const entries = this.collectSeriesEntries(config, decimals);
     const legendLayout = this.normalizeLegendLayout(config.legend_layout);
     const hoverEnabled = config.hover_enabled !== false;
+    const tapAction = this.resolveTapAction(config);
+    const interactive = !hoverEnabled && !this.isEditorPreview() && tapAction.action !== "none";
     const hoverState = this._hoverState;
     const graphTopInset = (config.clip_graph_to_labels ?? false) ? this._graphTopInset : 0;
     const graphStyle = graphTopInset > 0 ? { top: `${graphTopInset}px` } : {};
@@ -377,12 +388,18 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
     }));
 
     return html`
-      <ha-card>
+      <ha-card
+        class=${interactive ? "interactive" : ""}
+        tabindex=${interactive ? 0 : -1}
+        role=${interactive ? "button" : "article"}
+        @click=${this.handleCardClick}
+        @keydown=${this.handleCardKeyDown}
+      >
         <div
           class="container"
-          @pointermove=${this.handlePointerMove}
-          @pointerleave=${this.handlePointerLeave}
-          @pointercancel=${this.handlePointerLeave}
+          @pointermove=${hoverEnabled ? this.handlePointerMove : nothing}
+          @pointerleave=${hoverEnabled ? this.handlePointerLeave : nothing}
+          @pointercancel=${hoverEnabled ? this.handlePointerLeave : nothing}
         >
           <div class="card-trend" style=${styleMap(graphStyle)} aria-hidden="true">
             <canvas class="card-trend-canvas-area"></canvas>
@@ -985,6 +1002,83 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
   private handlePointerLeave = (): void => {
     this.clearHoverState();
   };
+
+  private handleCardClick = (): void => {
+    this.executeTapAction();
+  };
+
+  private handleCardKeyDown = (event: KeyboardEvent): void => {
+    if (event.key !== "Enter" && event.key !== " ") {
+      return;
+    }
+    event.preventDefault();
+    this.executeTapAction();
+  };
+
+  private executeTapAction(): void {
+    if (this.isEditorPreview() || !this._config) {
+      return;
+    }
+
+    if (this._config.hover_enabled !== false) {
+      return;
+    }
+
+    const tapAction = this.resolveTapAction(this._config);
+    if (tapAction.action === "none") {
+      return;
+    }
+
+    if (tapAction.action === "navigate") {
+      if (tapAction.navigation_path) {
+        this.navigateToPath(tapAction.navigation_path);
+      }
+      return;
+    }
+
+    if (tapAction.action === "more-info") {
+      const entityId =
+        tapAction.entity
+        ?? this._config.entity_1
+        ?? this._config.entity;
+      if (entityId) {
+        this.fireEvent("hass-more-info", { entityId });
+      }
+    }
+  }
+
+  private resolveTapAction(config: PowerPilzGraphCardConfig): Required<TapActionConfig> {
+    const source = config.tap_action;
+    if (source) {
+      const action: TapActionType = source.action ?? (source.navigation_path ? "navigate" : "none");
+      return {
+        action,
+        navigation_path: source.navigation_path ?? "",
+        entity: source.entity ?? ""
+      };
+    }
+
+    return {
+      action: "none",
+      navigation_path: "",
+      entity: ""
+    };
+  }
+
+  private navigateToPath(path: string): void {
+    window.history.pushState(null, "", path);
+    window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
+  }
+
+  private fireEvent(type: string, detail: Record<string, unknown>): void {
+    this.dispatchEvent(
+      new CustomEvent(type, {
+        detail,
+        bubbles: true,
+        composed: true
+      })
+    );
+  }
 
   private clearHoverState(): void {
     if (this._hoverState) {
@@ -1867,6 +1961,15 @@ export class PowerPilzGraphCard extends LitElement implements LovelaceCard {
       text-overflow: ellipsis;
       overflow: hidden;
       white-space: nowrap;
+    }
+
+    ha-card.interactive {
+      cursor: pointer;
+    }
+
+    ha-card.interactive:focus-visible {
+      outline: 2px solid var(--primary-color, #03a9f4);
+      outline-offset: 2px;
     }
   `;
 }

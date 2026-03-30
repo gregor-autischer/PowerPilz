@@ -34,7 +34,10 @@ const BASE_LABELS: Record<string, string> = {
   decimals: "Decimals",
   auto_scale_units: "Auto unit scaling (W<->kW, Wh<->kWh)",
   decimals_base_unit: "Decimals (base unit)",
-  decimals_prefixed_unit: "Decimals (prefixed units)"
+  decimals_prefixed_unit: "Decimals (prefixed units)",
+  tap_action_type: "Tap action",
+  tap_action_navigation_path: "Navigation path",
+  tap_action_entity: "More-info entity"
 };
 
 interface GraphEditorLikeConfig extends LovelaceCardConfig {
@@ -92,7 +95,19 @@ const entitySchema = (index: number): HaFormSchema => ({
   ]
 });
 
-export const createGraphSchema = (includeNormalizeStackToPercent = false, percentEnabled = false): HaFormSchema[] => {
+export interface GraphSchemaOptions {
+  includeNormalizeStackToPercent?: boolean;
+  percentEnabled?: boolean;
+  hoverEnabled?: boolean;
+}
+
+export const createGraphSchema = (
+  includeNormalizeStackToPercent = false,
+  percentEnabled = false,
+  options?: GraphSchemaOptions
+): HaFormSchema[] => {
+  const hoverEnabled = options?.hoverEnabled ?? true;
+
   const toggles: HaFormSchema[] = [
     { name: "hover_enabled", selector: { boolean: {} } },
     { name: "fill_area_enabled", selector: { boolean: {} } },
@@ -124,10 +139,40 @@ export const createGraphSchema = (includeNormalizeStackToPercent = false, percen
     );
   }
 
+  if (!hoverEnabled) {
+    toggles.push(
+      {
+        name: "tap_action_type",
+        selector: {
+          select: {
+            mode: "dropdown",
+            options: [
+              { label: "None", value: "none" },
+              { label: "More info", value: "more-info" },
+              { label: "Navigate", value: "navigate" }
+            ]
+          }
+        }
+      }
+    );
+  }
+
   toggles.push(
     { name: "clip_graph_to_labels", selector: { boolean: {} } },
     { name: "line_thickness", selector: { number: { mode: "box", min: 0.5, max: 6, step: 0.1 } } }
   );
+
+  const tapActionFields: HaFormSchema[] = [];
+  if (!hoverEnabled) {
+    tapActionFields.push({
+      type: "grid",
+      name: "",
+      schema: [
+        { name: "tap_action_navigation_path", selector: { text: {} } },
+        { name: "tap_action_entity", selector: { entity: {} } }
+      ]
+    });
+  }
 
   return [
     {
@@ -149,9 +194,14 @@ export const createGraphSchema = (includeNormalizeStackToPercent = false, percen
             select: {
               mode: "dropdown",
               options: [
-                { label: "24 hours", value: 24 },
+                { label: "6 hours", value: 6 },
                 { label: "12 hours", value: 12 },
-                { label: "6 hours", value: 6 }
+                { label: "24 hours", value: 24 },
+                { label: "48 hours", value: 48 },
+                { label: "3 days", value: 72 },
+                { label: "7 days", value: 168 },
+                { label: "14 days", value: 336 },
+                { label: "30 days", value: 720 }
               ]
             }
           }
@@ -177,6 +227,7 @@ export const createGraphSchema = (includeNormalizeStackToPercent = false, percen
       schema: toggles
     },
     ...Array.from({ length: GRAPH_SLOT_COUNT }, (_, index) => entitySchema(index + 1)),
+    ...tapActionFields,
     {
       type: "grid",
       name: "",

@@ -14,6 +14,12 @@ import {
   type GraphTimeframeHours
 } from "./graph-editor-shared";
 
+interface TapActionConfig {
+  action?: string;
+  navigation_path?: string;
+  entity?: string;
+}
+
 interface GraphStackCardConfig extends LovelaceCardConfig {
   type: "custom:power-pilz-graph-stack-card";
   legend_layout?: GraphLegendLayout;
@@ -33,6 +39,7 @@ interface GraphStackCardConfig extends LovelaceCardConfig {
   auto_scale_units?: boolean;
   decimals_base_unit?: number;
   decimals_prefixed_unit?: number;
+  tap_action?: TapActionConfig;
 
   entity?: string;
   icon?: string;
@@ -70,7 +77,13 @@ interface GraphStackCardConfig extends LovelaceCardConfig {
   entity_4_show_icon?: boolean;
   entity_4_icon_color?: string | number[];
   entity_4_trend_color?: string | number[];
+
+  // Flat tap action fields for ha-form binding
+  tap_action_type?: string;
+  tap_action_navigation_path?: string;
+  tap_action_entity?: string;
 }
+
 @customElement("power-pilz-graph-stack-card-editor")
 export class PowerPilzGraphStackCardEditor extends LitElement implements LovelaceCardEditor {
   @property({ attribute: false })
@@ -80,6 +93,7 @@ export class PowerPilzGraphStackCardEditor extends LitElement implements Lovelac
   private _config?: GraphStackCardConfig;
 
   public setConfig(config: GraphStackCardConfig): void {
+    const tap = config.tap_action;
     const next: GraphStackCardConfig = {
       ...config,
       type: "custom:power-pilz-graph-stack-card",
@@ -98,6 +112,9 @@ export class PowerPilzGraphStackCardEditor extends LitElement implements Lovelac
       decimals_prefixed_unit: config.decimals_prefixed_unit ?? config.decimals ?? 1,
       line_thickness: clampLineThickness(config.line_thickness),
       clip_graph_to_labels: config.clip_graph_to_labels ?? false,
+      tap_action_type: config.tap_action_type ?? tap?.action ?? "none",
+      tap_action_navigation_path: config.tap_action_navigation_path ?? tap?.navigation_path ?? "",
+      tap_action_entity: config.tap_action_entity ?? tap?.entity ?? "",
       ...normalizeGraphEntityFields(config)
     };
 
@@ -109,7 +126,9 @@ export class PowerPilzGraphStackCardEditor extends LitElement implements Lovelac
       return nothing;
     }
 
-    const schema = createGraphSchema(true, this._config.normalize_stack_to_percent ?? false);
+    const hoverEnabled = this._config.hover_enabled ?? true;
+    const percentEnabled = this._config.normalize_stack_to_percent ?? false;
+    const schema = createGraphSchema(true, percentEnabled, { hoverEnabled });
 
     return html`
       <div style="margin: 0 0 8px; color: var(--secondary-text-color); font-size: 12px;">
@@ -142,9 +161,27 @@ export class PowerPilzGraphStackCardEditor extends LitElement implements Lovelac
     if (!value || typeof value !== "object" || Array.isArray(value)) {
       return;
     }
+    const raw = value as GraphStackCardConfig;
+    const tapActionType = raw.tap_action_type ?? "none";
+    const tapActionNavigationPath = raw.tap_action_navigation_path ?? "";
+    const tapActionEntity = raw.tap_action_entity ?? "";
+
+    const {
+      tap_action_type: _tapType,
+      tap_action_navigation_path: _tapPath,
+      tap_action_entity: _tapEntity,
+      ...rest
+    } = raw;
     const nextConfig: GraphStackCardConfig = {
-      ...(value as GraphStackCardConfig),
-      type: "custom:power-pilz-graph-stack-card"
+      ...rest,
+      type: "custom:power-pilz-graph-stack-card",
+      tap_action: tapActionType !== "none"
+        ? {
+            action: tapActionType,
+            navigation_path: tapActionNavigationPath || undefined,
+            entity: tapActionEntity || undefined
+          }
+        : undefined
     };
     this.dispatchEvent(
       new CustomEvent("config-changed", {
