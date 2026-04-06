@@ -78,12 +78,14 @@ interface TrendCoordinate {
   x: number;
   y: number;
   value: number;
+  ts: number;
 }
 
 interface TrendCanvasPoint {
   x: number;
   y: number;
   value: number;
+  ts: number;
 }
 
 interface TrendValueRange {
@@ -110,6 +112,7 @@ interface GraphHoverState {
   x: number;
   y: number;
   value: number;
+  ts: number;
   color: string;
 }
 
@@ -135,7 +138,7 @@ interface PowerPilzGraphStackCardConfig extends LovelaceCardConfig {
   debug_performance?: boolean;
   trend_data_source?: TrendDataSource | "auto";
   normalize_stack_to_percent?: boolean;
-  percent_reference_slot?: number;
+  percent_reference_slot?: number | string;
   percent_reference_auto?: boolean;
   auto_scale_units?: boolean;
   decimals_base_unit?: number;
@@ -433,7 +436,7 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
                 : displayEntries.map((entry) =>
                     this.renderSeriesItem(
                       entry,
-                      hoverState && hoverState.slot === entry.slot ? hoverState.value : null
+                      hoverState && hoverState.slot === entry.slot ? hoverState : null
                     )
                   )}
             </div>
@@ -443,13 +446,14 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
     `;
   }
 
-  private renderSeriesItem(entry: GraphSeriesEntry, hoveredValue: number | null): TemplateResult {
-    const displayHoverValue = hoveredValue === null
+  private renderSeriesItem(entry: GraphSeriesEntry, hoveredState: GraphHoverState | null): TemplateResult {
+    const displayHoverValue = hoveredState === null
       ? null
-      : this.convertStackedHoverValue(entry.slot, hoveredValue);
+      : this.convertStackedHoverValue(entry.slot, hoveredState.value);
+    const hoverTime = hoveredState === null ? null : this.formatHoverTimestamp(hoveredState.ts);
     const secondary = displayHoverValue === null
       ? entry.secondary
-      : this.formatValue(displayHoverValue, entry.unit, entry.decimals);
+      : `${this.formatValue(displayHoverValue, entry.unit, entry.decimals)} - ${hoverTime ?? ""}`;
 
     return html`
       <div class="state-item" data-slot=${String(entry.slot)}>
@@ -653,6 +657,27 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
     });
   }
 
+  private formatHoverTimestamp(ts: number): string {
+    const date = new Date(ts);
+    const locale = "de-AT";
+    const time = new Intl.DateTimeFormat(locale, {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false
+    }).format(date);
+
+    if (this.trendWindowMs(this._config) <= 24 * 60 * 60 * 1000) {
+      return time;
+    }
+
+    const day = new Intl.DateTimeFormat(locale, {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric"
+    }).format(date);
+    return `${time} ${day}`;
+  }
+
   private resolveStackUnitFactors(entries: Array<Pick<GraphSeriesEntry, "slot" | "unit">>): Partial<Record<GraphSlot, number>> | null {
     if (entries.length === 0) {
       return null;
@@ -777,7 +802,7 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
       const x = xMin + (normalizedX / 100) * (xMax - xMin);
       const normalized = span <= EPSILON ? 0.5 : (point.value - min) / span;
       const y = bottom - normalized * (bottom - top);
-      return { x, y, value: point.value };
+      return { x, y, value: point.value, ts: point.ts };
     });
 
     const firstX = coordinates[0]?.x ?? xMin;
@@ -807,7 +832,12 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
   }
 
   private toCanvasPoints(points: TrendCoordinate[], width: number, height: number): TrendCanvasPoint[] {
-    return toTrendCanvasPoints(points, width, height);
+    return toTrendCanvasPoints(points, width, height).map((point) => ({
+      x: point.x,
+      y: point.y,
+      value: point.value,
+      ts: point.ts
+    }));
   }
 
   private syncTrendResizeObserver(): void {
@@ -1385,6 +1415,7 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
           x: interpolated.x,
           y: interpolated.y,
           value: interpolated.value,
+          ts: interpolated.ts,
           color: drawConfig.color
         };
       }
@@ -1401,10 +1432,10 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
     const first = points[0];
     const last = points[points.length - 1];
     if (x <= first.x) {
-      return { x, y: first.y, value: first.value };
+      return { x, y: first.y, value: first.value, ts: first.ts };
     }
     if (x >= last.x) {
-      return { x, y: last.y, value: last.value };
+      return { x, y: last.y, value: last.value, ts: last.ts };
     }
 
     for (let index = 1; index < points.length; index += 1) {
@@ -1416,18 +1447,19 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
 
       const span = next.x - prev.x;
       if (Math.abs(span) <= EPSILON) {
-        return { x, y: next.y, value: next.value };
+        return { x, y: next.y, value: next.value, ts: next.ts };
       }
 
       const t = (x - prev.x) / span;
       return {
         x,
         y: prev.y + ((next.y - prev.y) * t),
-        value: prev.value + ((next.value - prev.value) * t)
+        value: prev.value + ((next.value - prev.value) * t),
+        ts: prev.ts + ((next.ts - prev.ts) * t)
       };
     }
 
-    return { x, y: last.y, value: last.value };
+    return { x, y: last.y, value: last.value, ts: last.ts };
   }
 
   private strokeTrendPolyline(

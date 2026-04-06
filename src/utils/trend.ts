@@ -2,17 +2,19 @@ export interface TrendCanvasPoint {
   x: number;
   y: number;
   value: number;
+  ts: number;
 }
 
 export const toTrendCanvasPoints = (
-  points: Array<{ x: number; y: number; value: number }>,
+  points: Array<{ x: number; y: number; value: number; ts: number }>,
   width: number,
   height: number
 ): TrendCanvasPoint[] => {
   const canvasPoints = points.map((point) => ({
     x: (point.x / 100) * width,
     y: (point.y / 100) * height,
-    value: point.value
+    value: point.value,
+    ts: point.ts
   }));
   return downsampleTrendCanvasPoints(canvasPoints, width);
 };
@@ -42,21 +44,23 @@ export const downsampleTrendCanvasPoints = (
       continue;
     }
 
-    const sum = bucket.reduce(
+    const sum = bucket.reduce<{ x: number; y: number; value: number; ts: number }>(
       (acc, point) => {
         acc.x += point.x;
         acc.y += point.y;
         acc.value += point.value;
+        acc.ts += point.ts;
         return acc;
       },
-      { x: 0, y: 0, value: 0 }
+      { x: 0, y: 0, value: 0, ts: 0 }
     );
 
     const count = bucket.length;
     sampled.push({
       x: sum.x / count,
       y: sum.y / count,
-      value: sum.value / count
+      value: sum.value / count,
+      ts: sum.ts / count
     });
   }
 
@@ -77,7 +81,8 @@ export const smoothTrendCanvasPoints = (points: TrendCanvasPoint[]): TrendCanvas
     smoothed.push({
       x: cur.x,
       y: (prev.y + (cur.y * 2) + next.y) / 4,
-      value: (prev.value + (cur.value * 2) + next.value) / 4
+      value: (prev.value + (cur.value * 2) + next.value) / 4,
+      ts: cur.ts
     });
   }
   smoothed.push(points[points.length - 1]);

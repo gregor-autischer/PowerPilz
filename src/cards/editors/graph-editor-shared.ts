@@ -24,7 +24,7 @@ export const TREND_DEFAULTS: Record<number, string> = {
 // --- Helper texts ---
 
 const HOVER_HELP =
-  "When enabled, hovering over the graph shows a tooltip with the value at that point.";
+  "When enabled, hovering over the graph shows the value and timestamp for that point in the legend.";
 const AREA_FILL_HELP =
   "When enabled, the area below each trend line is filled with a semi-transparent gradient.";
 const SHARED_SCALE_HELP =

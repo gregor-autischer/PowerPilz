@@ -28,7 +28,7 @@ interface GraphStackCardConfig extends LovelaceCardConfig {
   trend_data_source?: TrendDataSource | "auto";
   debug_performance?: boolean;
   normalize_stack_to_percent?: boolean;
-  percent_reference_slot?: number;
+  percent_reference_slot?: number | string;
   percent_reference_auto?: boolean;
   auto_scale_units?: boolean;
   decimals_base_unit?: number;

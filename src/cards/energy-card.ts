@@ -68,12 +68,14 @@ interface TrendCoordinate {
   x: number;
   y: number;
   value: number;
+  ts: number;
 }
 
 interface TrendCanvasPoint {
   x: number;
   y: number;
   value: number;
+  ts: number;
 }
 
 interface TrendValueRange {
@@ -1760,7 +1762,8 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       const cross: TrendCanvasPoint = {
         x: start.x + (end.x - start.x) * t,
         y: start.y + (end.y - start.y) * t,
-        value: threshold
+        value: threshold,
+        ts: start.ts + (end.ts - start.ts) * t
       };
 
       segments.push({
@@ -1804,7 +1807,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       const x = xMin + (normalizedX / 100) * (xMax - xMin);
       const normalized = span <= EPSILON ? 0.5 : (point.value - min) / span;
       const y = bottom - normalized * (bottom - top);
-      return { x, y, value: point.value };
+      return { x, y, value: point.value, ts: point.ts };
     });
 
     const firstX = coordinates[0]?.x ?? xMin;
