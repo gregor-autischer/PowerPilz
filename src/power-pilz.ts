@@ -4,6 +4,7 @@ import "./cards/graph-stack-card";
 import "./cards/wallbox-card";
 import "./cards/switch-card";
 import "./cards/schedule-card";
+import "./cards/timer-card";
 import { POWER_PILZ_VERSION } from "./version";
 
 declare global {
@@ -54,6 +55,12 @@ const cards = [
     type: "power-pilz-schedule-card",
     name: "PowerPilz Schedule Card",
     description: "Visual time schedule card with 24h timeline, day selector and override controls.",
+    preview: true
+  },
+  {
+    type: "power-pilz-timer-card",
+    name: "PowerPilz Timer Card",
+    description: "Schedule a one-time future on/off action for any device within the next 7 days.",
     preview: true
   }
 ];

@@ -2,6 +2,7 @@ import { LitElement, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { HomeAssistant, LovelaceCardConfig, LovelaceCardEditor } from "../../types";
 import { POWER_PILZ_VERSION } from "../../version";
+import { haLang } from "../../utils/i18n";
 import {
   clampLineThickness,
   computeGraphEditorLabel,
@@ -124,7 +125,7 @@ export class PowerPilzGraphCardEditor extends LitElement implements LovelaceCard
   }
 
   private computeLabel = (schema: { name?: string }): string => {
-    return computeGraphEditorLabel(schema);
+    return computeGraphEditorLabel(schema, {}, haLang(this.hass));
   };
 
   private valueChanged = (event: CustomEvent<{ value: unknown }>): void => {

@@ -2,6 +2,7 @@ import { LitElement, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { HomeAssistant, LovelaceCardConfig, LovelaceCardEditor } from "../../types";
 import { POWER_PILZ_VERSION } from "../../version";
+import { tr, haLang } from "../../utils/i18n";
 
 interface WallboxCardConfig extends LovelaceCardConfig {
   type: "custom:power-pilz-wallbox-card";
@@ -70,23 +71,6 @@ const SCHEMA: HaFormSchema[] = [
   }
 ];
 
-const LABELS: Record<string, string> = {
-  name: "Name",
-  icon: "Icon",
-  icon_color: "Icon color",
-  power_entity: "Power entity",
-  status_entity: "Status entity",
-  mode_entity: "Mode entity",
-  command_entity: "Command entity",
-  show_mode_selector: "Show mode selector",
-  show_live_value: "Show live status and power",
-  show_command_button: "Show play/pause button",
-  decimals: "Decimals",
-  auto_scale_units: "Auto unit scaling (W<->kW, Wh<->kWh)",
-  decimals_base_unit: "Decimals (base unit)",
-  decimals_prefixed_unit: "Decimals (prefixed units)"
-};
-
 @customElement("power-pilz-wallbox-card-editor")
 export class PowerPilzWallboxCardEditor extends LitElement implements LovelaceCardEditor {
   @property({ attribute: false })
@@ -106,6 +90,26 @@ export class PowerPilzWallboxCardEditor extends LitElement implements LovelaceCa
       decimals_base_unit: config.decimals_base_unit ?? config.decimals ?? 1,
       decimals_prefixed_unit: config.decimals_prefixed_unit ?? config.decimals ?? 1,
       type: "custom:power-pilz-wallbox-card"
+    };
+  }
+
+  private labels(): Record<string, string> {
+    const lang = haLang(this.hass);
+    return {
+      name: tr(lang, "wallbox.editor.name"),
+      icon: tr(lang, "wallbox.editor.icon"),
+      icon_color: tr(lang, "wallbox.editor.icon_color"),
+      power_entity: tr(lang, "wallbox.editor.power_entity"),
+      status_entity: tr(lang, "wallbox.editor.status_entity"),
+      mode_entity: tr(lang, "wallbox.editor.mode_entity"),
+      command_entity: tr(lang, "wallbox.editor.command_entity"),
+      show_mode_selector: tr(lang, "wallbox.editor.show_mode"),
+      show_live_value: tr(lang, "wallbox.editor.show_live"),
+      show_command_button: tr(lang, "wallbox.editor.show_button"),
+      decimals: tr(lang, "wallbox.editor.decimals"),
+      auto_scale_units: tr(lang, "wallbox.editor.auto_scale"),
+      decimals_base_unit: tr(lang, "wallbox.editor.decimals_base"),
+      decimals_prefixed_unit: tr(lang, "wallbox.editor.decimals_prefixed")
     };
   }
 
@@ -129,8 +133,7 @@ export class PowerPilzWallboxCardEditor extends LitElement implements LovelaceCa
   }
 
   private computeLabel = (schema: { name?: string }): string => {
-    const name = schema.name ?? "";
-    return LABELS[name] ?? name;
+    return this.labels()[schema.name ?? ""] ?? schema.name ?? "";
   };
 
   private valueChanged = (event: CustomEvent<{ value: unknown }>): void => {

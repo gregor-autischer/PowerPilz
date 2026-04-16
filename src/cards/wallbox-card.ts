@@ -13,6 +13,7 @@ import type {
 import { getEntity, readNumber, readState, readUnit } from "../utils/entity";
 import { mushroomIconStyle } from "../utils/color";
 import { clampUnitDecimals, formatValueWithUnitScaling } from "../utils/unit-scaling";
+import { tr, haLang } from "../utils/i18n";
 import "./editors/wallbox-card-editor";
 
 const EPSILON = 0.01;
@@ -118,7 +119,7 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
     this._config = {
       ...config,
       icon: config.icon ?? "mdi:power-plug",
-      name: config.name ?? "Wallbox",
+      name: config.name ?? tr(haLang(this.hass), "wallbox.default_name"),
       show_mode_selector: config.show_mode_selector ?? true,
       show_live_value: config.show_live_value ?? true,
       show_command_button: config.show_command_button ?? true,
@@ -153,8 +154,9 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
   }
 
   protected render(): TemplateResult {
+    const lang = haLang(this.hass);
     if (!this._config) {
-      return html`<ha-card>Invalid configuration</ha-card>`;
+      return html`<ha-card>${tr(lang, "common.invalid_config")}</ha-card>`;
     }
 
     if (!this.hass) {
@@ -170,7 +172,7 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
     const modeOptions = this.getModeOptions(modeEntity);
     const isCharging = this.isCharging(status, power, config.command_entity);
     const command = this.resolveActionCommand(isCharging);
-    const actionLabel = isCharging ? "Stop" : "Start";
+    const actionLabel = isCharging ? tr(lang, "wallbox.stop") : tr(lang, "wallbox.start");
     const actionIcon = isCharging ? "mdi:pause" : "mdi:play";
     const statusLabel = this.statusLabel(status, isCharging);
     const powerLabel = this.formatPower(power, powerUnit, config.decimals ?? 1);
@@ -178,7 +180,7 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
     const showLiveValue = this.showLiveValue(config);
     const showCommandButton = this.showCommandButton(config);
     const modeDisabled = this.isEditorPreview() || this._actionBusy || !config.mode_entity || modeOptions.length === 0;
-    const selectedMode = modeValue || modeOptions[0] || "Mode";
+    const selectedMode = modeValue || modeOptions[0] || tr(lang, "wallbox.mode_fallback");
     const modeChevron = this._modeMenuOpen ? "mdi:chevron-up" : "mdi:chevron-down";
     const iconStyle = this.iconStyle(config.icon_color);
     const trailingCount = Number(showLiveValue) + Number(showCommandButton);
@@ -211,7 +213,7 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
             </div>
             <div class="info">
               <div class="primary">${config.name}</div>
-              <div class="secondary">EV charger</div>
+              <div class="secondary">${tr(lang, "wallbox.ev_charger")}</div>
             </div>
 
             ${showHeaderTrailing
@@ -329,9 +331,14 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
   }
 
   private statusLabel(status: string | undefined, charging: boolean): string {
+    const lang = haLang(this.hass);
     if (!status) {
-      return charging ? "Charging" : "Idle";
+      return charging ? tr(lang, "wallbox.status_charging") : tr(lang, "wallbox.status_idle");
     }
+    const normalized = status.toLowerCase().replace(/[_\s-]+/g, "_");
+    const translationKey = `wallbox.status_${normalized}`;
+    const translated = tr(lang, translationKey);
+    if (translated !== translationKey) return translated;
     return status
       .replace(/[_-]+/g, " ")
       .replace(/\s+/g, " ")

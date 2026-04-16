@@ -12,6 +12,7 @@ import type {
 } from "../types";
 import { getEntity } from "../utils/entity";
 import { mushroomIconStyle, toRgbCss, type ColorValue } from "../utils/color";
+import { tr, haLang } from "../utils/i18n";
 import "./editors/switch-card-editor";
 
 const MAX_OPTIONS = 5;
@@ -92,7 +93,7 @@ export class PowerPilzSwitchCard extends LitElement implements LovelaceCard {
     this._config = {
       ...config,
       icon: config.icon ?? "mdi:toggle-switch-outline",
-      name: config.name ?? "Mode"
+      name: config.name ?? tr(haLang(this.hass), "switch.default_name")
     };
     // When card_layout changes, tell HA to rebuild the grid cell sizing.
     if (prevLayout !== undefined && prevLayout !== config.card_layout) {
@@ -312,7 +313,7 @@ export class PowerPilzSwitchCard extends LitElement implements LovelaceCard {
     const pillOffset = segmentCount > 0 ? (activeIdx / segmentCount) * 100 : 0;
     const pillWidth = segmentCount > 0 ? 100 / segmentCount : 100;
     const friendlyName = entity?.attributes?.friendly_name;
-    const subtitle = config.subtitle || currentState || "Unknown";
+    const subtitle = config.subtitle || currentState || tr(haLang(this.hass), "common.unknown");
     const cardLayout = this.resolvedCardLayout();
     const sliderSize = this.resolvedSliderSize();
     const sliderWidth = SLIDER_WIDTH[sliderSize];
@@ -341,7 +342,7 @@ export class PowerPilzSwitchCard extends LitElement implements LovelaceCard {
                 </div>
               </div>
               <div class="info">
-                <div class="primary">${config.name || friendlyName || "Mode"}</div>
+                <div class="primary">${config.name || friendlyName || tr(haLang(this.hass), "switch.default_name")}</div>
                 <div class="secondary">${subtitle}</div>
               </div>
             </div>
@@ -368,7 +369,7 @@ export class PowerPilzSwitchCard extends LitElement implements LovelaceCard {
               </div>
             </div>
             <div class="info">
-              <div class="primary">${config.name || friendlyName || "Mode"}</div>
+              <div class="primary">${config.name || friendlyName || tr(haLang(this.hass), "switch.default_name")}</div>
               <div class="secondary">${subtitle}</div>
             </div>
             ${hasSlider

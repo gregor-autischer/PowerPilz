@@ -1,4 +1,5 @@
 import type { LovelaceCardConfig } from "../../types";
+import { tr, type Lang } from "../../utils/i18n";
 import { normalizeTrendDataSource, type TrendDataSource } from "../../utils/history";
 import {
   normalizeLineThickness as normalizeLineThicknessValue,
@@ -548,9 +549,34 @@ export const normalizeGraphEntityFields = (config: GraphEditorLikeConfig): Recor
   entity_4_trend_color: normalizeTrendColor(config.entity_4_trend_color as GraphColor, undefined, 4)
 });
 
+// Map of graph schema field names → i18n keys
+const GRAPH_LABEL_KEYS: Record<string, string> = {
+  legend_layout: "graph.editor.layout",
+  timeframe_hours: "graph.editor.timeframe_hours",
+  hover_enabled: "graph.editor.hover_enabled",
+  fill_area_enabled: "graph.editor.fill_area_enabled",
+  shared_trend_scale: "graph.editor.shared_trend_scale",
+  trend_data_source: "graph.editor.trend_data_source",
+  clip_graph_to_labels: "graph.editor.clip_graph_to_labels",
+  line_thickness: "graph.editor.line_thickness",
+  unit: "graph.editor.unit",
+  decimals: "graph.editor.decimals",
+  auto_scale_units: "graph.editor.auto_scale_units",
+  decimals_base_unit: "graph.editor.decimals_base_unit",
+  decimals_prefixed_unit: "graph.editor.decimals_prefixed_unit",
+  normalize_stack_to_percent: "graph.editor.normalize_stack_to_percent",
+  percent_reference_slot: "graph.editor.percent_reference_slot",
+  percent_reference_auto: "graph.editor.percent_reference_auto",
+  entity: "graph.editor.entity",
+  tap_action: "graph.editor.tap_action",
+  hold_action: "graph.editor.hold_action",
+  double_tap_action: "graph.editor.double_tap_action"
+};
+
 export const computeGraphEditorLabel = (
   schema: { name?: string },
-  extraLabels: Record<string, string> = {}
+  extraLabels: Record<string, string> = {},
+  lang: Lang | string = "en"
 ): string => {
   const name = schema.name ?? "";
 
@@ -558,20 +584,23 @@ export const computeGraphEditorLabel = (
   if (match) {
     const [, , field] = match;
     const fieldLabel: Record<string, string> = {
-      enabled: "Enabled",
-      name: "Name",
-      show_icon: "Show icon",
-      icon: "Icon",
-      icon_color: "Icon color",
-      trend_color: "Graph color"
+      enabled: lang === "de" ? "Aktiviert" : "Enabled",
+      name: lang === "de" ? "Name" : "Name",
+      show_icon: lang === "de" ? "Symbol anzeigen" : "Show icon",
+      icon: lang === "de" ? "Symbol" : "Icon",
+      icon_color: lang === "de" ? "Symbolfarbe" : "Icon color",
+      trend_color: lang === "de" ? "Graph-Farbe" : "Graph color"
     };
     return fieldLabel[field] ?? field;
   }
 
   const entityMatch = name.match(/^entity_(\d+)$/);
   if (entityMatch) {
-    return "Sensor";
+    return lang === "de" ? "Sensor" : "Sensor";
   }
 
-  return extraLabels[name] ?? BASE_LABELS[name] ?? name;
+  if (extraLabels[name]) return extraLabels[name];
+  const key = GRAPH_LABEL_KEYS[name];
+  if (key) return tr(lang, key);
+  return BASE_LABELS[name] ?? name;
 };

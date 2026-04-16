@@ -2,6 +2,7 @@ import { LitElement, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { HomeAssistant, LovelaceCardConfig, LovelaceCardEditor } from "../../types";
 import { POWER_PILZ_VERSION } from "../../version";
+import { tr, haLang } from "../../utils/i18n";
 
 interface ScheduleCardConfig extends LovelaceCardConfig {
   type: "custom:power-pilz-schedule-card";
@@ -23,207 +24,6 @@ interface ScheduleCardConfig extends LovelaceCardConfig {
 
 type HaFormSchema = Record<string, unknown>;
 
-// --- Helper texts ---
-
-const SCHEDULE_ENTITY_HELP =
-  "A schedule helper entity (schedule domain). Create one in Settings > Devices & Services > Helpers > Add > Schedule. It defines the weekly on/off time blocks shown on the timeline.";
-const SWITCH_ENTITY_HELP =
-  "The device this schedule controls (switch, light, or input_boolean). Automatically turned on/off when the mode changes to 'On' or 'Off'. The card icon reflects the device state (colored = on, grey = off).";
-const MODE_ENTITY_HELP =
-  "An input_select with options like 'Auto', 'On', 'Off' (create in Settings > Helpers > Dropdown). Controls the override mode: Timer = schedule runs normally, On = device always on, Off = device always off. Tap the card or mode button to cycle through modes.";
-const TIME_WINDOW_HELP =
-  "How many hours to display on the timeline. 24h shows the full day, 12h and 6h center on the current time.";
-const ACTIVE_COLOR_HELP =
-  "Color for the active (on) time blocks on the timeline.";
-const CARD_LAYOUT_HELP =
-  "Horizontal shows controls inline with the header. Vertical stacks everything for a taller card.";
-
-const SCHEMA: HaFormSchema[] = [
-  // --- Entities ---
-  {
-    type: "expandable",
-    name: "",
-    title: "Entities",
-    icon: "mdi:connection",
-    expanded: true,
-    schema: [
-      {
-        name: "schedule_entity",
-        selector: { entity: { filter: { domain: "schedule" } } },
-        helper: SCHEDULE_ENTITY_HELP,
-        description: SCHEDULE_ENTITY_HELP
-      },
-      {
-        name: "switch_entity",
-        selector: { entity: { filter: { domain: ["switch", "light", "input_boolean"] } } },
-        helper: SWITCH_ENTITY_HELP,
-        description: SWITCH_ENTITY_HELP
-      },
-      {
-        name: "mode_entity",
-        selector: { entity: { filter: { domain: ["input_select", "select"] } } },
-        helper: MODE_ENTITY_HELP,
-        description: MODE_ENTITY_HELP
-      }
-    ]
-  },
-
-  // --- Identity ---
-  {
-    type: "expandable",
-    name: "",
-    title: "Identity",
-    icon: "mdi:card-text-outline",
-    expanded: false,
-    schema: [
-      {
-        type: "grid",
-        name: "",
-        columns: 2,
-        schema: [
-          { name: "name", selector: { text: {} } },
-          { name: "subtitle", selector: { text: {} } }
-        ]
-      },
-      {
-        type: "grid",
-        name: "",
-        columns: 2,
-        schema: [
-          { name: "icon", selector: { icon: {} }, context: { icon_entity: "schedule_entity" } },
-          {
-            name: "icon_color",
-            selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
-          }
-        ]
-      }
-    ]
-  },
-
-  // --- Layout ---
-  {
-    type: "expandable",
-    name: "",
-    title: "Layout",
-    icon: "mdi:page-layout-body",
-    expanded: false,
-    schema: [
-      {
-        type: "grid",
-        name: "",
-        columns: 2,
-        schema: [
-          {
-            name: "card_layout",
-            selector: {
-              select: {
-                mode: "dropdown",
-                options: [
-                  { label: "Horizontal", value: "horizontal" },
-                  { label: "Vertical", value: "vertical" }
-                ]
-              }
-            },
-            helper: CARD_LAYOUT_HELP,
-            description: CARD_LAYOUT_HELP
-          },
-          {
-            name: "time_window",
-            selector: {
-              select: {
-                mode: "dropdown",
-                options: [
-                  { label: "24 hours (full day)", value: "24" },
-                  { label: "12 hours (±6h)", value: "12" },
-                  { label: "6 hours (±3h)", value: "6" }
-                ]
-              }
-            },
-            helper: TIME_WINDOW_HELP,
-            description: TIME_WINDOW_HELP
-          }
-        ]
-      }
-    ]
-  },
-
-  // --- Appearance ---
-  {
-    type: "expandable",
-    name: "",
-    title: "Appearance",
-    icon: "mdi:palette-outline",
-    expanded: false,
-    schema: [
-      {
-        type: "grid",
-        name: "",
-        columns: 2,
-        schema: [
-          {
-            name: "active_color",
-            selector: { ui_color: { include_state: false, include_none: true, default_color: "primary" } },
-            helper: ACTIVE_COLOR_HELP,
-            description: ACTIVE_COLOR_HELP
-          }
-        ]
-      }
-    ]
-  },
-
-  // --- Display options ---
-  {
-    type: "expandable",
-    name: "",
-    title: "Display options",
-    icon: "mdi:tune-variant",
-    expanded: false,
-    schema: [
-      {
-        type: "grid",
-        name: "",
-        columns: 2,
-        schema: [
-          { name: "show_day_selector", selector: { boolean: {} } },
-          { name: "show_mode_control", selector: { boolean: {} } },
-          { name: "show_now_indicator", selector: { boolean: {} } },
-          { name: "show_time_labels", selector: { boolean: {} } }
-        ]
-      }
-    ]
-  }
-];
-
-const LABELS: Record<string, string> = {
-  schedule_entity: "Schedule entity",
-  switch_entity: "Device entity",
-  mode_entity: "Mode override entity",
-  name: "Name",
-  subtitle: "Subtitle",
-  icon: "Icon",
-  icon_color: "Icon color",
-  card_layout: "Card layout",
-  time_window: "Time window",
-  active_color: "Active block color",
-  show_day_selector: "Show day selector",
-  show_mode_control: "Show mode button",
-  show_now_indicator: "Show current time indicator",
-  show_time_labels: "Show hour labels"
-};
-
-const HELPERS: Record<string, string> = {
-  schedule_entity: SCHEDULE_ENTITY_HELP,
-  switch_entity: SWITCH_ENTITY_HELP,
-  mode_entity: MODE_ENTITY_HELP,
-  card_layout: CARD_LAYOUT_HELP,
-  time_window: TIME_WINDOW_HELP,
-  active_color: ACTIVE_COLOR_HELP,
-  show_day_selector: "Show or hide the weekday selector bar.",
-  show_mode_control: "Show or hide the mode override button (Timer/On/Off) in the card header.",
-  show_now_indicator: "Show a vertical line on the timeline at the current time.",
-  show_time_labels: "Show hour labels above the timeline."
-};
-
 @customElement("power-pilz-schedule-card-editor")
 export class PowerPilzScheduleCardEditor extends LitElement implements LovelaceCardEditor {
   @property({ attribute: false })
@@ -243,9 +43,194 @@ export class PowerPilzScheduleCardEditor extends LitElement implements LovelaceC
     };
   }
 
+  private buildSchema(): HaFormSchema[] {
+    const lang = haLang(this.hass);
+    return [
+      {
+        type: "expandable",
+        name: "",
+        title: tr(lang, "schedule.editor.section_entities"),
+        icon: "mdi:connection",
+        expanded: true,
+        schema: [
+          {
+            name: "schedule_entity",
+            selector: { entity: { filter: { domain: "schedule" } } },
+            helper: tr(lang, "schedule.editor.schedule_help"),
+            description: tr(lang, "schedule.editor.schedule_help")
+          },
+          {
+            name: "switch_entity",
+            selector: { entity: { filter: { domain: ["switch", "light", "input_boolean"] } } },
+            helper: tr(lang, "schedule.editor.switch_help"),
+            description: tr(lang, "schedule.editor.switch_help")
+          },
+          {
+            name: "mode_entity",
+            selector: { entity: { filter: { domain: ["input_select", "select"] } } },
+            helper: tr(lang, "schedule.editor.mode_help"),
+            description: tr(lang, "schedule.editor.mode_help")
+          }
+        ]
+      },
+      {
+        type: "expandable",
+        name: "",
+        title: tr(lang, "schedule.editor.section_identity"),
+        icon: "mdi:card-text-outline",
+        expanded: false,
+        schema: [
+          {
+            type: "grid",
+            name: "",
+            columns: 2,
+            schema: [
+              { name: "name", selector: { text: {} } },
+              { name: "subtitle", selector: { text: {} } }
+            ]
+          },
+          {
+            type: "grid",
+            name: "",
+            columns: 2,
+            schema: [
+              { name: "icon", selector: { icon: {} }, context: { icon_entity: "schedule_entity" } },
+              {
+                name: "icon_color",
+                selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        type: "expandable",
+        name: "",
+        title: tr(lang, "schedule.editor.section_layout"),
+        icon: "mdi:page-layout-body",
+        expanded: false,
+        schema: [
+          {
+            type: "grid",
+            name: "",
+            columns: 2,
+            schema: [
+              {
+                name: "card_layout",
+                selector: {
+                  select: {
+                    mode: "dropdown",
+                    options: [
+                      { label: tr(lang, "schedule.editor.layout_horizontal"), value: "horizontal" },
+                      { label: tr(lang, "schedule.editor.layout_vertical"), value: "vertical" }
+                    ]
+                  }
+                },
+                helper: tr(lang, "schedule.editor.card_layout_help"),
+                description: tr(lang, "schedule.editor.card_layout_help")
+              },
+              {
+                name: "time_window",
+                selector: {
+                  select: {
+                    mode: "dropdown",
+                    options: [
+                      { label: tr(lang, "schedule.editor.tw_24"), value: "24" },
+                      { label: tr(lang, "schedule.editor.tw_12"), value: "12" },
+                      { label: tr(lang, "schedule.editor.tw_6"), value: "6" }
+                    ]
+                  }
+                },
+                helper: tr(lang, "schedule.editor.time_window_help"),
+                description: tr(lang, "schedule.editor.time_window_help")
+              }
+            ]
+          }
+        ]
+      },
+      {
+        type: "expandable",
+        name: "",
+        title: tr(lang, "schedule.editor.section_appearance"),
+        icon: "mdi:palette-outline",
+        expanded: false,
+        schema: [
+          {
+            type: "grid",
+            name: "",
+            columns: 2,
+            schema: [
+              {
+                name: "active_color",
+                selector: { ui_color: { include_state: false, include_none: true, default_color: "primary" } },
+                helper: tr(lang, "schedule.editor.active_color_help"),
+                description: tr(lang, "schedule.editor.active_color_help")
+              }
+            ]
+          }
+        ]
+      },
+      {
+        type: "expandable",
+        name: "",
+        title: tr(lang, "schedule.editor.section_display"),
+        icon: "mdi:tune-variant",
+        expanded: false,
+        schema: [
+          {
+            type: "grid",
+            name: "",
+            columns: 2,
+            schema: [
+              { name: "show_day_selector", selector: { boolean: {} } },
+              { name: "show_mode_control", selector: { boolean: {} } },
+              { name: "show_now_indicator", selector: { boolean: {} } },
+              { name: "show_time_labels", selector: { boolean: {} } }
+            ]
+          }
+        ]
+      }
+    ];
+  }
+
+  private labelMap(): Record<string, string> {
+    const lang = haLang(this.hass);
+    return {
+      schedule_entity: tr(lang, "schedule.editor.schedule_entity"),
+      switch_entity: tr(lang, "schedule.editor.switch_entity"),
+      mode_entity: tr(lang, "schedule.editor.mode_entity"),
+      name: tr(lang, "schedule.editor.name"),
+      subtitle: tr(lang, "schedule.editor.subtitle"),
+      icon: tr(lang, "schedule.editor.icon"),
+      icon_color: tr(lang, "schedule.editor.icon_color"),
+      card_layout: tr(lang, "schedule.editor.card_layout"),
+      time_window: tr(lang, "schedule.editor.time_window"),
+      active_color: tr(lang, "schedule.editor.active_color"),
+      show_day_selector: tr(lang, "schedule.editor.show_day_selector"),
+      show_mode_control: tr(lang, "schedule.editor.show_mode_control"),
+      show_now_indicator: tr(lang, "schedule.editor.show_now_indicator"),
+      show_time_labels: tr(lang, "schedule.editor.show_time_labels")
+    };
+  }
+
+  private helperMap(): Record<string, string> {
+    const lang = haLang(this.hass);
+    return {
+      schedule_entity: tr(lang, "schedule.editor.schedule_help"),
+      switch_entity: tr(lang, "schedule.editor.switch_help"),
+      mode_entity: tr(lang, "schedule.editor.mode_help"),
+      card_layout: tr(lang, "schedule.editor.card_layout_help"),
+      time_window: tr(lang, "schedule.editor.time_window_help"),
+      active_color: tr(lang, "schedule.editor.active_color_help"),
+      show_day_selector: tr(lang, "schedule.editor.show_day_help"),
+      show_mode_control: tr(lang, "schedule.editor.show_mode_help"),
+      show_now_indicator: tr(lang, "schedule.editor.show_now_help"),
+      show_time_labels: tr(lang, "schedule.editor.show_labels_help")
+    };
+  }
+
   protected render() {
     if (!this.hass || !this._config) return nothing;
-
     return html`
       <div style="margin: 0 0 8px; color: var(--secondary-text-color); font-size: 12px;">
         PowerPilz v${POWER_PILZ_VERSION}
@@ -253,7 +238,7 @@ export class PowerPilzScheduleCardEditor extends LitElement implements LovelaceC
       <ha-form
         .hass=${this.hass}
         .data=${this._config}
-        .schema=${SCHEMA}
+        .schema=${this.buildSchema()}
         .computeLabel=${this.computeLabel}
         .computeHelper=${this.computeHelper}
         @value-changed=${this.valueChanged}
@@ -262,13 +247,11 @@ export class PowerPilzScheduleCardEditor extends LitElement implements LovelaceC
   }
 
   private computeLabel = (schema: { name?: string }): string => {
-    const name = schema.name ?? "";
-    return LABELS[name] ?? name;
+    return this.labelMap()[schema.name ?? ""] ?? schema.name ?? "";
   };
 
   private computeHelper = (schema: { name?: string }): string | undefined => {
-    const name = schema.name ?? "";
-    return HELPERS[name];
+    return this.helperMap()[schema.name ?? ""];
   };
 
   private valueChanged = (event: CustomEvent<{ value: unknown }>): void => {
@@ -276,13 +259,9 @@ export class PowerPilzScheduleCardEditor extends LitElement implements LovelaceC
     if (!(target instanceof HTMLElement) || target.tagName !== "HA-FORM") return;
     const value = event.detail.value;
     if (!value || typeof value !== "object" || Array.isArray(value)) return;
-    const nextConfig: ScheduleCardConfig = {
-      ...(value as ScheduleCardConfig),
-      type: "custom:power-pilz-schedule-card"
-    };
     this.dispatchEvent(
       new CustomEvent("config-changed", {
-        detail: { config: nextConfig },
+        detail: { config: { ...(value as ScheduleCardConfig), type: "custom:power-pilz-schedule-card" } },
         bubbles: true,
         composed: true
       })

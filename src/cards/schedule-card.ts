@@ -12,6 +12,7 @@ import type {
 } from "../types";
 import { getEntity } from "../utils/entity";
 import { mushroomIconStyle, toRgbCss, type ColorValue } from "../utils/color";
+import { tr, haLang, weekdayShort } from "../utils/i18n";
 import "./editors/schedule-card-editor";
 
 // --- Types ---
@@ -38,7 +39,6 @@ interface ScheduleData {
 }
 
 const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const;
-const WEEKDAY_LABELS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 interface PowerPilzScheduleCardConfig extends LovelaceCardConfig {
   type: "custom:power-pilz-schedule-card";
@@ -104,7 +104,7 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
     this._config = {
       ...config,
       icon: config.icon ?? "mdi:clock-outline",
-      name: config.name ?? "Schedule",
+      name: config.name ?? tr(haLang(this.hass), "schedule.default_name"),
       time_window: config.time_window ?? "24",
       show_day_selector: config.show_day_selector ?? true,
       show_mode_control: config.show_mode_control ?? true,
@@ -237,19 +237,49 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
   }
 
   private isDeviceOn(): boolean {
-    // Check switch_entity first, then fall back to schedule entity state
+    const mode = this.modeValue().toLowerCase();
+
+    // Manual override takes precedence
+    if (mode === "on") return true;
+    if (mode === "off") return false;
+
+    // Auto mode: compute directly from the loaded schedule blocks for today
+    // (same data source as the timeline, so it always matches visually)
+    const todayIdx = new Date().getDay();
+    const todaysBlocks = this.blocksForDay(todayIdx);
+    const nowMin = this.nowMinutes();
+    const inBlock = todaysBlocks.some((b) => {
+      const from = this.timeToMinutes(b.from);
+      const to = this.timeToMinutes(b.to);
+      return nowMin >= from && nowMin < to;
+    });
+    if (inBlock) return true;
+
+    // Secondary: schedule entity state (if the integration populated it)
+    const schedule = getEntity(this.hass, this._config?.schedule_entity);
+    if (schedule?.state === "on") return true;
+
+    // Fallback: switch entity state
     if (this._config?.switch_entity) {
       const sw = getEntity(this.hass, this._config.switch_entity);
       return sw?.state === "on";
     }
-    const schedule = getEntity(this.hass, this._config?.schedule_entity);
-    return schedule?.state === "on";
+    return false;
   }
 
   private modeValue(): string {
     if (!this._config?.mode_entity) return "Auto";
     const entity = getEntity(this.hass, this._config.mode_entity);
     return entity?.state ?? "Auto";
+  }
+
+  private modeLabel(mode: string): string {
+    const lang = haLang(this.hass);
+    const normalized = mode.toLowerCase();
+    if (normalized === "auto") return tr(lang, "schedule.timer_label");
+    if (normalized === "on") return tr(lang, "common.on");
+    if (normalized === "off") return tr(lang, "common.off");
+    return mode;
   }
 
 
@@ -454,7 +484,7 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
             data-day=${idx}
             @click=${this.handleDaySelect}
           >
-            ${WEEKDAY_LABELS_SHORT[idx]}
+            ${weekdayShort(haLang(this.hass), idx)}
           </button>
         `)}
       </div>
@@ -464,7 +494,7 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
   private renderModeButton(): TemplateResult {
     const mode = this.modeValue();
     const modeIcon = mode === "On" ? "mdi:power" : mode === "Off" ? "mdi:power-off" : "mdi:clock-outline";
-    const modeLabel = mode.toLowerCase() === "auto" ? "Timer" : mode;
+    const modeLabel = this.modeLabel(mode);
 
     return html`
       <button type="button" class="mode-btn" @click=${this.handleModeChange} title="Mode: ${mode}">
@@ -475,13 +505,13 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
   }
 
   protected render(): TemplateResult {
-    if (!this._config) return html`<ha-card>Invalid configuration</ha-card>`;
+    if (!this._config) return html`<ha-card>${tr(haLang(this.hass), "common.invalid_config")}</ha-card>`;
     if (!this.hass) return html``;
 
     const config = this._config;
     const friendlyName = getEntity(this.hass, config.schedule_entity)?.attributes?.friendly_name;
     const mode = this.modeValue();
-    const subtitle = config.subtitle || (mode.toLowerCase() === "auto" ? "Timer" : mode);
+    const subtitle = config.subtitle || this.modeLabel(mode);
     const showDays = config.show_day_selector !== false;
     const showMode = config.show_mode_control !== false && Boolean(config.mode_entity);
     const isVertical = config.card_layout === "vertical";
@@ -503,7 +533,7 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
                 </div>
               </div>
               <div class="info">
-                <div class="primary">${config.name || friendlyName || "Schedule"}</div>
+                <div class="primary">${config.name || friendlyName || tr(haLang(this.hass), "schedule.default_name")}</div>
                 <div class="secondary">${subtitle}</div>
               </div>
               ${showMode ? this.renderModeButton() : nothing}

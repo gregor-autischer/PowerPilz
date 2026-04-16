@@ -2,6 +2,7 @@ import { LitElement, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { HomeAssistant, LovelaceCardConfig, LovelaceCardEditor } from "../../types";
 import { POWER_PILZ_VERSION } from "../../version";
+import { tr, haLang } from "../../utils/i18n";
 
 interface SwitchCardConfig extends LovelaceCardConfig {
   type: "custom:power-pilz-switch-card";
@@ -28,251 +29,6 @@ interface SwitchCardConfig extends LovelaceCardConfig {
 
 type HaFormSchema = Record<string, unknown>;
 
-const SCHEMA: HaFormSchema[] = [
-  // --- Identity ---
-  {
-    type: "expandable",
-    name: "",
-    title: "Identity",
-    icon: "mdi:card-text-outline",
-    expanded: true,
-    schema: [
-      {
-        type: "grid",
-        name: "",
-        columns: 2,
-        schema: [
-          { name: "name", selector: { text: {} } },
-          { name: "subtitle", selector: { text: {} } }
-        ]
-      },
-      {
-        type: "grid",
-        name: "",
-        columns: 2,
-        schema: [
-          { name: "icon", selector: { icon: {} }, context: { icon_entity: "entity" } },
-          {
-            name: "icon_color",
-            selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
-          }
-        ]
-      },
-      {
-        name: "entity",
-        selector: { entity: { filter: { domain: ["input_select", "select"] } } }
-      }
-    ]
-  },
-
-  // --- Layout ---
-  {
-    type: "expandable",
-    name: "",
-    title: "Layout",
-    icon: "mdi:page-layout-body",
-    expanded: false,
-    schema: [
-      {
-        type: "grid",
-        name: "",
-        columns: 2,
-        schema: [
-          {
-            name: "card_layout",
-            selector: {
-              select: {
-                mode: "dropdown",
-                options: [
-                  { label: "Horizontal (1 row)", value: "horizontal" },
-                  { label: "Vertical (2 rows)", value: "vertical" }
-                ]
-              }
-            }
-          },
-          {
-            name: "slider_size",
-            selector: {
-              select: {
-                mode: "dropdown",
-                options: [
-                  { label: "Small", value: "small" },
-                  { label: "Medium", value: "medium" },
-                  { label: "Large", value: "large" }
-                ]
-              }
-            }
-          }
-        ]
-      }
-    ]
-  },
-
-  // --- Slider appearance ---
-  {
-    type: "expandable",
-    name: "",
-    title: "Slider appearance",
-    icon: "mdi:tune-variant",
-    expanded: false,
-    schema: [
-      {
-        type: "grid",
-        name: "",
-        columns: 2,
-        schema: [
-          {
-            name: "slider_color",
-            selector: { ui_color: { include_state: false, include_none: true, default_color: "default" } }
-          },
-          {
-            name: "use_custom_icons",
-            selector: { boolean: {} }
-          }
-        ]
-      }
-    ]
-  },
-
-  // --- State customization ---
-  {
-    type: "expandable",
-    name: "",
-    title: "State customization",
-    icon: "mdi:palette-outline",
-    expanded: false,
-    schema: [
-      {
-        type: "expandable",
-        name: "",
-        title: "State 1 (Off / first option)",
-        icon: "mdi:numeric-1-circle-outline",
-        expanded: true,
-        schema: [
-          {
-            type: "grid",
-            name: "",
-            columns: 2,
-            schema: [
-              {
-                name: "state_1_color",
-                selector: { ui_color: { include_state: false, include_none: true, default_color: "default" } }
-              },
-              { name: "state_1_icon", selector: { icon: {} } }
-            ]
-          }
-        ]
-      },
-      {
-        type: "expandable",
-        name: "",
-        title: "State 2",
-        icon: "mdi:numeric-2-circle-outline",
-        expanded: true,
-        schema: [
-          {
-            type: "grid",
-            name: "",
-            columns: 2,
-            schema: [
-              {
-                name: "state_2_color",
-                selector: { ui_color: { include_state: false, include_none: true, default_color: "default" } }
-              },
-              { name: "state_2_icon", selector: { icon: {} } }
-            ]
-          }
-        ]
-      },
-      {
-        type: "expandable",
-        name: "",
-        title: "State 3",
-        icon: "mdi:numeric-3-circle-outline",
-        expanded: true,
-        schema: [
-          {
-            type: "grid",
-            name: "",
-            columns: 2,
-            schema: [
-              {
-                name: "state_3_color",
-                selector: { ui_color: { include_state: false, include_none: true, default_color: "default" } }
-              },
-              { name: "state_3_icon", selector: { icon: {} } }
-            ]
-          }
-        ]
-      },
-      {
-        type: "expandable",
-        name: "",
-        title: "State 4",
-        icon: "mdi:numeric-4-circle-outline",
-        expanded: false,
-        schema: [
-          {
-            type: "grid",
-            name: "",
-            columns: 2,
-            schema: [
-              {
-                name: "state_4_color",
-                selector: { ui_color: { include_state: false, include_none: true, default_color: "default" } }
-              },
-              { name: "state_4_icon", selector: { icon: {} } }
-            ]
-          }
-        ]
-      },
-      {
-        type: "expandable",
-        name: "",
-        title: "State 5",
-        icon: "mdi:numeric-5-circle-outline",
-        expanded: false,
-        schema: [
-          {
-            type: "grid",
-            name: "",
-            columns: 2,
-            schema: [
-              {
-                name: "state_5_color",
-                selector: { ui_color: { include_state: false, include_none: true, default_color: "default" } }
-              },
-              { name: "state_5_icon", selector: { icon: {} } }
-            ]
-          }
-        ]
-      }
-    ]
-  }
-];
-
-const LABELS: Record<string, string> = {
-  name: "Name",
-  subtitle: "Subtitle",
-  icon: "Icon",
-  icon_color: "Icon color",
-  entity: "State entity",
-  card_layout: "Card layout",
-  slider_size: "Slider width",
-  slider_color: "Slider color",
-  use_custom_icons: "Custom icons per state",
-  state_1_color: "Color",
-  state_2_color: "Color",
-  state_3_color: "Color",
-  state_4_color: "Color",
-  state_5_color: "Color",
-  state_1_icon: "Icon",
-  state_2_icon: "Icon",
-  state_3_icon: "Icon",
-  state_4_icon: "Icon",
-  state_5_icon: "Icon"
-};
-
 @customElement("power-pilz-switch-card-editor")
 export class PowerPilzSwitchCardEditor extends LitElement implements LovelaceCardEditor {
   @property({ attribute: false })
@@ -289,11 +45,169 @@ export class PowerPilzSwitchCardEditor extends LitElement implements LovelaceCar
     };
   }
 
-  protected render() {
-    if (!this.hass || !this._config) {
-      return nothing;
-    }
+  private stateSection(n: number, icon: string): HaFormSchema {
+    const lang = haLang(this.hass);
+    return {
+      type: "expandable",
+      name: "",
+      title: n === 1 ? tr(lang, "switch.editor.state_1_title") : tr(lang, "switch.editor.state_n_title", { n }),
+      icon,
+      expanded: n <= 3,
+      schema: [
+        {
+          type: "grid",
+          name: "",
+          columns: 2,
+          schema: [
+            {
+              name: `state_${n}_color`,
+              selector: { ui_color: { include_state: false, include_none: true } }
+            },
+            { name: `state_${n}_icon`, selector: { icon: {} } }
+          ]
+        }
+      ]
+    };
+  }
 
+  private buildSchema(): HaFormSchema[] {
+    const lang = haLang(this.hass);
+    return [
+      {
+        type: "expandable",
+        name: "",
+        title: tr(lang, "switch.editor.section_identity"),
+        icon: "mdi:card-text-outline",
+        expanded: true,
+        schema: [
+          {
+            type: "grid",
+            name: "",
+            columns: 2,
+            schema: [
+              { name: "name", selector: { text: {} } },
+              { name: "subtitle", selector: { text: {} } }
+            ]
+          },
+          {
+            type: "grid",
+            name: "",
+            columns: 2,
+            schema: [
+              { name: "icon", selector: { icon: {} }, context: { icon_entity: "entity" } },
+              {
+                name: "icon_color",
+                selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
+              }
+            ]
+          },
+          {
+            name: "entity",
+            selector: { entity: { filter: { domain: ["input_select", "select"] } } }
+          }
+        ]
+      },
+      {
+        type: "expandable",
+        name: "",
+        title: tr(lang, "switch.editor.section_layout"),
+        icon: "mdi:page-layout-body",
+        expanded: false,
+        schema: [
+          {
+            type: "grid",
+            name: "",
+            columns: 2,
+            schema: [
+              {
+                name: "card_layout",
+                selector: {
+                  select: {
+                    mode: "dropdown",
+                    options: [
+                      { label: tr(lang, "switch.editor.layout_horizontal"), value: "horizontal" },
+                      { label: tr(lang, "switch.editor.layout_vertical"), value: "vertical" }
+                    ]
+                  }
+                }
+              },
+              {
+                name: "slider_size",
+                selector: {
+                  select: {
+                    mode: "dropdown",
+                    options: [
+                      { label: tr(lang, "switch.editor.slider_small"), value: "small" },
+                      { label: tr(lang, "switch.editor.slider_medium"), value: "medium" },
+                      { label: tr(lang, "switch.editor.slider_large"), value: "large" }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        type: "expandable",
+        name: "",
+        title: tr(lang, "switch.editor.section_slider"),
+        icon: "mdi:tune-variant",
+        expanded: false,
+        schema: [
+          {
+            type: "grid",
+            name: "",
+            columns: 2,
+            schema: [
+              {
+                name: "slider_color",
+                selector: { ui_color: { include_state: false, include_none: true } }
+              },
+              { name: "use_custom_icons", selector: { boolean: {} } }
+            ]
+          }
+        ]
+      },
+      {
+        type: "expandable",
+        name: "",
+        title: tr(lang, "switch.editor.section_state_custom"),
+        icon: "mdi:palette-outline",
+        expanded: false,
+        schema: [
+          this.stateSection(1, "mdi:numeric-1-circle-outline"),
+          this.stateSection(2, "mdi:numeric-2-circle-outline"),
+          this.stateSection(3, "mdi:numeric-3-circle-outline"),
+          this.stateSection(4, "mdi:numeric-4-circle-outline"),
+          this.stateSection(5, "mdi:numeric-5-circle-outline")
+        ]
+      }
+    ];
+  }
+
+  private labelMap(): Record<string, string> {
+    const lang = haLang(this.hass);
+    const result: Record<string, string> = {
+      name: tr(lang, "switch.editor.name"),
+      subtitle: tr(lang, "switch.editor.subtitle"),
+      icon: tr(lang, "switch.editor.icon"),
+      icon_color: tr(lang, "switch.editor.icon_color"),
+      entity: tr(lang, "switch.editor.entity"),
+      card_layout: tr(lang, "switch.editor.card_layout"),
+      slider_size: tr(lang, "switch.editor.slider_size"),
+      slider_color: tr(lang, "switch.editor.slider_color"),
+      use_custom_icons: tr(lang, "switch.editor.use_custom_icons")
+    };
+    for (let i = 1; i <= 5; i++) {
+      result[`state_${i}_color`] = tr(lang, "switch.editor.state_color");
+      result[`state_${i}_icon`] = tr(lang, "switch.editor.state_icon");
+    }
+    return result;
+  }
+
+  protected render() {
+    if (!this.hass || !this._config) return nothing;
     return html`
       <div style="margin: 0 0 8px; color: var(--secondary-text-color); font-size: 12px;">
         PowerPilz v${POWER_PILZ_VERSION}
@@ -301,7 +215,7 @@ export class PowerPilzSwitchCardEditor extends LitElement implements LovelaceCar
       <ha-form
         .hass=${this.hass}
         .data=${this._config}
-        .schema=${SCHEMA}
+        .schema=${this.buildSchema()}
         .computeLabel=${this.computeLabel}
         @value-changed=${this.valueChanged}
       ></ha-form>
@@ -309,26 +223,17 @@ export class PowerPilzSwitchCardEditor extends LitElement implements LovelaceCar
   }
 
   private computeLabel = (schema: { name?: string }): string => {
-    const name = schema.name ?? "";
-    return LABELS[name] ?? name;
+    return this.labelMap()[schema.name ?? ""] ?? schema.name ?? "";
   };
 
   private valueChanged = (event: CustomEvent<{ value: unknown }>): void => {
     const target = event.target;
-    if (!(target instanceof HTMLElement) || target.tagName !== "HA-FORM") {
-      return;
-    }
+    if (!(target instanceof HTMLElement) || target.tagName !== "HA-FORM") return;
     const value = event.detail.value;
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
-      return;
-    }
-    const nextConfig: SwitchCardConfig = {
-      ...(value as SwitchCardConfig),
-      type: "custom:power-pilz-switch-card"
-    };
+    if (!value || typeof value !== "object" || Array.isArray(value)) return;
     this.dispatchEvent(
       new CustomEvent("config-changed", {
-        detail: { config: nextConfig },
+        detail: { config: { ...(value as SwitchCardConfig), type: "custom:power-pilz-switch-card" } },
         bubbles: true,
         composed: true
       })
