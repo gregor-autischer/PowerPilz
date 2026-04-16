@@ -2,6 +2,7 @@ import "./cards/energy-card";
 import "./cards/graph-card";
 import "./cards/graph-stack-card";
 import "./cards/wallbox-card";
+import "./cards/switch-card";
 import { POWER_PILZ_VERSION } from "./version";
 
 declare global {
@@ -40,6 +41,12 @@ const cards = [
     type: "power-pilz-graph-stack-card",
     name: "PowerPilz Graph Stack Card",
     description: "Mushroom-style cumulative stacked trend card for up to four entities.",
+    preview: true
+  },
+  {
+    type: "power-pilz-switch-card",
+    name: "PowerPilz Switch Card",
+    description: "Mushroom-style mode selector with sliding pill for input_select / select entities.",
     preview: true
   }
 ];

@@ -18,6 +18,7 @@ The name is modeled after Mushroom. `Pilz` is German for `mushroom`, and the vis
 - Mushroom-like spacing, typography and controls
 - Energy flow card with optional sub-nodes and trend overlays
 - Wallbox card focused on EV charging control and status
+- Switch card with sliding pill mode selector for input_select / select entities
 - Graph and stacked graph cards with up to 4 entities
 - HACS-ready project structure
 
@@ -73,6 +74,7 @@ All PowerPilz cards can be configured with the Home Assistant dashboard UI edito
 
 - ⚡ [Energy card](docs/cards/energy.md)
 - 🔌 [Wallbox card](docs/cards/wallbox.md)
+- 🎚️ [Switch card](docs/cards/switch.md)
 - 📈 [Graph card](docs/cards/graph.md)
 - 🧱 [Graph stack card](docs/cards/graph-stack.md)
 
@@ -98,7 +100,7 @@ Releases are built automatically when changes are merged into branch `build` (Gi
 Before merging to `build`, you must bump the version in both files:
 
 1. `package.json`
-2. `src/power-pilz.ts` (`const VERSION = "..."`)
+2. `src/version.ts` (`POWER_PILZ_VERSION`)
 
 Notes:
 
