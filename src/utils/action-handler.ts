@@ -5,10 +5,17 @@
  *
  * Uses `click` for tap/double-tap (reliable across all browsers and
  * touch/mouse) and `pointerdown` timer for hold detection.
+ *
+ * Touch-device hardening:
+ *  - `touch-action: manipulation` prevents Safari double-tap-to-zoom.
+ *  - `isHeld` auto-resets after a safety window to avoid stuck state
+ *    when `pointercancel` fires before the post-hold click on iPad/Safari.
+ *  - Passive pointer listeners improve scroll performance on touch devices.
  */
 
 const HOLD_THRESHOLD_MS = 500;
 const DOUBLE_TAP_WINDOW_MS = 250;
+const HELD_SAFETY_RESET_MS = 1000;
 
 export interface ActionHandlerOptions {
   hasHold: boolean;
@@ -31,9 +38,14 @@ export const bindActionHandler = (
   options: ActionHandlerOptions
 ): ActionHandlerCleanup => {
   let holdTimer: ReturnType<typeof setTimeout> | undefined;
+  let heldResetTimer: ReturnType<typeof setTimeout> | undefined;
   let doubleTapTimer: ReturnType<typeof setTimeout> | undefined;
   let isHeld = false;
   let pendingTap = false;
+
+  // Prevent Safari double-tap-to-zoom on the card element.
+  const prevTouchAction = element.style.touchAction;
+  element.style.touchAction = "manipulation";
 
   const clearHold = (): void => {
     if (holdTimer !== undefined) {
@@ -42,17 +54,32 @@ export const bindActionHandler = (
     }
   };
 
+  const clearHeldReset = (): void => {
+    if (heldResetTimer !== undefined) {
+      clearTimeout(heldResetTimer);
+      heldResetTimer = undefined;
+    }
+  };
+
   // --- Hold detection via pointerdown/pointerup ---
 
   const handlePointerDown = (event: PointerEvent): void => {
     if (event.button !== 0) return;
     isHeld = false;
+    clearHeldReset();
     if (!options.hasHold) return;
     clearHold();
     holdTimer = setTimeout(() => {
       isHeld = true;
       holdTimer = undefined;
       callbacks.onHold();
+      // Safety: auto-clear isHeld after a reasonable window.
+      // On iPad/Safari pointercancel can fire instead of pointerup,
+      // and the subsequent click may never arrive to reset isHeld.
+      heldResetTimer = setTimeout(() => {
+        isHeld = false;
+        heldResetTimer = undefined;
+      }, HELD_SAFETY_RESET_MS);
     }, HOLD_THRESHOLD_MS);
   };
 
@@ -62,7 +89,12 @@ export const bindActionHandler = (
 
   const handlePointerCancel = (): void => {
     clearHold();
-    isHeld = false;
+    // Only reset isHeld if the hold callback hasn't fired yet.
+    // If it already fired (isHeld === true), the heldResetTimer
+    // or the next click event will handle the reset.
+    if (!isHeld) {
+      isHeld = false;
+    }
   };
 
   // --- Tap and double-tap detection via click ---
@@ -71,6 +103,7 @@ export const bindActionHandler = (
     // Suppress click after hold
     if (isHeld) {
       isHeld = false;
+      clearHeldReset();
       event.stopPropagation();
       return;
     }
@@ -105,16 +138,17 @@ export const bindActionHandler = (
     }
   };
 
-  element.addEventListener("pointerdown", handlePointerDown);
-  element.addEventListener("pointerup", handlePointerUp);
-  element.addEventListener("pointercancel", handlePointerCancel);
-  element.addEventListener("pointerleave", handlePointerCancel);
+  element.addEventListener("pointerdown", handlePointerDown, { passive: true });
+  element.addEventListener("pointerup", handlePointerUp, { passive: true });
+  element.addEventListener("pointercancel", handlePointerCancel, { passive: true });
+  element.addEventListener("pointerleave", handlePointerCancel, { passive: true });
   element.addEventListener("click", handleClick);
   element.addEventListener("contextmenu", handleContextMenu);
 
   return {
     destroy: () => {
       clearHold();
+      clearHeldReset();
       if (doubleTapTimer !== undefined) {
         clearTimeout(doubleTapTimer);
       }
@@ -124,6 +158,7 @@ export const bindActionHandler = (
       element.removeEventListener("pointerleave", handlePointerCancel);
       element.removeEventListener("click", handleClick);
       element.removeEventListener("contextmenu", handleContextMenu);
+      element.style.touchAction = prevTouchAction;
     }
   };
 };
