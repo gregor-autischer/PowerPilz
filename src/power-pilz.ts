@@ -3,6 +3,7 @@ import "./cards/graph-card";
 import "./cards/graph-stack-card";
 import "./cards/wallbox-card";
 import "./cards/switch-card";
+import "./cards/schedule-card";
 import { POWER_PILZ_VERSION } from "./version";
 
 declare global {
@@ -47,6 +48,12 @@ const cards = [
     type: "power-pilz-switch-card",
     name: "PowerPilz Switch Card",
     description: "Mushroom-style mode selector with sliding pill for input_select / select entities.",
+    preview: true
+  },
+  {
+    type: "power-pilz-schedule-card",
+    name: "PowerPilz Schedule Card",
+    description: "Visual time schedule card with 24h timeline, day selector and override controls.",
     preview: true
   }
 ];
