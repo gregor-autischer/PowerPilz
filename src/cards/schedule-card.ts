@@ -42,7 +42,15 @@ const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "frida
 
 interface PowerPilzScheduleCardConfig extends LovelaceCardConfig {
   type: "custom:power-pilz-schedule-card";
-  schedule_entity: string;
+  // Companion mode (default on): point at a single PowerPilz Smart Schedule
+  // helper (a `select.*` entity). The card derives the schedule, device and
+  // mode entities from its attributes (`linked_schedule`, `target_entity`,
+  // and the companion entity itself as the mode selector).
+  use_companion?: boolean;
+  companion_entity?: string;
+  // Manual mode (use_companion: false): configure the three entities
+  // individually as in older versions of the card.
+  schedule_entity?: string;
   switch_entity?: string;
   mode_entity?: string;
   name?: string;
@@ -66,11 +74,31 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
   public static async getStubConfig(hass?: HomeAssistant): Promise<PowerPilzScheduleCardConfig> {
     const states = hass?.states ?? {};
     const entityIds = Object.keys(states);
+
+    // Prefer a PowerPilz Companion Smart Schedule select entity: its
+    // `linked_schedule` / `target_entity` attributes tell us it's one of
+    // ours, and we can default to companion mode with just that one entity.
+    const companion = entityIds.find((id) => {
+      if (!id.startsWith("select.")) return false;
+      const attrs = states[id]?.attributes as Record<string, unknown> | undefined;
+      return typeof attrs?.linked_schedule === "string"
+        && typeof attrs?.target_entity === "string";
+    });
+
+    if (companion) {
+      return {
+        type: "custom:power-pilz-schedule-card",
+        use_companion: true,
+        companion_entity: companion
+      };
+    }
+
+    // Fallback: manual 3-entity mode.
     const firstByDomain = (domain: string): string | undefined =>
       entityIds.find((id) => id.startsWith(`${domain}.`));
-
     return {
       type: "custom:power-pilz-schedule-card",
+      use_companion: false,
       schedule_entity: firstByDomain("schedule") ?? "schedule.my_schedule",
       switch_entity: firstByDomain("switch") ?? firstByDomain("input_boolean"),
       mode_entity: firstByDomain("input_select")
@@ -98,11 +126,22 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
   private _lastEntityUpdated?: string;
 
   public setConfig(config: PowerPilzScheduleCardConfig): void {
-    if (!config.schedule_entity) {
-      throw new Error("Schedule entity is required");
-    }
+    // Default resolution:
+    //   - Explicit `use_companion` in config → honor it
+    //   - Otherwise: legacy cards with `schedule_entity` set default to
+    //     manual mode so they don't break on load. Fresh cards default
+    //     to companion mode.
+    const useCompanion = config.use_companion !== undefined
+      ? config.use_companion !== false
+      : !config.schedule_entity;
+
+    // Don't throw for missing entity — the card renders a soft
+    // "please configure an entity" placeholder instead. Throwing here
+    // makes HA's editor flash a red error banner while the user is
+    // still filling in the form, which is too aggressive.
     this._config = {
       ...config,
+      use_companion: useCompanion,
       icon: config.icon ?? "mdi:clock-outline",
       name: config.name ?? tr(haLang(this.hass), "schedule.default_name"),
       time_window: config.time_window ?? "24",
@@ -111,6 +150,40 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
       show_now_indicator: config.show_now_indicator ?? true,
       show_time_labels: config.show_time_labels ?? true
     };
+  }
+
+  // -------- Entity resolvers --------
+  // In companion mode the card takes its three entity IDs from the
+  // attributes of the configured Smart Schedule `select.*` entity. In
+  // manual mode they come directly from config. Always go through these
+  // getters to stay mode-agnostic.
+
+  private get _scheduleEntityId(): string | undefined {
+    if (!this._config) return undefined;
+    if (this._config.use_companion === false) {
+      return this._config.schedule_entity;
+    }
+    const companion = this.hass?.states?.[this._config.companion_entity ?? ""];
+    const linked = companion?.attributes?.linked_schedule;
+    return typeof linked === "string" ? linked : undefined;
+  }
+
+  private get _switchEntityId(): string | undefined {
+    if (!this._config) return undefined;
+    if (this._config.use_companion === false) {
+      return this._config.switch_entity;
+    }
+    const companion = this.hass?.states?.[this._config.companion_entity ?? ""];
+    const target = companion?.attributes?.target_entity;
+    return typeof target === "string" ? target : undefined;
+  }
+
+  private get _modeEntityId(): string | undefined {
+    if (!this._config) return undefined;
+    if (this._config.use_companion === false) {
+      return this._config.mode_entity;
+    }
+    return this._config.companion_entity;
   }
 
   public getCardSize(): number {
@@ -143,8 +216,9 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
   }
 
   protected updated(changedProps: Map<string, unknown>): void {
-    if (!changedProps.has("hass") || !this._config?.schedule_entity) return;
-    const entity = this._config.schedule_entity;
+    if (!changedProps.has("hass")) return;
+    const entity = this._scheduleEntityId;
+    if (!entity) return;
 
     // Refetch when schedule entity changes
     if (entity !== this._lastFetchEntity) {
@@ -167,11 +241,20 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
   // --- Schedule data fetching ---
 
   private async fetchSchedule(): Promise<void> {
-    if (!this.hass?.callWS || !this._config?.schedule_entity) return;
+    const entity = this._scheduleEntityId;
+    if (!this.hass?.callWS || !entity) return;
     try {
       const schedules: ScheduleData[] = await this.hass.callWS({ type: "schedule/list" });
-      const objectId = this._config.schedule_entity.split(".")[1];
-      this._scheduleData = schedules.find((s) => s.id === objectId);
+      const objectId = entity.split(".")[1];
+      // Match on the HA storage id (object_id of the slug). `schedule/list`
+      // returns items with id keyed by their uuid, so also match by slug
+      // via the `schedule.<slug>` entity_id stored in hass.states.
+      this._scheduleData = schedules.find((s) => s.id === objectId)
+        ?? schedules.find((s) => {
+          const stateEntity = this.hass?.states?.[entity];
+          const friendly = stateEntity?.attributes?.friendly_name;
+          return typeof friendly === "string" && s.name === friendly;
+        });
     } catch {
       this._scheduleData = undefined;
     }
@@ -256,20 +339,22 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
     if (inBlock) return true;
 
     // Secondary: schedule entity state (if the integration populated it)
-    const schedule = getEntity(this.hass, this._config?.schedule_entity);
+    const schedule = getEntity(this.hass, this._scheduleEntityId);
     if (schedule?.state === "on") return true;
 
     // Fallback: switch entity state
-    if (this._config?.switch_entity) {
-      const sw = getEntity(this.hass, this._config.switch_entity);
+    const switchId = this._switchEntityId;
+    if (switchId) {
+      const sw = getEntity(this.hass, switchId);
       return sw?.state === "on";
     }
     return false;
   }
 
   private modeValue(): string {
-    if (!this._config?.mode_entity) return "Auto";
-    const entity = getEntity(this.hass, this._config.mode_entity);
+    const modeId = this._modeEntityId;
+    if (!modeId) return "Auto";
+    const entity = getEntity(this.hass, modeId);
     return entity?.state ?? "Auto";
   }
 
@@ -289,7 +374,7 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
     // Only trigger if tapping the card itself (not buttons/timeline)
     const target = event.target as HTMLElement;
     if (target.closest(".mode-btn") || target.closest(".timeline-track") || target.closest(".day-btn")) return;
-    if (this.isEditorPreview() || !this._config?.mode_entity) return;
+    if (this.isEditorPreview() || !this._modeEntityId) return;
     void this.handleModeChange(event);
   };
 
@@ -302,9 +387,10 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
 
   private handleModeChange = async (event: Event): Promise<void> => {
     event.stopPropagation();
-    if (this.isEditorPreview() || !this._config?.mode_entity) return;
+    const modeId = this._modeEntityId;
+    if (this.isEditorPreview() || !modeId) return;
 
-    const entity = getEntity(this.hass, this._config.mode_entity);
+    const entity = getEntity(this.hass, modeId);
     if (!entity) return;
     const options = (entity.attributes?.options as string[]) ?? [];
     if (options.length === 0) return;
@@ -312,31 +398,36 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
     const current = options.indexOf(entity.state);
     const next = (current + 1) % options.length;
     const nextOption = options[next];
-    const domain = this._config.mode_entity.split(".")[0];
+    const domain = modeId.split(".")[0];
     await this.hass.callService(domain, "select_option", {
-      entity_id: this._config.mode_entity,
+      entity_id: modeId,
       option: nextOption
     });
 
-    // When switching to On/Off, also toggle the switch entity directly
-    if (this._config.switch_entity) {
-      const switchDomain = this._config.switch_entity.split(".")[0];
-      const normalized = nextOption.toLowerCase();
-      if (normalized === "on") {
-        await this.hass.callService(switchDomain, "turn_on", {
-          entity_id: this._config.switch_entity
-        });
-      } else if (normalized === "off") {
-        await this.hass.callService(switchDomain, "turn_off", {
-          entity_id: this._config.switch_entity
-        });
+    // In manual mode, also poke the switch so On/Off reflects immediately.
+    // In companion mode the integration's select entity already drives
+    // the target device — no direct toggle needed.
+    if (this._config?.use_companion === false) {
+      const switchId = this._switchEntityId;
+      if (switchId) {
+        const switchDomain = switchId.split(".")[0];
+        const normalized = nextOption.toLowerCase();
+        if (normalized === "on") {
+          await this.hass.callService(switchDomain, "turn_on", {
+            entity_id: switchId
+          });
+        } else if (normalized === "off") {
+          await this.hass.callService(switchDomain, "turn_off", {
+            entity_id: switchId
+          });
+        }
       }
     }
   };
 
   private handleTimelineTap = async (event: MouseEvent): Promise<void> => {
     event.stopPropagation();
-    if (this.isEditorPreview() || !this._scheduleData || !this._config?.schedule_entity) return;
+    if (this.isEditorPreview() || !this._scheduleData || !this._scheduleEntityId) return;
 
     const track = (event.currentTarget as HTMLElement);
     const rect = track.getBoundingClientRect();
@@ -359,7 +450,9 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
       return snapped >= from && snapped < to;
     });
 
-    const objectId = this._config.schedule_entity.split(".")[1];
+    const scheduleId = this._scheduleEntityId;
+    if (!scheduleId) return;
+    const objectId = scheduleId.split(".")[1];
 
     if (hitIndex >= 0) {
       // Remove block
@@ -508,12 +601,32 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
     if (!this._config) return html`<ha-card>${tr(haLang(this.hass), "common.invalid_config")}</ha-card>`;
     if (!this.hass) return html``;
 
+    // Soft placeholder when no entity is configured yet — happens while the
+    // user is still filling in the visual editor. We don't throw in
+    // setConfig (that would flash a red "Konfigurationsfehler" banner),
+    // we render a neutral hint here instead.
+    if (!this._scheduleEntityId && !this._modeEntityId) {
+      const lang = haLang(this.hass);
+      const hint = this._config.use_companion !== false
+        ? tr(lang, "schedule.placeholder_companion")
+        : tr(lang, "schedule.placeholder_manual");
+      return html`
+        <ha-card>
+          <div class="placeholder">
+            <ha-icon icon="mdi:clock-outline"></ha-icon>
+            <div class="placeholder-text">${hint}</div>
+          </div>
+        </ha-card>
+      `;
+    }
+
     const config = this._config;
-    const friendlyName = getEntity(this.hass, config.schedule_entity)?.attributes?.friendly_name;
+    const friendlyName = getEntity(this.hass, this._scheduleEntityId)?.attributes?.friendly_name
+      ?? getEntity(this.hass, this._modeEntityId)?.attributes?.friendly_name;
     const mode = this.modeValue();
     const subtitle = config.subtitle || this.modeLabel(mode);
     const showDays = config.show_day_selector !== false;
-    const showMode = config.show_mode_control !== false && Boolean(config.mode_entity);
+    const showMode = config.show_mode_control !== false && Boolean(this._modeEntityId);
     const isVertical = config.card_layout === "vertical";
 
     // Icon color: show configured color when device is on, grey when off
@@ -549,6 +662,22 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
   }
 
   static styles = css`
+    .placeholder {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px;
+      color: var(--secondary-text-color);
+    }
+    .placeholder ha-icon {
+      --mdc-icon-size: 28px;
+      opacity: 0.6;
+      flex: none;
+    }
+    .placeholder-text {
+      font-size: 13px;
+      line-height: 1.4;
+    }
     :host {
       display: block;
       container-type: inline-size;

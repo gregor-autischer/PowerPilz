@@ -6,6 +6,8 @@ import { tr, haLang } from "../../utils/i18n";
 
 interface ScheduleCardConfig extends LovelaceCardConfig {
   type: "custom:power-pilz-schedule-card";
+  use_companion?: boolean;
+  companion_entity?: string;
   schedule_entity?: string;
   switch_entity?: string;
   mode_entity?: string;
@@ -33,8 +35,17 @@ export class PowerPilzScheduleCardEditor extends LitElement implements LovelaceC
   private _config?: ScheduleCardConfig;
 
   public setConfig(config: ScheduleCardConfig): void {
+    // Default resolution mirrors the card's setConfig:
+    //   - Explicit `use_companion` → honor it
+    //   - Legacy config with `schedule_entity` → default manual mode
+    //   - Fresh config → default companion mode
+    const useCompanion = config.use_companion !== undefined
+      ? config.use_companion !== false
+      : !config.schedule_entity;
+
     this._config = {
       ...config,
+      use_companion: useCompanion,
       show_day_selector: config.show_day_selector ?? true,
       show_mode_control: config.show_mode_control ?? true,
       show_now_indicator: config.show_now_indicator ?? true,
@@ -45,34 +56,62 @@ export class PowerPilzScheduleCardEditor extends LitElement implements LovelaceC
 
   private buildSchema(): HaFormSchema[] {
     const lang = haLang(this.hass);
+    const useCompanion = this._config?.use_companion !== false;
+
+    const entitiesSection: HaFormSchema = {
+      type: "expandable",
+      name: "",
+      title: tr(lang, "schedule.editor.section_entities"),
+      icon: "mdi:connection",
+      expanded: true,
+      schema: [
+        {
+          name: "use_companion",
+          selector: { boolean: {} },
+          helper: tr(lang, "schedule.editor.use_companion_help"),
+          description: tr(lang, "schedule.editor.use_companion_help")
+        },
+        ...(useCompanion
+          ? [
+              {
+                name: "companion_entity",
+                selector: {
+                  entity: {
+                    filter: {
+                      domain: "select",
+                      integration: "powerpilz_companion"
+                    }
+                  }
+                },
+                helper: tr(lang, "schedule.editor.companion_help"),
+                description: tr(lang, "schedule.editor.companion_help")
+              }
+            ]
+          : [
+              {
+                name: "schedule_entity",
+                selector: { entity: { filter: { domain: "schedule" } } },
+                helper: tr(lang, "schedule.editor.schedule_help"),
+                description: tr(lang, "schedule.editor.schedule_help")
+              },
+              {
+                name: "switch_entity",
+                selector: { entity: { filter: { domain: ["switch", "light", "input_boolean"] } } },
+                helper: tr(lang, "schedule.editor.switch_help"),
+                description: tr(lang, "schedule.editor.switch_help")
+              },
+              {
+                name: "mode_entity",
+                selector: { entity: { filter: { domain: ["input_select", "select"] } } },
+                helper: tr(lang, "schedule.editor.mode_help"),
+                description: tr(lang, "schedule.editor.mode_help")
+              }
+            ])
+      ]
+    };
+
     return [
-      {
-        type: "expandable",
-        name: "",
-        title: tr(lang, "schedule.editor.section_entities"),
-        icon: "mdi:connection",
-        expanded: true,
-        schema: [
-          {
-            name: "schedule_entity",
-            selector: { entity: { filter: { domain: "schedule" } } },
-            helper: tr(lang, "schedule.editor.schedule_help"),
-            description: tr(lang, "schedule.editor.schedule_help")
-          },
-          {
-            name: "switch_entity",
-            selector: { entity: { filter: { domain: ["switch", "light", "input_boolean"] } } },
-            helper: tr(lang, "schedule.editor.switch_help"),
-            description: tr(lang, "schedule.editor.switch_help")
-          },
-          {
-            name: "mode_entity",
-            selector: { entity: { filter: { domain: ["input_select", "select"] } } },
-            helper: tr(lang, "schedule.editor.mode_help"),
-            description: tr(lang, "schedule.editor.mode_help")
-          }
-        ]
-      },
+      entitiesSection,
       {
         type: "expandable",
         name: "",
@@ -94,7 +133,11 @@ export class PowerPilzScheduleCardEditor extends LitElement implements LovelaceC
             name: "",
             columns: 2,
             schema: [
-              { name: "icon", selector: { icon: {} }, context: { icon_entity: "schedule_entity" } },
+              {
+                name: "icon",
+                selector: { icon: {} },
+                context: { icon_entity: useCompanion ? "companion_entity" : "schedule_entity" }
+              },
               {
                 name: "icon_color",
                 selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
@@ -196,6 +239,8 @@ export class PowerPilzScheduleCardEditor extends LitElement implements LovelaceC
   private labelMap(): Record<string, string> {
     const lang = haLang(this.hass);
     return {
+      use_companion: tr(lang, "schedule.editor.use_companion"),
+      companion_entity: tr(lang, "schedule.editor.companion_entity"),
       schedule_entity: tr(lang, "schedule.editor.schedule_entity"),
       switch_entity: tr(lang, "schedule.editor.switch_entity"),
       mode_entity: tr(lang, "schedule.editor.mode_entity"),
@@ -216,6 +261,8 @@ export class PowerPilzScheduleCardEditor extends LitElement implements LovelaceC
   private helperMap(): Record<string, string> {
     const lang = haLang(this.hass);
     return {
+      use_companion: tr(lang, "schedule.editor.use_companion_help"),
+      companion_entity: tr(lang, "schedule.editor.companion_help"),
       schedule_entity: tr(lang, "schedule.editor.schedule_help"),
       switch_entity: tr(lang, "schedule.editor.switch_help"),
       mode_entity: tr(lang, "schedule.editor.mode_help"),
@@ -257,11 +304,24 @@ export class PowerPilzScheduleCardEditor extends LitElement implements LovelaceC
   private valueChanged = (event: CustomEvent<{ value: unknown }>): void => {
     const target = event.target;
     if (!(target instanceof HTMLElement) || target.tagName !== "HA-FORM") return;
-    const value = event.detail.value;
-    if (!value || typeof value !== "object" || Array.isArray(value)) return;
+    const raw = event.detail.value;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return;
+
+    // Enforce mutual exclusivity: keep only the fields that belong to the
+    // currently-selected mode. This keeps the stored config tidy and
+    // prevents stale fields from bleeding through when toggling.
+    const value = { ...(raw as ScheduleCardConfig) };
+    if (value.use_companion !== false) {
+      delete value.schedule_entity;
+      delete value.switch_entity;
+      delete value.mode_entity;
+    } else {
+      delete value.companion_entity;
+    }
+
     this.dispatchEvent(
       new CustomEvent("config-changed", {
-        detail: { config: { ...(value as ScheduleCardConfig), type: "custom:power-pilz-schedule-card" } },
+        detail: { config: { ...value, type: "custom:power-pilz-schedule-card" } },
         bubbles: true,
         composed: true
       })

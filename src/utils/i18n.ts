@@ -103,6 +103,14 @@ const EN: Dict = {
   "schedule.editor.section_layout": "Layout",
   "schedule.editor.section_appearance": "Appearance",
   "schedule.editor.section_display": "Display options",
+  "schedule.placeholder_companion": "Pick a PowerPilz Smart Schedule entity in the card settings to configure this card.",
+  "schedule.placeholder_manual": "Pick a schedule entity in the card settings to configure this card.",
+  "schedule.editor.use_companion": "Use PowerPilz Companion integration",
+  "schedule.editor.use_companion_help":
+    "When enabled (default), configure only one entity — a PowerPilz Smart Schedule helper from the PowerPilz Companion integration — and the card reads the linked schedule and target device from its attributes. When disabled, configure the three entities manually (schedule / device / mode).",
+  "schedule.editor.companion_entity": "PowerPilz Smart Schedule entity",
+  "schedule.editor.companion_help":
+    "A PowerPilz Smart Schedule helper (select.* entity created by the PowerPilz Companion integration). The card automatically reads its `linked_schedule` and `target_entity` attributes — no other entities needed.",
   "schedule.editor.schedule_entity": "Schedule entity",
   "schedule.editor.switch_entity": "Device entity",
   "schedule.editor.mode_entity": "Mode override entity",
@@ -299,6 +307,14 @@ const DE: Dict = {
   "schedule.editor.section_layout": "Layout",
   "schedule.editor.section_appearance": "Farben",
   "schedule.editor.section_display": "Anzeige-Optionen",
+  "schedule.placeholder_companion": "Wähle in den Karten-Einstellungen eine PowerPilz Smart-Zeitschaltuhr-Entität aus, um diese Karte zu konfigurieren.",
+  "schedule.placeholder_manual": "Wähle in den Karten-Einstellungen eine Zeitplan-Entität aus, um diese Karte zu konfigurieren.",
+  "schedule.editor.use_companion": "PowerPilz Companion Integration nutzen",
+  "schedule.editor.use_companion_help":
+    "Wenn aktiviert (Standard), musst du nur eine einzige Entität angeben — einen PowerPilz Smart-Zeitschaltuhr-Helfer aus der PowerPilz Companion Integration — die Karte liest den verknüpften Zeitplan und das Zielgerät automatisch aus deren Attributen. Wenn deaktiviert, gibst du die drei Entitäten (Zeitplan / Gerät / Modus) manuell an.",
+  "schedule.editor.companion_entity": "PowerPilz Smart-Zeitschaltuhr-Entität",
+  "schedule.editor.companion_help":
+    "Ein PowerPilz Smart-Zeitschaltuhr-Helfer (select.* Entität, angelegt von der PowerPilz Companion Integration). Die Karte liest automatisch deren `linked_schedule`- und `target_entity`-Attribute — keine weiteren Entitäten nötig.",
   "schedule.editor.schedule_entity": "Zeitplan-Entität",
   "schedule.editor.switch_entity": "Geräte-Entität",
   "schedule.editor.mode_entity": "Modus-Override Entität",
