@@ -12,7 +12,25 @@ import type {
 import { getEntity } from "../utils/entity";
 import { mushroomIconStyle, toRgbCss, type ColorValue } from "../utils/color";
 import { tr, haLang, weekdayShort } from "../utils/i18n";
+import { bindActionHandler, type ActionHandlerCleanup } from "../utils/action-handler";
+import { openScheduleEditDialog } from "./dialogs/schedule-edit-dialog";
 import "./editors/schedule-card-editor";
+
+/** Action config shape — mirrors HA's ActionConfig. */
+interface ActionConfig {
+  action?: string;
+  navigation_path?: string;
+  url_path?: string;
+  service?: string;
+  target?: Record<string, unknown>;
+  service_data?: Record<string, unknown>;
+  data?: Record<string, unknown>;
+  confirmation?: unknown;
+  [key: string]: unknown;
+}
+
+/** Custom action value for opening our Schedule edit dialog. */
+const ACTION_SCHEDULE_EDIT = "powerpilz-schedule-edit";
 
 // --- Types ---
 
@@ -63,6 +81,21 @@ interface PowerPilzScheduleCardConfig extends LovelaceCardConfig {
   show_mode_control?: boolean;
   show_now_indicator?: boolean;
   show_time_labels?: boolean;
+  // Tap / hold / double-tap behaviour. Standard HA action shapes
+  // ('none', 'more-info', 'toggle', 'navigate', 'url', 'call-service',
+  // 'perform-action') plus our own 'powerpilz-schedule-edit' that opens
+  // the inline weekly-plan editor. Defaults:
+  //   tap_action:        toggle the mode (legacy behaviour)
+  //   hold_action:       powerpilz-schedule-edit
+  //   double_tap_action: none
+  tap_action?: ActionConfig;
+  hold_action?: ActionConfig;
+  double_tap_action?: ActionConfig;
+  /** When true (default) a long-press on the card opens the PowerPilz
+   *  schedule edit dialog — unless `hold_action` is explicitly set to
+   *  something else. Set to false to disable the default long-press
+   *  behaviour without needing to configure `hold_action`. */
+  long_press_opens_editor?: boolean;
 }
 
 export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
@@ -206,6 +239,110 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
     return { grid_columns: 2, grid_rows: this.getCardSize() };
   }
 
+  private _actionCleanup?: ActionHandlerCleanup;
+
+  protected firstUpdated(): void {
+    this._bindActions();
+  }
+
+  protected updated(changedProps: Map<string, unknown>): void {
+    this._originalUpdated(changedProps);
+    if (changedProps.has("_config")) {
+      this._bindActions();
+    }
+  }
+
+  private _bindActions(): void {
+    const target = this.renderRoot.querySelector<HTMLElement>("ha-card");
+    if (!target) return;
+    this._actionCleanup?.destroy();
+    const explicitHold = !!this._config?.hold_action?.action
+      && this._config.hold_action.action !== "none";
+    const defaultHold = this._config?.long_press_opens_editor !== false
+      && !this._config?.hold_action?.action;
+    const hasHold = explicitHold || defaultHold;
+    const hasDoubleTap = !!this._config?.double_tap_action
+      && this._config.double_tap_action.action !== undefined
+      && this._config.double_tap_action.action !== "none";
+    this._actionCleanup = bindActionHandler(
+      target,
+      {
+        onTap: () => this._fireAction("tap"),
+        onHold: () => this._fireAction("hold"),
+        onDoubleTap: () => this._fireAction("double_tap"),
+      },
+      { hasHold, hasDoubleTap }
+    );
+  }
+
+  private _fireAction(kind: "tap" | "hold" | "double_tap"): void {
+    if (this.isEditorPreview() || !this._config) return;
+    const key = `${kind}_action` as const;
+    let actionConfig = this._config[key];
+
+    // Legacy fallback: a bare tap without tap_action configured still
+    // cycles the mode (the card's original behaviour since v0.2.x).
+    if (kind === "tap" && (!actionConfig || !actionConfig.action)) {
+      if (this._modeEntityId) {
+        actionConfig = { action: "fire-dom-event" } as ActionConfig;
+        void this.handleModeChange(new Event("tap"));
+      }
+      return;
+    }
+
+    // Default for hold: open the edit dialog when `long_press_opens_editor`
+    // is enabled (its default) AND no explicit hold_action is configured.
+    if (kind === "hold" && (!actionConfig || !actionConfig.action)) {
+      if (this._config.long_press_opens_editor !== false) {
+        actionConfig = { action: ACTION_SCHEDULE_EDIT };
+      }
+    }
+
+    if (!actionConfig || !actionConfig.action || actionConfig.action === "none") {
+      return;
+    }
+
+    if (actionConfig.action === ACTION_SCHEDULE_EDIT) {
+      this._openScheduleEdit();
+      return;
+    }
+
+    // Standard HA actions — delegate to HA's default action dispatcher.
+    this.dispatchEvent(
+      new CustomEvent("hass-action", {
+        detail: { config: this._config, action: kind },
+        bubbles: true,
+        composed: true,
+      })
+    );
+  }
+
+  private _openScheduleEdit(): void {
+    const entity = this._scheduleEntityId;
+    if (!entity || !this.hass) return;
+    openScheduleEditDialog({ hass: this.hass, scheduleEntityId: entity });
+  }
+
+  private _originalUpdated(changedProps: Map<string, unknown>): void {
+    // Schedule fetch logic that used to live directly in updated().
+    if (!changedProps.has("hass")) return;
+    const entity = this._scheduleEntityId;
+    if (!entity) return;
+    if (entity !== this._lastFetchEntity) {
+      this._lastFetchEntity = entity;
+      this._lastEntityUpdated = undefined;
+      this.fetchSchedule();
+      return;
+    }
+    const stateObj = this.hass?.states?.[entity];
+    const lastUpdated = stateObj?.attributes?.last_updated as string | undefined
+      ?? stateObj?.state;
+    if (lastUpdated && lastUpdated !== this._lastEntityUpdated) {
+      this._lastEntityUpdated = lastUpdated;
+      this.fetchSchedule();
+    }
+  }
+
   public connectedCallback(): void {
     super.connectedCallback();
     this.fetchSchedule();
@@ -217,29 +354,8 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
       clearInterval(this._fetchTimer);
       this._fetchTimer = undefined;
     }
-  }
-
-  protected updated(changedProps: Map<string, unknown>): void {
-    if (!changedProps.has("hass")) return;
-    const entity = this._scheduleEntityId;
-    if (!entity) return;
-
-    // Refetch when schedule entity changes
-    if (entity !== this._lastFetchEntity) {
-      this._lastFetchEntity = entity;
-      this._lastEntityUpdated = undefined;
-      this.fetchSchedule();
-      return;
-    }
-
-    // Refetch when entity state changes (edited elsewhere)
-    const stateObj = this.hass?.states?.[entity];
-    const lastUpdated = stateObj?.attributes?.last_updated as string | undefined
-      ?? stateObj?.state;
-    if (lastUpdated && lastUpdated !== this._lastEntityUpdated) {
-      this._lastEntityUpdated = lastUpdated;
-      this.fetchSchedule();
-    }
+    this._actionCleanup?.destroy();
+    this._actionCleanup = undefined;
   }
 
   // --- Schedule data fetching ---
@@ -383,6 +499,9 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
   };
 
   private handleDaySelect = (event: Event): void => {
+    // Stop propagation so the card-level tap_action doesn't also fire
+    // when the user picks a day to preview.
+    event.stopPropagation();
     const target = event.currentTarget;
     if (!(target instanceof HTMLElement)) return;
     const day = parseInt(target.dataset.day ?? "0", 10);
@@ -663,7 +782,7 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
     // align visually with a single-row Mushroom card placed next to a
     // same-height neighbour — regardless of `card_layout`.
     return html`
-      <ha-card @click=${this.handleCardTap}>
+      <ha-card>
         <div class="container ${isVertical ? "vertical" : "horizontal"}">
           <div class="row row-header">${headerContent}</div>
           ${showDays

@@ -47,6 +47,10 @@ All options are available in the Lovelace editor, but you can also use YAML.
 | `show_mode_control` | boolean | `true` | Show the Off/On/Auto button |
 | `show_now_indicator` | boolean | `true` | Show the vertical line at the current time |
 | `show_time_labels` | boolean | `true` | Show hour labels above the timeline |
+| `long_press_opens_editor` | boolean | `true` | When enabled, a long-press on the card opens a modal with HA's native drag-and-drop weekly-plan editor (embedded `ha-schedule-form`). Saves write back to the linked schedule helper via the `schedule/update` websocket command. Set to `false` to disable the gesture entirely, or override it by setting `hold_action` below. |
+| `tap_action` | ActionConfig | toggle mode | Standard HA action config. Default cycles through Off/On/Auto. |
+| `hold_action` | ActionConfig | schedule editor | Standard HA action config. When unset, opens the schedule edit modal if `long_press_opens_editor` is `true`. Power-user YAML: set `action: powerpilz-schedule-edit` to force the edit modal. |
+| `double_tap_action` | ActionConfig | none | Standard HA action config. |
 
 ## Example YAML
 
