@@ -6,6 +6,8 @@ import { tr, haLang } from "../../utils/i18n";
 
 interface TimerCardConfig extends LovelaceCardConfig {
   type: "custom:power-pilz-timer-card";
+  use_companion?: boolean;
+  companion_entity?: string;
   switch_entity?: string;
   on_datetime_entity?: string;
   off_datetime_entity?: string;
@@ -28,48 +30,82 @@ export class PowerPilzTimerCardEditor extends LitElement implements LovelaceCard
   private _config?: TimerCardConfig;
 
   public setConfig(config: TimerCardConfig): void {
+    // Smart default: explicit wins; legacy configs with switch_entity
+    // default to manual mode; fresh configs default to companion mode.
+    const useCompanion = config.use_companion !== undefined
+      ? config.use_companion !== false
+      : !config.switch_entity;
     this._config = {
       ...config,
+      use_companion: useCompanion,
       type: "custom:power-pilz-timer-card"
     };
   }
 
   private buildSchema(): HaFormSchema[] {
     const lang = haLang(this.hass);
+    const useCompanion = this._config?.use_companion !== false;
+
+    const entitiesSection: HaFormSchema = {
+      type: "expandable",
+      name: "",
+      title: tr(lang, "timer.editor.section_entities"),
+      icon: "mdi:connection",
+      expanded: true,
+      schema: [
+        {
+          name: "use_companion",
+          selector: { boolean: {} },
+          helper: tr(lang, "timer.editor.use_companion_help"),
+          description: tr(lang, "timer.editor.use_companion_help")
+        },
+        ...(useCompanion
+          ? [
+              {
+                name: "companion_entity",
+                selector: {
+                  entity: {
+                    filter: {
+                      domain: "switch",
+                      integration: "powerpilz_companion"
+                    }
+                  }
+                },
+                helper: tr(lang, "timer.editor.companion_help"),
+                description: tr(lang, "timer.editor.companion_help")
+              }
+            ]
+          : [
+              {
+                name: "switch_entity",
+                selector: { entity: { filter: { domain: ["switch", "light", "input_boolean", "climate", "fan"] } } },
+                helper: tr(lang, "timer.editor.switch_help"),
+                description: tr(lang, "timer.editor.switch_help")
+              },
+              {
+                name: "on_datetime_entity",
+                selector: { entity: { filter: { domain: "input_datetime" } } },
+                helper: tr(lang, "timer.editor.on_help"),
+                description: tr(lang, "timer.editor.on_help")
+              },
+              {
+                name: "off_datetime_entity",
+                selector: { entity: { filter: { domain: "input_datetime" } } },
+                helper: tr(lang, "timer.editor.off_help"),
+                description: tr(lang, "timer.editor.off_help")
+              },
+              {
+                name: "active_entity",
+                selector: { entity: { filter: { domain: "input_boolean" } } },
+                helper: tr(lang, "timer.editor.active_help"),
+                description: tr(lang, "timer.editor.active_help")
+              }
+            ])
+      ]
+    };
+
     return [
-      {
-        type: "expandable",
-        name: "",
-        title: tr(lang, "timer.editor.section_entities"),
-        icon: "mdi:connection",
-        expanded: true,
-        schema: [
-          {
-            name: "switch_entity",
-            selector: { entity: { filter: { domain: ["switch", "light", "input_boolean", "climate", "fan"] } } },
-            helper: tr(lang, "timer.editor.switch_help"),
-            description: tr(lang, "timer.editor.switch_help")
-          },
-          {
-            name: "on_datetime_entity",
-            selector: { entity: { filter: { domain: "input_datetime" } } },
-            helper: tr(lang, "timer.editor.on_help"),
-            description: tr(lang, "timer.editor.on_help")
-          },
-          {
-            name: "off_datetime_entity",
-            selector: { entity: { filter: { domain: "input_datetime" } } },
-            helper: tr(lang, "timer.editor.off_help"),
-            description: tr(lang, "timer.editor.off_help")
-          },
-          {
-            name: "active_entity",
-            selector: { entity: { filter: { domain: "input_boolean" } } },
-            helper: tr(lang, "timer.editor.active_help"),
-            description: tr(lang, "timer.editor.active_help")
-          }
-        ]
-      },
+      entitiesSection,
       {
         type: "expandable",
         name: "",
@@ -91,7 +127,11 @@ export class PowerPilzTimerCardEditor extends LitElement implements LovelaceCard
             name: "",
             columns: 2,
             schema: [
-              { name: "icon", selector: { icon: {} }, context: { icon_entity: "switch_entity" } },
+              {
+                name: "icon",
+                selector: { icon: {} },
+                context: { icon_entity: useCompanion ? "companion_entity" : "switch_entity" }
+              },
               {
                 name: "icon_color",
                 selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
@@ -121,6 +161,8 @@ export class PowerPilzTimerCardEditor extends LitElement implements LovelaceCard
   private labelMap(): Record<string, string> {
     const lang = haLang(this.hass);
     return {
+      use_companion: tr(lang, "timer.editor.use_companion"),
+      companion_entity: tr(lang, "timer.editor.companion_entity"),
       switch_entity: tr(lang, "timer.editor.switch_entity"),
       on_datetime_entity: tr(lang, "timer.editor.on_datetime_entity"),
       off_datetime_entity: tr(lang, "timer.editor.off_datetime_entity"),
@@ -136,6 +178,8 @@ export class PowerPilzTimerCardEditor extends LitElement implements LovelaceCard
   private helperMap(): Record<string, string> {
     const lang = haLang(this.hass);
     return {
+      use_companion: tr(lang, "timer.editor.use_companion_help"),
+      companion_entity: tr(lang, "timer.editor.companion_help"),
       switch_entity: tr(lang, "timer.editor.switch_help"),
       on_datetime_entity: tr(lang, "timer.editor.on_help"),
       off_datetime_entity: tr(lang, "timer.editor.off_help"),
@@ -172,11 +216,23 @@ export class PowerPilzTimerCardEditor extends LitElement implements LovelaceCard
   private valueChanged = (event: CustomEvent<{ value: unknown }>): void => {
     const target = event.target;
     if (!(target instanceof HTMLElement) || target.tagName !== "HA-FORM") return;
-    const value = event.detail.value;
-    if (!value || typeof value !== "object" || Array.isArray(value)) return;
+    const raw = event.detail.value;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return;
+
+    // Enforce mutual exclusivity between companion + manual fields.
+    const value = { ...(raw as TimerCardConfig) };
+    if (value.use_companion !== false) {
+      delete value.switch_entity;
+      delete value.on_datetime_entity;
+      delete value.off_datetime_entity;
+      delete value.active_entity;
+    } else {
+      delete value.companion_entity;
+    }
+
     this.dispatchEvent(
       new CustomEvent("config-changed", {
-        detail: { config: { ...(value as TimerCardConfig), type: "custom:power-pilz-timer-card" } },
+        detail: { config: { ...value, type: "custom:power-pilz-timer-card" } },
         bubbles: true,
         composed: true
       })

@@ -73,6 +73,14 @@ const EN: Dict = {
   "timer.editor.section_entities": "Entities",
   "timer.editor.section_identity": "Identity",
   "timer.editor.section_appearance": "Appearance",
+  "timer.editor.use_companion": "Use PowerPilz Companion integration",
+  "timer.editor.use_companion_help":
+    "When enabled (default), configure only one entity — a PowerPilz Smart Timer from the Companion integration — and the card derives the target device, on/off times and active flag from its attributes. When disabled, configure the four entities manually (device / on-time / off-time / active flag).",
+  "timer.editor.companion_entity": "PowerPilz Smart Timer entity",
+  "timer.editor.companion_help":
+    "A PowerPilz Smart Timer helper (switch.* entity created by the Companion integration). The card automatically reads its `target_entity`, `on_datetime` and `off_datetime` attributes and uses the `powerpilz_companion.set_timer` service to update times.",
+  "timer.placeholder_companion": "Pick a PowerPilz Smart Timer entity in the card settings to configure this card.",
+  "timer.placeholder_manual": "Pick the four timer entities in the card settings to configure this card.",
   "timer.editor.switch_entity": "Device to control",
   "timer.editor.on_datetime_entity": "Turn-ON datetime helper",
   "timer.editor.off_datetime_entity": "Turn-OFF datetime helper (optional)",
@@ -278,6 +286,14 @@ const DE: Dict = {
   "timer.editor.section_entities": "Entitäten",
   "timer.editor.section_identity": "Erscheinungsbild",
   "timer.editor.section_appearance": "Farben",
+  "timer.editor.use_companion": "PowerPilz Companion Integration nutzen",
+  "timer.editor.use_companion_help":
+    "Wenn aktiviert (Standard), musst du nur eine einzige Entität angeben — einen PowerPilz Smart Timer aus der Companion Integration — die Karte liest Zielgerät, Ein/Aus-Zeiten und Aktiv-Flag automatisch aus deren Attributen. Wenn deaktiviert, gibst du die vier Entitäten manuell an (Gerät / Einschalt-Zeit / Ausschalt-Zeit / Aktiv-Flag).",
+  "timer.editor.companion_entity": "PowerPilz Smart Timer-Entität",
+  "timer.editor.companion_help":
+    "Ein PowerPilz Smart Timer-Helfer (switch.* Entität, angelegt von der Companion Integration). Die Karte liest automatisch deren `target_entity`-, `on_datetime`- und `off_datetime`-Attribute und nutzt den `powerpilz_companion.set_timer`-Service zum Setzen der Zeiten.",
+  "timer.placeholder_companion": "Wähle in den Karten-Einstellungen eine PowerPilz Smart Timer-Entität aus, um diese Karte zu konfigurieren.",
+  "timer.placeholder_manual": "Wähle in den Karten-Einstellungen die vier Timer-Entitäten aus, um diese Karte zu konfigurieren.",
   "timer.editor.switch_entity": "Zu steuerndes Gerät",
   "timer.editor.on_datetime_entity": "Einschalt-Zeit Helfer",
   "timer.editor.off_datetime_entity": "Ausschalt-Zeit Helfer (optional)",
