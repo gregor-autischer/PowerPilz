@@ -29,18 +29,13 @@ const EN: Dict = {
   // --- Common ---
   "common.cancel": "Cancel",
   "common.set": "Set",
-  "common.save": "Save",
   "common.on": "On",
   "common.off": "Off",
-  "common.auto": "Auto",
   "common.active": "Active",
-  "common.idle": "Idle",
   "common.unknown": "Unknown",
   "common.invalid_config": "Invalid configuration",
   "common.today": "Today",
   "common.tomorrow": "Tomorrow",
-  "common.optional": "optional",
-  "common.entity_required": "Entity is required",
 
   // --- Weekday short ---
   "weekday.short.0": "Sun",
@@ -61,7 +56,6 @@ const EN: Dict = {
   "timer.keep_timer": "Keep timer",
   "timer.cancel_timer": "Cancel timer",
   "timer.timer_active": "Timer active",
-  "timer.no_timer_set": "No timer set",
   "timer.time_now": "now",
   "timer.time_in_m": "in {m}m",
   "timer.time_in_hm": "in {h}h {m}m",
@@ -103,7 +97,6 @@ const EN: Dict = {
   // --- Schedule card ---
   "schedule.default_name": "Schedule",
   "schedule.timer_label": "Timer",
-  "schedule.no_timer_set": "No timer set",
 
   // Schedule editor
   "schedule.editor.section_entities": "Entities",
@@ -244,18 +237,13 @@ const DE: Dict = {
   // --- Common ---
   "common.cancel": "Abbrechen",
   "common.set": "Setzen",
-  "common.save": "Speichern",
   "common.on": "Ein",
   "common.off": "Aus",
-  "common.auto": "Auto",
   "common.active": "Aktiv",
-  "common.idle": "Inaktiv",
   "common.unknown": "Unbekannt",
   "common.invalid_config": "Ungültige Konfiguration",
   "common.today": "Heute",
   "common.tomorrow": "Morgen",
-  "common.optional": "optional",
-  "common.entity_required": "Entity ist erforderlich",
 
   // --- Weekday short ---
   "weekday.short.0": "So",
@@ -276,7 +264,6 @@ const DE: Dict = {
   "timer.keep_timer": "Timer behalten",
   "timer.cancel_timer": "Timer abbrechen",
   "timer.timer_active": "Timer aktiv",
-  "timer.no_timer_set": "Kein Timer gesetzt",
   "timer.time_now": "jetzt",
   "timer.time_in_m": "in {m} Min",
   "timer.time_in_hm": "in {h}h {m}m",
@@ -317,7 +304,6 @@ const DE: Dict = {
   // --- Schedule card ---
   "schedule.default_name": "Zeitplan",
   "schedule.timer_label": "Zeitschaltuhr",
-  "schedule.no_timer_set": "Kein Timer gesetzt",
 
   "schedule.editor.section_entities": "Entitäten",
   "schedule.editor.section_identity": "Erscheinungsbild",

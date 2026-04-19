@@ -2,7 +2,6 @@ import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { property, state } from "lit/decorators.js";
 import { styleMap } from "lit/directives/style-map.js";
 import type {
-  HassEntity,
   HomeAssistant,
   LovelaceCard,
   LovelaceCardConfig,
@@ -768,10 +767,6 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
 
     /* --- Header --- */
 
-    .header {
-      flex: none;
-    }
-
     .state-item {
       display: flex;
       align-items: center;
@@ -823,15 +818,6 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
       text-overflow: ellipsis;
       overflow: hidden;
       white-space: nowrap;
-    }
-
-    /* --- Body --- */
-
-    .body {
-      padding: 0 var(--control-spacing) var(--control-spacing);
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
     }
 
     /* --- Day selector --- */
