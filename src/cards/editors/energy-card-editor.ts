@@ -121,7 +121,7 @@ const subBlockFields = (prefix: "solar" | "home" | "grid" | "grid_secondary", in
           name: "",
           columns: 2,
           schema: [
-            { name: `${slot}_entity`, selector: { entity: { filter: { domain: "sensor" } } } },
+            { name: `${slot}_entity`, selector: { entity: { filter: { domain: ["sensor", "input_number", "number"] } } } },
             { name: `${slot}_label`, selector: { text: {} } }
           ]
         },
@@ -454,7 +454,7 @@ const SCHEMA: HaFormSchema[] = [
             schema: [
               {
                 name: "solar_entity",
-                selector: { entity: { filter: { domain: "sensor" } } },
+                selector: { entity: { filter: { domain: ["sensor", "input_number", "number"] } } },
                 helper: SOLAR_FLOW_DIRECTION_HELP,
                 description: SOLAR_FLOW_DIRECTION_HELP
               },
@@ -525,7 +525,7 @@ const SCHEMA: HaFormSchema[] = [
             schema: [
               {
                 name: "grid_entity",
-                selector: { entity: { filter: { domain: "sensor" } } },
+                selector: { entity: { filter: { domain: ["sensor", "input_number", "number"] } } },
                 helper: GRID_FLOW_DIRECTION_HELP,
                 description: GRID_FLOW_DIRECTION_HELP
               },
@@ -610,7 +610,7 @@ const SCHEMA: HaFormSchema[] = [
             schema: [
               {
                 name: "grid_secondary_entity",
-                selector: { entity: { filter: { domain: "sensor" } } },
+                selector: { entity: { filter: { domain: ["sensor", "input_number", "number"] } } },
                 helper: GRID_SECONDARY_FLOW_DIRECTION_HELP,
                 description: GRID_SECONDARY_FLOW_DIRECTION_HELP
               },
@@ -695,7 +695,7 @@ const SCHEMA: HaFormSchema[] = [
             schema: [
               {
                 name: "home_entity",
-                selector: { entity: { filter: { domain: "sensor" } } },
+                selector: { entity: { filter: { domain: ["sensor", "input_number", "number"] } } },
                 helper: HOME_FLOW_DIRECTION_HELP,
                 description: HOME_FLOW_DIRECTION_HELP
               },
@@ -766,11 +766,11 @@ const SCHEMA: HaFormSchema[] = [
             schema: [
               {
                 name: "battery_entity",
-                selector: { entity: { filter: { domain: "sensor" } } },
+                selector: { entity: { filter: { domain: ["sensor", "input_number", "number"] } } },
                 helper: BATTERY_FLOW_DIRECTION_HELP,
                 description: BATTERY_FLOW_DIRECTION_HELP
               },
-              { name: "battery_percentage_entity", selector: { entity: { filter: { domain: "sensor" } } } }
+              { name: "battery_percentage_entity", selector: { entity: { filter: { domain: ["sensor", "input_number", "number"] } } } }
             ]
           },
           {
@@ -869,11 +869,11 @@ const SCHEMA: HaFormSchema[] = [
             schema: [
               {
                 name: "battery_secondary_entity",
-                selector: { entity: { filter: { domain: "sensor" } } },
+                selector: { entity: { filter: { domain: ["sensor", "input_number", "number"] } } },
                 helper: BATTERY_SECONDARY_FLOW_DIRECTION_HELP,
                 description: BATTERY_SECONDARY_FLOW_DIRECTION_HELP
               },
-              { name: "battery_secondary_percentage_entity", selector: { entity: { filter: { domain: "sensor" } } } }
+              { name: "battery_secondary_percentage_entity", selector: { entity: { filter: { domain: ["sensor", "input_number", "number"] } } } }
             ]
           },
           {
