@@ -6,18 +6,13 @@
  *   - Pointer-drag on empty track → paints a new block with 15-minute
  *     snapping, persisted on pointer-up.
  *   - Click on an existing block → opens a second modal for minute/
- *     second-precise time editing, a free-form `data` field (matching
- *     HA's Schedule helper model) and a Delete action.
+ *     second-precise time editing, a free-form `data` field and a
+ *     Delete action.
  *
- * All changes are buffered on `this._schedule` until the user hits
- * Save, which calls the stable `schedule/update` websocket command.
- *
- * This implementation deliberately does NOT depend on HA's own
- * `<ha-schedule-form>` custom element: that component is lazy-loaded
- * only after the Settings → Helpers dialog has been opened at least
- * once per browser session, leading to a broken first-use experience.
- * We use the same `schedule/update` contract HA's form does, so saves
- * write back through the supported path.
+ * All changes are buffered on `this._blocks` until the user hits Save,
+ * which calls the PowerPilz Companion `set_schedule_blocks` service.
+ * Blocks are read straight from the companion select entity's
+ * `week_blocks` attribute — no separate schedule helper is involved.
  */
 
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
@@ -32,10 +27,7 @@ interface ScheduleBlock {
   data?: Record<string, unknown>;
 }
 
-interface ScheduleData {
-  id: string;
-  name: string;
-  icon?: string;
+type WeekBlocks = {
   monday: ScheduleBlock[];
   tuesday: ScheduleBlock[];
   wednesday: ScheduleBlock[];
@@ -43,8 +35,7 @@ interface ScheduleData {
   friday: ScheduleBlock[];
   saturday: ScheduleBlock[];
   sunday: ScheduleBlock[];
-  [key: string]: unknown;
-}
+};
 
 const DIALOG_TAG = "power-pilz-schedule-edit-dialog";
 
@@ -85,8 +76,23 @@ interface EditingState {
 
 export interface ScheduleEditDialogOptions {
   hass: HomeAssistant;
+  /** The PowerPilz Smart Schedule `select.*` entity id. Blocks are read
+   *  from its `week_blocks` attribute and saved via the Companion
+   *  integration's `set_schedule_blocks` service. */
   scheduleEntityId: string;
   title?: string;
+}
+
+function _emptyWeek(): WeekBlocks {
+  return {
+    monday: [],
+    tuesday: [],
+    wednesday: [],
+    thursday: [],
+    friday: [],
+    saturday: [],
+    sunday: [],
+  };
 }
 
 class PowerPilzScheduleEditDialog extends LitElement {
@@ -99,7 +105,7 @@ class PowerPilzScheduleEditDialog extends LitElement {
   @property({ type: String })
   public dialogTitle = "";
 
-  @state() private _schedule?: ScheduleData;
+  @state() private _blocks: WeekBlocks = _emptyWeek();
   @state() private _loading = true;
   @state() private _loadError?: string;
   @state() private _saving = false;
@@ -136,28 +142,36 @@ class PowerPilzScheduleEditDialog extends LitElement {
   private async _loadSchedule(): Promise<void> {
     const lang = haLang(this.hass);
     try {
-      if (!this.hass?.callWS) {
-        this._loadError = tr(lang, "schedule.edit_dialog.error_no_ws");
-        this._loading = false;
-        return;
-      }
-      const list: ScheduleData[] = await this.hass.callWS({
-        type: "schedule/list",
-      });
-      const slug = this.scheduleEntityId.split(".", 2)[1] ?? "";
-      const friendly = this.hass.states?.[this.scheduleEntityId]?.attributes
-        ?.friendly_name;
-      let found = list.find((s) => s.id === slug);
-      if (!found && friendly) {
-        found = list.find((s) => s.name === friendly);
-      }
-      if (!found) {
+      const state = this.hass?.states?.[this.scheduleEntityId];
+      if (!state) {
         this._loadError = tr(lang, "schedule.edit_dialog.error_not_found", {
           entity: this.scheduleEntityId,
         });
-      } else {
-        this._schedule = JSON.parse(JSON.stringify(found));
+        return;
       }
+      const raw = state.attributes?.week_blocks;
+      const loaded = _emptyWeek();
+      if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+        for (const day of Object.keys(loaded) as (keyof WeekBlocks)[]) {
+          const list = (raw as Record<string, unknown>)[day];
+          if (Array.isArray(list)) {
+            loaded[day] = list
+              .filter((b) => b && typeof b === "object")
+              .map((b) => {
+                const blk = b as Record<string, unknown>;
+                const out: ScheduleBlock = {
+                  from: String(blk.from ?? "00:00:00"),
+                  to: String(blk.to ?? "00:00:00"),
+                };
+                if (blk.data && typeof blk.data === "object" && !Array.isArray(blk.data)) {
+                  out.data = blk.data as Record<string, unknown>;
+                }
+                return out;
+              });
+          }
+        }
+      }
+      this._blocks = loaded;
     } catch (err) {
       this._loadError = String((err as Error)?.message || err);
     } finally {
@@ -166,22 +180,17 @@ class PowerPilzScheduleEditDialog extends LitElement {
   }
 
   private async _handleSave(): Promise<void> {
-    if (!this._schedule || this._saving || !this.hass?.callWS) return;
+    if (this._saving || !this.hass) return;
     this._saving = true;
     try {
-      await this.hass.callWS!({
-        type: "schedule/update",
-        schedule_id: this._schedule.id,
-        name: this._schedule.name,
-        icon: this._schedule.icon,
-        monday: this._schedule.monday ?? [],
-        tuesday: this._schedule.tuesday ?? [],
-        wednesday: this._schedule.wednesday ?? [],
-        thursday: this._schedule.thursday ?? [],
-        friday: this._schedule.friday ?? [],
-        saturday: this._schedule.saturday ?? [],
-        sunday: this._schedule.sunday ?? [],
-      });
+      await this.hass.callService(
+        "powerpilz_companion",
+        "set_schedule_blocks",
+        {
+          entity_id: this.scheduleEntityId,
+          blocks: this._blocks,
+        },
+      );
       this._dirty = false;
       this._close();
     } catch (err) {
@@ -205,14 +214,13 @@ class PowerPilzScheduleEditDialog extends LitElement {
   // ------------------------------------------------------------
 
   private _blocksForDay(key: DayKey): ScheduleBlock[] {
-    const blocks = (this._schedule?.[key] as ScheduleBlock[] | undefined) ?? [];
+    const blocks = this._blocks[key];
     return Array.isArray(blocks) ? [...blocks] : [];
   }
 
   private _setBlocksForDay(key: DayKey, blocks: ScheduleBlock[]): void {
-    if (!this._schedule) return;
     const cleaned = _sortAndMerge(blocks);
-    this._schedule = { ...this._schedule, [key]: cleaned } as ScheduleData;
+    this._blocks = { ...this._blocks, [key]: cleaned };
     this._dirty = true;
   }
 
@@ -229,7 +237,7 @@ class PowerPilzScheduleEditDialog extends LitElement {
 
   private _handleTrackPointerDown = (event: PointerEvent): void => {
     if (event.button !== 0) return;
-    if (!this._schedule) return;
+    if (this._loading || this._loadError) return;
     // Ignore pointerdown that originated on an existing block — that's
     // a click-to-edit gesture, handled by `_handleBlockClick`.
     if ((event.target as HTMLElement).closest(".pp-block")) return;
@@ -434,7 +442,7 @@ class PowerPilzScheduleEditDialog extends LitElement {
             <button
               class="primary"
               @click=${this._handleSave}
-              ?disabled=${this._saving || !this._schedule || !this._dirty || !!this._loadError}
+              ?disabled=${this._saving || !this._dirty || !!this._loadError}
             >
               ${this._saving
                 ? tr(lang, "common.saving") || "Saving…"
@@ -453,11 +461,6 @@ class PowerPilzScheduleEditDialog extends LitElement {
     }
     if (this._loadError) {
       return html`<div class="msg error">${this._loadError}</div>`;
-    }
-    if (!this._schedule) {
-      return html`<div class="msg error">
-        ${tr(lang, "schedule.edit_dialog.error_not_found", { entity: this.scheduleEntityId })}
-      </div>`;
     }
 
     return html`

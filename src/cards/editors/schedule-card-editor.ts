@@ -6,11 +6,7 @@ import { tr, haLang } from "../../utils/i18n";
 
 interface ScheduleCardConfig extends LovelaceCardConfig {
   type: "custom:power-pilz-schedule-card";
-  use_companion?: boolean;
-  companion_entity?: string;
-  schedule_entity?: string;
-  switch_entity?: string;
-  mode_entity?: string;
+  entity?: string;
   name?: string;
   subtitle?: string;
   icon?: string;
@@ -39,17 +35,21 @@ export class PowerPilzScheduleCardEditor extends LitElement implements LovelaceC
   private _config?: ScheduleCardConfig;
 
   public setConfig(config: ScheduleCardConfig): void {
-    // Default resolution mirrors the card's setConfig:
-    //   - Explicit `use_companion` → honor it
-    //   - Legacy config with `schedule_entity` → default manual mode
-    //   - Fresh config → default companion mode
-    const useCompanion = config.use_companion !== undefined
-      ? config.use_companion !== false
-      : !config.schedule_entity;
+    // Legacy configs had `companion_entity`; fold it onto the new
+    // `entity` key so old YAML still works. Drop any of the pre-v0.4
+    // manual-mode fields — the companion integration owns them now.
+    const legacy = config as ScheduleCardConfig & {
+      companion_entity?: string;
+      schedule_entity?: string;
+      switch_entity?: string;
+      mode_entity?: string;
+      use_companion?: boolean;
+    };
+    const entity = config.entity || legacy.companion_entity;
 
     this._config = {
       ...config,
-      use_companion: useCompanion,
+      entity,
       show_day_selector: config.show_day_selector ?? true,
       show_mode_control: config.show_mode_control ?? true,
       show_now_indicator: config.show_now_indicator ?? true,
@@ -61,7 +61,6 @@ export class PowerPilzScheduleCardEditor extends LitElement implements LovelaceC
 
   private buildSchema(): HaFormSchema[] {
     const lang = haLang(this.hass);
-    const useCompanion = this._config?.use_companion !== false;
 
     const entitiesSection: HaFormSchema = {
       type: "expandable",
@@ -71,47 +70,18 @@ export class PowerPilzScheduleCardEditor extends LitElement implements LovelaceC
       expanded: true,
       schema: [
         {
-          name: "use_companion",
-          selector: { boolean: {} },
-          helper: tr(lang, "schedule.editor.use_companion_help"),
-          description: tr(lang, "schedule.editor.use_companion_help")
-        },
-        ...(useCompanion
-          ? [
-              {
-                name: "companion_entity",
-                selector: {
-                  entity: {
-                    filter: {
-                      domain: "select",
-                      integration: "powerpilz_companion"
-                    }
-                  }
-                },
-                helper: tr(lang, "schedule.editor.companion_help"),
-                description: tr(lang, "schedule.editor.companion_help")
+          name: "entity",
+          selector: {
+            entity: {
+              filter: {
+                domain: "select",
+                integration: "powerpilz_companion"
               }
-            ]
-          : [
-              {
-                name: "schedule_entity",
-                selector: { entity: { filter: { domain: "schedule" } } },
-                helper: tr(lang, "schedule.editor.schedule_help"),
-                description: tr(lang, "schedule.editor.schedule_help")
-              },
-              {
-                name: "switch_entity",
-                selector: { entity: { filter: { domain: ["switch", "light", "input_boolean"] } } },
-                helper: tr(lang, "schedule.editor.switch_help"),
-                description: tr(lang, "schedule.editor.switch_help")
-              },
-              {
-                name: "mode_entity",
-                selector: { entity: { filter: { domain: ["input_select", "select"] } } },
-                helper: tr(lang, "schedule.editor.mode_help"),
-                description: tr(lang, "schedule.editor.mode_help")
-              }
-            ])
+            }
+          },
+          helper: tr(lang, "schedule.editor.companion_help"),
+          description: tr(lang, "schedule.editor.companion_help")
+        }
       ]
     };
 
@@ -141,7 +111,7 @@ export class PowerPilzScheduleCardEditor extends LitElement implements LovelaceC
               {
                 name: "icon",
                 selector: { icon: {} },
-                context: { icon_entity: useCompanion ? "companion_entity" : "schedule_entity" }
+                context: { icon_entity: "entity" }
               },
               {
                 name: "icon_color",
@@ -269,11 +239,7 @@ export class PowerPilzScheduleCardEditor extends LitElement implements LovelaceC
   private labelMap(): Record<string, string> {
     const lang = haLang(this.hass);
     return {
-      use_companion: tr(lang, "schedule.editor.use_companion"),
-      companion_entity: tr(lang, "schedule.editor.companion_entity"),
-      schedule_entity: tr(lang, "schedule.editor.schedule_entity"),
-      switch_entity: tr(lang, "schedule.editor.switch_entity"),
-      mode_entity: tr(lang, "schedule.editor.mode_entity"),
+      entity: tr(lang, "schedule.editor.companion_entity"),
       name: tr(lang, "schedule.editor.name"),
       subtitle: tr(lang, "schedule.editor.subtitle"),
       icon: tr(lang, "schedule.editor.icon"),
@@ -295,11 +261,7 @@ export class PowerPilzScheduleCardEditor extends LitElement implements LovelaceC
   private helperMap(): Record<string, string> {
     const lang = haLang(this.hass);
     return {
-      use_companion: tr(lang, "schedule.editor.use_companion_help"),
-      companion_entity: tr(lang, "schedule.editor.companion_help"),
-      schedule_entity: tr(lang, "schedule.editor.schedule_help"),
-      switch_entity: tr(lang, "schedule.editor.switch_help"),
-      mode_entity: tr(lang, "schedule.editor.mode_help"),
+      entity: tr(lang, "schedule.editor.companion_help"),
       card_layout: tr(lang, "schedule.editor.card_layout_help"),
       time_window: tr(lang, "schedule.editor.time_window_help"),
       active_color: tr(lang, "schedule.editor.active_color_help"),
@@ -342,17 +304,13 @@ export class PowerPilzScheduleCardEditor extends LitElement implements LovelaceC
     const raw = event.detail.value;
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return;
 
-    // Enforce mutual exclusivity: keep only the fields that belong to the
-    // currently-selected mode. This keeps the stored config tidy and
-    // prevents stale fields from bleeding through when toggling.
-    const value = { ...(raw as ScheduleCardConfig) };
-    if (value.use_companion !== false) {
-      delete value.schedule_entity;
-      delete value.switch_entity;
-      delete value.mode_entity;
-    } else {
-      delete value.companion_entity;
-    }
+    // Strip legacy / obsolete fields so they never reappear in saved YAML.
+    const value = { ...(raw as ScheduleCardConfig & Record<string, unknown>) };
+    delete value.use_companion;
+    delete value.companion_entity;
+    delete value.schedule_entity;
+    delete value.switch_entity;
+    delete value.mode_entity;
 
     this.dispatchEvent(
       new CustomEvent("config-changed", {

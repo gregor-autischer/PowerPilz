@@ -144,7 +144,7 @@ const EN: Dict = {
     "When enabled (default), configure only one entity — a PowerPilz Smart Schedule helper from the PowerPilz Companion integration — and the card reads the linked schedule and target device from its attributes. When disabled, configure the three entities manually (schedule / device / mode).",
   "schedule.editor.companion_entity": "PowerPilz Smart Schedule entity",
   "schedule.editor.companion_help":
-    "A PowerPilz Smart Schedule helper (select.* entity created by the PowerPilz Companion integration). The card automatically reads its `linked_schedule` and `target_entity` attributes — no other entities needed.",
+    "A PowerPilz Smart Schedule helper (select.* entity from the PowerPilz Companion integration). The card reads the weekly plan and target device straight from its attributes. Edit the weekly plan by long-pressing the card.",
   "schedule.editor.schedule_entity": "Schedule entity",
   "schedule.editor.switch_entity": "Device entity",
   "schedule.editor.mode_entity": "Mode override entity",
@@ -383,7 +383,7 @@ const DE: Dict = {
     "Wenn aktiviert (Standard), musst du nur eine einzige Entität angeben — einen PowerPilz Smart-Zeitschaltuhr-Helfer aus der PowerPilz Companion Integration — die Karte liest den verknüpften Zeitplan und das Zielgerät automatisch aus deren Attributen. Wenn deaktiviert, gibst du die drei Entitäten (Zeitplan / Gerät / Modus) manuell an.",
   "schedule.editor.companion_entity": "PowerPilz Smart-Zeitschaltuhr-Entität",
   "schedule.editor.companion_help":
-    "Ein PowerPilz Smart-Zeitschaltuhr-Helfer (select.* Entität, angelegt von der PowerPilz Companion Integration). Die Karte liest automatisch deren `linked_schedule`- und `target_entity`-Attribute — keine weiteren Entitäten nötig.",
+    "Ein PowerPilz Smart-Zeitschaltuhr-Helfer (select.* Entität aus der PowerPilz Companion Integration). Die Karte liest den Wochenplan und das Zielgerät direkt aus deren Attributen. Wochenplan bearbeiten: lange auf die Karte drücken.",
   "schedule.editor.schedule_entity": "Zeitplan-Entität",
   "schedule.editor.switch_entity": "Geräte-Entität",
   "schedule.editor.mode_entity": "Modus-Override Entität",

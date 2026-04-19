@@ -40,36 +40,31 @@ type TimeWindow = "6" | "12" | "24";
 interface ScheduleBlock {
   from: string; // "HH:MM:SS"
   to: string;   // "HH:MM:SS"
+  data?: Record<string, unknown>;
 }
 
-interface ScheduleData {
-  id: string;
-  name: string;
-  monday: ScheduleBlock[];
-  tuesday: ScheduleBlock[];
-  wednesday: ScheduleBlock[];
-  thursday: ScheduleBlock[];
-  friday: ScheduleBlock[];
-  saturday: ScheduleBlock[];
-  sunday: ScheduleBlock[];
-  [key: string]: unknown;
-}
+type WeekBlocks = Record<string, ScheduleBlock[]>;
 
-const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const;
+// Map JS Date.getDay() (0 = Sunday) to the canonical weekday keys the
+// Smart Schedule helper emits in its `week_blocks` attribute (Python's
+// datetime.weekday() order, Monday=0).
+const WEEKDAY_KEYS_BY_DAY_INDEX: readonly string[] = [
+  "sunday",    // 0 — JS Sun
+  "monday",    // 1
+  "tuesday",   // 2
+  "wednesday", // 3
+  "thursday",  // 4
+  "friday",    // 5
+  "saturday",  // 6
+];
 
 interface PowerPilzScheduleCardConfig extends LovelaceCardConfig {
   type: "custom:power-pilz-schedule-card";
-  // Companion mode (default on): point at a single PowerPilz Smart Schedule
-  // helper (a `select.*` entity). The card derives the schedule, device and
-  // mode entities from its attributes (`linked_schedule`, `target_entity`,
-  // and the companion entity itself as the mode selector).
-  use_companion?: boolean;
-  companion_entity?: string;
-  // Manual mode (use_companion: false): configure the three entities
-  // individually as in older versions of the card.
-  schedule_entity?: string;
-  switch_entity?: string;
-  mode_entity?: string;
+  /** The PowerPilz Smart Schedule helper entity (a
+   *  `select.*` entity exposed by the Companion integration). All
+   *  schedule blocks, target device and mode options come from its
+   *  attributes — no extra entities are needed. */
+  entity?: string;
   name?: string;
   subtitle?: string;
   icon?: string;
@@ -81,20 +76,12 @@ interface PowerPilzScheduleCardConfig extends LovelaceCardConfig {
   show_mode_control?: boolean;
   show_now_indicator?: boolean;
   show_time_labels?: boolean;
-  // Tap / hold / double-tap behaviour. Standard HA action shapes
-  // ('none', 'more-info', 'toggle', 'navigate', 'url', 'call-service',
-  // 'perform-action') plus our own 'powerpilz-schedule-edit' that opens
-  // the inline weekly-plan editor. Defaults:
-  //   tap_action:        toggle the mode (legacy behaviour)
-  //   hold_action:       powerpilz-schedule-edit
-  //   double_tap_action: none
   tap_action?: ActionConfig;
   hold_action?: ActionConfig;
   double_tap_action?: ActionConfig;
   /** When true (default) a long-press on the card opens the PowerPilz
    *  schedule edit dialog — unless `hold_action` is explicitly set to
-   *  something else. Set to false to disable the default long-press
-   *  behaviour without needing to configure `hold_action`. */
+   *  something else. */
   long_press_opens_editor?: boolean;
 }
 
@@ -107,33 +94,17 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
     const states = hass?.states ?? {};
     const entityIds = Object.keys(states);
 
-    // Prefer a PowerPilz Companion Smart Schedule select entity: its
-    // `linked_schedule` / `target_entity` attributes tell us it's one of
-    // ours, and we can default to companion mode with just that one entity.
-    const companion = entityIds.find((id) => {
+    // Prefer a PowerPilz Smart Schedule select — distinguishable by
+    // its `mode_names` + `week_blocks` attributes.
+    const entity = entityIds.find((id) => {
       if (!id.startsWith("select.")) return false;
       const attrs = states[id]?.attributes as Record<string, unknown> | undefined;
-      return typeof attrs?.linked_schedule === "string"
-        && typeof attrs?.target_entity === "string";
+      return !!attrs?.mode_names && attrs?.week_blocks !== undefined;
     });
 
-    if (companion) {
-      return {
-        type: "custom:power-pilz-schedule-card",
-        use_companion: true,
-        companion_entity: companion
-      };
-    }
-
-    // Fallback: manual 3-entity mode.
-    const firstByDomain = (domain: string): string | undefined =>
-      entityIds.find((id) => id.startsWith(`${domain}.`));
     return {
       type: "custom:power-pilz-schedule-card",
-      use_companion: false,
-      schedule_entity: firstByDomain("schedule") ?? "schedule.my_schedule",
-      switch_entity: firstByDomain("switch") ?? firstByDomain("input_boolean"),
-      mode_entity: firstByDomain("input_select")
+      entity: entity ?? ""
     };
   }
 
@@ -150,30 +121,21 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
   public layout: string | undefined;
 
   @state() private _config?: PowerPilzScheduleCardConfig;
-  @state() private _scheduleData?: ScheduleData;
   @state() private _selectedDay: number = new Date().getDay(); // 0=Sun
+  @state() private _tick = 0; // bumped every minute for now-indicator
 
-  private _fetchTimer?: number;
-  private _lastFetchEntity?: string;
-  private _lastEntityUpdated?: string;
+  private _tickTimer?: number;
 
   public setConfig(config: PowerPilzScheduleCardConfig): void {
-    // Default resolution:
-    //   - Explicit `use_companion` in config → honor it
-    //   - Otherwise: legacy cards with `schedule_entity` set default to
-    //     manual mode so they don't break on load. Fresh cards default
-    //     to companion mode.
-    const useCompanion = config.use_companion !== undefined
-      ? config.use_companion !== false
-      : !config.schedule_entity;
+    // Legacy: `companion_entity` → `entity`.
+    const legacy = config as PowerPilzScheduleCardConfig & {
+      companion_entity?: string;
+    };
+    const entity = config.entity || legacy.companion_entity || "";
 
-    // Don't throw for missing entity — the card renders a soft
-    // "please configure an entity" placeholder instead. Throwing here
-    // makes HA's editor flash a red error banner while the user is
-    // still filling in the form, which is too aggressive.
     this._config = {
       ...config,
-      use_companion: useCompanion,
+      entity,
       icon: config.icon ?? "mdi:clock-outline",
       name: config.name ?? tr(haLang(this.hass), "schedule.default_name"),
       time_window: config.time_window ?? "24",
@@ -185,42 +147,33 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
   }
 
   // -------- Entity resolvers --------
-  // In companion mode the card takes its three entity IDs from the
-  // attributes of the configured Smart Schedule `select.*` entity. In
-  // manual mode they come directly from config. Always go through these
-  // getters to stay mode-agnostic.
+  //
+  // In v0.4+ the card only takes the Smart Schedule select entity; the
+  // target device, mode list and weekly blocks all come from its
+  // attributes. Legacy helpers that used to split this into three
+  // entities are gone.
 
   private get _scheduleEntityId(): string | undefined {
-    if (!this._config) return undefined;
-    if (this._config.use_companion === false) {
-      return this._config.schedule_entity;
-    }
-    const companion = this.hass?.states?.[this._config.companion_entity ?? ""];
-    const linked = companion?.attributes?.linked_schedule;
-    return typeof linked === "string" ? linked : undefined;
+    return this._config?.entity || undefined;
   }
 
+  /** The Smart Schedule select is both the schedule source AND the
+   *  mode selector. Kept as a separate getter for readability at call
+   *  sites. */
+  private get _modeEntityId(): string | undefined {
+    return this._scheduleEntityId;
+  }
+
+  /** Target device that the helper drives — exposed on the select as
+   *  the `target_entity` attribute. */
   private get _switchEntityId(): string | undefined {
-    if (!this._config) return undefined;
-    if (this._config.use_companion === false) {
-      return this._config.switch_entity;
-    }
-    const companion = this.hass?.states?.[this._config.companion_entity ?? ""];
-    const target = companion?.attributes?.target_entity;
+    const id = this._scheduleEntityId;
+    if (!id) return undefined;
+    const target = this.hass?.states?.[id]?.attributes?.target_entity;
     return typeof target === "string" ? target : undefined;
   }
 
-  private get _modeEntityId(): string | undefined {
-    if (!this._config) return undefined;
-    if (this._config.use_companion === false) {
-      return this._config.mode_entity;
-    }
-    return this._config.companion_entity;
-  }
-
   public getCardSize(): number {
-    // 3 rows when day selector visible (header + days + timeline),
-    // 2 rows otherwise (header + timeline).
     return this._config?.show_day_selector !== false ? 3 : 2;
   }
 
@@ -246,11 +199,6 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
   }
 
   protected updated(changedProps: Map<string, unknown>): void {
-    this._originalUpdated(changedProps);
-    // Re-bind actions on every render where:
-    //   (a) we haven't bound yet (ha-card was missing on firstUpdated
-    //       because render() short-circuited before hass arrived), OR
-    //   (b) the config changed (hold/tap actions may have new values)
     if (!this._actionCleanup || changedProps.has("_config")) {
       this._bindActions();
     }
@@ -284,8 +232,7 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
     const key = `${kind}_action` as const;
     let actionConfig = this._config[key];
 
-    // Legacy fallback: a bare tap without tap_action configured still
-    // cycles the mode (the card's original behaviour since v0.2.x).
+    // Legacy fallback: a bare tap without tap_action cycles mode.
     if (kind === "tap" && (!actionConfig || !actionConfig.action)) {
       if (this._modeEntityId) {
         actionConfig = { action: "fire-dom-event" } as ActionConfig;
@@ -294,8 +241,7 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
       return;
     }
 
-    // Default for hold: open the edit dialog when `long_press_opens_editor`
-    // is enabled (its default) AND no explicit hold_action is configured.
+    // Default for hold: open the edit dialog.
     if (kind === "hold" && (!actionConfig || !actionConfig.action)) {
       if (this._config.long_press_opens_editor !== false) {
         actionConfig = { action: ACTION_SCHEDULE_EDIT };
@@ -311,7 +257,6 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
       return;
     }
 
-    // Standard HA actions — delegate to HA's default action dispatcher.
     this.dispatchEvent(
       new CustomEvent("hass-action", {
         detail: { config: this._config, action: kind },
@@ -327,65 +272,23 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
     openScheduleEditDialog({ hass: this.hass, scheduleEntityId: entity });
   }
 
-  private _originalUpdated(changedProps: Map<string, unknown>): void {
-    // Schedule fetch logic that used to live directly in updated().
-    if (!changedProps.has("hass")) return;
-    const entity = this._scheduleEntityId;
-    if (!entity) return;
-    if (entity !== this._lastFetchEntity) {
-      this._lastFetchEntity = entity;
-      this._lastEntityUpdated = undefined;
-      this.fetchSchedule();
-      return;
-    }
-    const stateObj = this.hass?.states?.[entity];
-    const lastUpdated = stateObj?.attributes?.last_updated as string | undefined
-      ?? stateObj?.state;
-    if (lastUpdated && lastUpdated !== this._lastEntityUpdated) {
-      this._lastEntityUpdated = lastUpdated;
-      this.fetchSchedule();
-    }
-  }
-
   public connectedCallback(): void {
     super.connectedCallback();
-    this.fetchSchedule();
+    if (!this._tickTimer) {
+      this._tickTimer = window.setInterval(() => {
+        this._tick++;
+      }, 60_000);
+    }
   }
 
   public disconnectedCallback(): void {
     super.disconnectedCallback();
-    if (this._fetchTimer) {
-      clearInterval(this._fetchTimer);
-      this._fetchTimer = undefined;
+    if (this._tickTimer) {
+      clearInterval(this._tickTimer);
+      this._tickTimer = undefined;
     }
     this._actionCleanup?.destroy();
     this._actionCleanup = undefined;
-  }
-
-  // --- Schedule data fetching ---
-
-  private async fetchSchedule(): Promise<void> {
-    const entity = this._scheduleEntityId;
-    if (!this.hass?.callWS || !entity) return;
-    try {
-      const schedules: ScheduleData[] = await this.hass.callWS({ type: "schedule/list" });
-      const objectId = entity.split(".")[1];
-      // Match on the HA storage id (object_id of the slug). `schedule/list`
-      // returns items with id keyed by their uuid, so also match by slug
-      // via the `schedule.<slug>` entity_id stored in hass.states.
-      this._scheduleData = schedules.find((s) => s.id === objectId)
-        ?? schedules.find((s) => {
-          const stateEntity = this.hass?.states?.[entity];
-          const friendly = stateEntity?.attributes?.friendly_name;
-          return typeof friendly === "string" && s.name === friendly;
-        });
-    } catch {
-      this._scheduleData = undefined;
-    }
-    // Auto-refresh every 60s for now-indicator and schedule changes
-    if (!this._fetchTimer) {
-      this._fetchTimer = window.setInterval(() => this.fetchSchedule(), 60000);
-    }
   }
 
   // --- Helpers ---
@@ -398,22 +301,32 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
     return mushroomIconStyle(color);
   }
 
+  private _weekBlocks(): WeekBlocks {
+    const id = this._scheduleEntityId;
+    if (!id) return {};
+    const attrs = this.hass?.states?.[id]?.attributes as Record<string, unknown> | undefined;
+    const wb = attrs?.week_blocks;
+    if (wb && typeof wb === "object" && !Array.isArray(wb)) {
+      return wb as WeekBlocks;
+    }
+    return {};
+  }
+
   private dayKey(dayIndex: number): string {
-    return WEEKDAYS[dayIndex] ?? "monday";
+    return WEEKDAY_KEYS_BY_DAY_INDEX[dayIndex] ?? "monday";
   }
 
   private blocksForDay(dayIndex: number): ScheduleBlock[] {
-    if (!this._scheduleData) return [];
-    const key = this.dayKey(dayIndex);
-    const blocks = this._scheduleData[key];
-    return Array.isArray(blocks) ? blocks as ScheduleBlock[] : [];
+    const wb = this._weekBlocks();
+    const blocks = wb[this.dayKey(dayIndex)];
+    return Array.isArray(blocks) ? (blocks as ScheduleBlock[]) : [];
   }
 
   private timeToMinutes(timeStr: string): number {
-    const parts = timeStr.split(":");
+    const parts = (timeStr || "").split(":");
     const h = parseInt(parts[0] ?? "0", 10);
     const m = parseInt(parts[1] ?? "0", 10);
-    return h * 60 + m;
+    return (isNaN(h) ? 0 : h) * 60 + (isNaN(m) ? 0 : m);
   }
 
   private nowMinutes(): number {
@@ -445,45 +358,35 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
 
   private isDeviceOn(): boolean {
     const mode = this.modeValue().toLowerCase();
-
-    // Manual override takes precedence
     if (mode === "on") return true;
     if (mode === "off") return false;
 
-    // Auto mode: compute directly from the loaded schedule blocks for today
-    // (same data source as the timeline, so it always matches visually)
+    // Auto mode: read the helper's own schedule_active attribute if
+    // present (authoritative), else compute from today's blocks as a
+    // fallback.
+    const id = this._scheduleEntityId;
+    const attrs = id ? this.hass?.states?.[id]?.attributes : undefined;
+    if (typeof attrs?.schedule_active === "boolean") {
+      return attrs.schedule_active as boolean;
+    }
+
     const todayIdx = new Date().getDay();
     const todaysBlocks = this.blocksForDay(todayIdx);
     const nowMin = this.nowMinutes();
-    const inBlock = todaysBlocks.some((b) => {
+    return todaysBlocks.some((b) => {
       const from = this.timeToMinutes(b.from);
       const to = this.timeToMinutes(b.to);
       return nowMin >= from && nowMin < to;
     });
-    if (inBlock) return true;
-
-    // Secondary: schedule entity state (if the integration populated it)
-    const schedule = getEntity(this.hass, this._scheduleEntityId);
-    if (schedule?.state === "on") return true;
-
-    // Fallback: switch entity state
-    const switchId = this._switchEntityId;
-    if (switchId) {
-      const sw = getEntity(this.hass, switchId);
-      return sw?.state === "on";
-    }
-    return false;
   }
 
-  /** Returns the *logical* mode ("on"/"off"/"auto" or the raw state for
-   *  generic input_selects). For Smart Schedule targets we reverse-map
-   *  the current display name via the `mode_names` attribute so this is
-   *  stable across renames. */
+  /** Returns the *logical* mode ("on"/"off"/"auto") by reverse-mapping
+   *  the helper's current display state via the `mode_names` attribute. */
   private modeValue(): string {
     const modeId = this._modeEntityId;
-    if (!modeId) return "Auto";
+    if (!modeId) return "auto";
     const entity = getEntity(this.hass, modeId);
-    const state = entity?.state ?? "Auto";
+    const state = entity?.state ?? "auto";
     const modeNames = entity?.attributes?.mode_names;
     if (modeNames && typeof modeNames === "object") {
       for (const [key, disp] of Object.entries(modeNames as Record<string, unknown>)) {
@@ -493,10 +396,8 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
     return state;
   }
 
-  /** Maps a logical mode back to the user-facing display name. For
-   *  Smart Schedule this is the renamed value (e.g. "Heizen"); for a
-   *  generic input_select the `mode` input is already the display name
-   *  and is returned as-is. */
+  /** Maps a logical mode back to the user-facing display name from the
+   *  helper's `mode_names` attribute. */
   private modeLabel(mode: string): string {
     const modeId = this._modeEntityId;
     if (modeId) {
@@ -510,20 +411,9 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
     return mode;
   }
 
-
   // --- Event handlers ---
 
-  private handleCardTap = (event: Event): void => {
-    // Only trigger if tapping the card itself (not buttons/timeline)
-    const target = event.target as HTMLElement;
-    if (target.closest(".mode-btn") || target.closest(".timeline-track") || target.closest(".day-btn")) return;
-    if (this.isEditorPreview() || !this._modeEntityId) return;
-    void this.handleModeChange(event);
-  };
-
   private handleDaySelect = (event: Event): void => {
-    // Stop propagation so the card-level tap_action doesn't also fire
-    // when the user picks a day to preview.
     event.stopPropagation();
     const target = event.currentTarget;
     if (!(target instanceof HTMLElement)) return;
@@ -549,33 +439,13 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
       entity_id: modeId,
       option: nextOption
     });
-
-    // In manual mode, also poke the switch so On/Off reflects immediately.
-    // In companion mode the integration's select entity already drives
-    // the target device — no direct toggle needed.
-    if (this._config?.use_companion === false) {
-      const switchId = this._switchEntityId;
-      if (switchId) {
-        const switchDomain = switchId.split(".")[0];
-        const normalized = nextOption.toLowerCase();
-        if (normalized === "on") {
-          await this.hass.callService(switchDomain, "turn_on", {
-            entity_id: switchId
-          });
-        } else if (normalized === "off") {
-          await this.hass.callService(switchDomain, "turn_off", {
-            entity_id: switchId
-          });
-        }
-      }
-    }
   };
 
   private handleTimelineTap = async (event: MouseEvent): Promise<void> => {
     event.stopPropagation();
-    if (this.isEditorPreview() || !this._scheduleData || !this._scheduleEntityId) return;
+    if (this.isEditorPreview() || !this._scheduleEntityId) return;
 
-    const track = (event.currentTarget as HTMLElement);
+    const track = event.currentTarget as HTMLElement;
     const rect = track.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const pct = x / rect.width;
@@ -583,28 +453,21 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
     const { start, end } = this.resolvedTimeWindow();
     const range = end - start;
     const tappedMinute = Math.round(start + pct * range);
-
-    // Snap to 30min grid
     const snapped = Math.round(tappedMinute / 30) * 30;
+
     const dayKey = this.dayKey(this._selectedDay);
     const blocks = [...this.blocksForDay(this._selectedDay)];
 
-    // Check if tap is inside an existing block
+    // Hit-test existing block → remove it.
     const hitIndex = blocks.findIndex((b) => {
       const from = this.timeToMinutes(b.from);
       const to = this.timeToMinutes(b.to);
       return snapped >= from && snapped < to;
     });
 
-    const scheduleId = this._scheduleEntityId;
-    if (!scheduleId) return;
-    const objectId = scheduleId.split(".")[1];
-
     if (hitIndex >= 0) {
-      // Remove block
       blocks.splice(hitIndex, 1);
     } else {
-      // Add 1-hour block centered on tap
       const blockStart = Math.max(0, snapped - 30);
       const blockEnd = Math.min(1440, snapped + 30);
       const fromStr = `${String(Math.floor(blockStart / 60)).padStart(2, "0")}:${String(blockStart % 60).padStart(2, "0")}:00`;
@@ -612,7 +475,6 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
         ? "24:00:00"
         : `${String(Math.floor(blockEnd / 60)).padStart(2, "0")}:${String(blockEnd % 60).padStart(2, "0")}:00`;
 
-      // Check for overlap and skip if would conflict
       const conflicts = blocks.some((b) => {
         const bFrom = this.timeToMinutes(b.from);
         const bTo = this.timeToMinutes(b.to);
@@ -624,16 +486,17 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
       }
     }
 
+    // Build full week payload with just the modified day replaced.
+    const fullWeek: WeekBlocks = { ...this._weekBlocks() };
+    fullWeek[dayKey] = blocks;
+
     try {
-      if (!this.hass.callWS) return;
-      await this.hass.callWS({
-        type: "schedule/update",
-        schedule_id: objectId,
-        [dayKey]: blocks
+      await this.hass.callService("powerpilz_companion", "set_schedule_blocks", {
+        entity_id: this._scheduleEntityId,
+        blocks: fullWeek
       });
-      await this.fetchSchedule();
     } catch {
-      // Ignore errors silently
+      // Ignore silently — the attributes will refresh on next state change.
     }
   };
 
@@ -646,12 +509,13 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
     const blocks = this.blocksForDay(this._selectedDay);
     const activeColor = this.resolvedActiveColor();
     const activeAlpha = this.resolvedActiveColorAlpha(0.3);
+    // Reference _tick so we re-render when the minute changes.
+    void this._tick;
     const nowMin = this.nowMinutes();
     const isToday = this._selectedDay === new Date().getDay();
     const showNow = config.show_now_indicator !== false && isToday && nowMin >= start && nowMin <= end;
     const showLabels = config.show_time_labels !== false;
 
-    // Generate hour labels
     const hourLabels: { hour: number; pct: number }[] = [];
     if (showLabels) {
       const firstHour = Math.ceil(start / 60);
@@ -716,7 +580,7 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
     const today = new Date().getDay();
     return html`
       <div class="day-selector">
-        ${WEEKDAYS.map((_, idx) => html`
+        ${WEEKDAY_KEYS_BY_DAY_INDEX.map((_, idx) => html`
           <button
             type="button"
             class="day-btn ${idx === this._selectedDay ? "active" : ""} ${idx === today ? "today" : ""}"
@@ -748,44 +612,31 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
     if (!this._config) return html`<ha-card>${tr(haLang(this.hass), "common.invalid_config")}</ha-card>`;
     if (!this.hass) return html``;
 
-    // Soft placeholder when no entity is configured yet — happens while the
-    // user is still filling in the visual editor. We don't throw in
-    // setConfig (that would flash a red "Konfigurationsfehler" banner),
-    // we render a neutral hint here instead.
-    if (!this._scheduleEntityId && !this._modeEntityId) {
+    if (!this._scheduleEntityId) {
       const lang = haLang(this.hass);
-      const hint = this._config.use_companion !== false
-        ? tr(lang, "schedule.placeholder_companion")
-        : tr(lang, "schedule.placeholder_manual");
       return html`
         <ha-card>
           <div class="placeholder">
             <ha-icon icon="mdi:clock-outline"></ha-icon>
-            <div class="placeholder-text">${hint}</div>
+            <div class="placeholder-text">${tr(lang, "schedule.placeholder_companion")}</div>
           </div>
         </ha-card>
       `;
     }
 
     const config = this._config;
-    const friendlyName = getEntity(this.hass, this._scheduleEntityId)?.attributes?.friendly_name
-      ?? getEntity(this.hass, this._modeEntityId)?.attributes?.friendly_name;
+    const friendlyName = getEntity(this.hass, this._scheduleEntityId)?.attributes?.friendly_name;
     const mode = this.modeValue();
     const subtitle = config.subtitle || this.modeLabel(mode);
     const showDays = config.show_day_selector !== false;
     const showMode = config.show_mode_control !== false && Boolean(this._modeEntityId);
     const isVertical = config.card_layout === "vertical";
 
-    // Icon color: show configured color when device is on, grey when off
     const isDeviceOn = this.isDeviceOn();
     const iconStyle = isDeviceOn
       ? this.iconStyle(config.icon_color)
       : this.iconStyle("disabled");
 
-    // In vertical mode render three sibling rows so each takes an equal
-     // share of the card height (= each row matches a single-row
-     // Mushroom card next to it when the card is 3 grid-rows tall).
-     // In horizontal mode keep the legacy header/body structure.
     const headerContent = html`
       <div class="state-item">
         <div class="icon-wrap">
@@ -801,10 +652,6 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
       </div>
     `;
 
-    // Always render the 3-row structure. Each row gets an equal flex
-    // share of the card height, so header / day-selector / timeline each
-    // align visually with a single-row Mushroom card placed next to a
-    // same-height neighbour — regardless of `card_layout`.
     return html`
       <ha-card>
         <div class="container ${isVertical ? "vertical" : "horizontal"}">
@@ -875,18 +722,6 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
       box-sizing: border-box;
       height: 100%;
       min-height: 0;
-    }
-
-    /* Three sibling rows share the card height equally, so each row
-       looks like a single-row Mushroom card placed next to a same-
-       height card. The row count is 2 when the day selector is hidden
-       (header + timeline), otherwise 3.
-
-       Applies to BOTH horizontal and vertical card_layout settings —
-       the user-visible difference between those is now limited to
-       minor details (they used to control spread-vs-center stacking,
-       which the equal-rows layout replaces). */
-    .container {
       justify-content: stretch;
     }
 
@@ -898,17 +733,11 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
       justify-content: center;
     }
 
-    /* Day-selector and timeline rows get only the horizontal padding
-       the legacy body wrapper used to provide. NO vertical padding —
-       that would shift the row's content off-center from the header's
-       icon position. Each row must be symmetrically centerable. */
     .container > .row-days,
     .container > .row-timeline {
       padding-left: var(--control-spacing);
       padding-right: var(--control-spacing);
     }
-
-    /* --- Header --- */
 
     .state-item {
       display: flex;
@@ -963,8 +792,6 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
       white-space: nowrap;
     }
 
-    /* --- Day selector --- */
-
     .day-selector {
       display: flex;
       gap: 2px;
@@ -1002,16 +829,7 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
       color: var(--primary-text-color);
     }
 
-    /* --- Timeline ---
-       The track is the visual reference point: it sits vertically
-       centered inside the timeline row and always at the same position,
-       whether hour labels are shown or not. Labels float above the
-       track via absolute positioning so toggling them doesn't shift
-       the track vertically. */
-
-    .timeline-container {
-      position: relative;
-    }
+    .timeline-container { position: relative; }
 
     .time-labels {
       position: absolute;
@@ -1033,8 +851,6 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
 
     .timeline-track {
       position: relative;
-      /* Match the icon circle height so the timeline lines up with a
-         single-row card's icon when placed side-by-side. */
       height: var(--icon-size);
       border-radius: var(--control-border-radius);
       background-color: rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.05);
@@ -1060,8 +876,6 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
       pointer-events: none;
       opacity: 0.9;
     }
-
-    /* --- Mode button (header, matches wallbox play button size) --- */
 
     .mode-btn {
       display: flex;
