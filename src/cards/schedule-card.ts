@@ -187,15 +187,20 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
   }
 
   public getCardSize(): number {
-    const layout = this._config?.card_layout ?? "horizontal";
-    return layout === "vertical" ? 3 : 2;
+    // 3 rows when day selector visible (header + days + timeline),
+    // 2 rows otherwise (header + timeline).
+    return this._config?.show_day_selector !== false ? 3 : 2;
   }
 
   public getGridOptions(): LovelaceGridOptions {
-    const layout = this._config?.card_layout ?? "horizontal";
-    return layout === "vertical"
-      ? { columns: 6, rows: 3, min_columns: 3, min_rows: 2, max_rows: 4 }
-      : { columns: 6, rows: 2, min_columns: 4, min_rows: 1, max_rows: 3 };
+    const showDays = this._config?.show_day_selector !== false;
+    return {
+      columns: 6,
+      rows: showDays ? 3 : 2,
+      min_columns: 3,
+      min_rows: showDays ? 2 : 1,
+      max_rows: showDays ? 4 : 3
+    };
   }
 
   public getLayoutOptions(): LovelaceLayoutOptions {
@@ -635,27 +640,37 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
       ? this.iconStyle(config.icon_color)
       : this.iconStyle("disabled");
 
+    // In vertical mode render three sibling rows so each takes an equal
+     // share of the card height (= each row matches a single-row
+     // Mushroom card next to it when the card is 3 grid-rows tall).
+     // In horizontal mode keep the legacy header/body structure.
+    const headerContent = html`
+      <div class="state-item">
+        <div class="icon-wrap">
+          <div class="icon-shape" style=${styleMap(iconStyle)}>
+            <ha-icon .icon=${config.icon ?? "mdi:clock-outline"}></ha-icon>
+          </div>
+        </div>
+        <div class="info">
+          <div class="primary">${config.name || friendlyName || tr(haLang(this.hass), "schedule.default_name")}</div>
+          <div class="secondary">${subtitle}</div>
+        </div>
+        ${showMode ? this.renderModeButton() : nothing}
+      </div>
+    `;
+
+    // Always render the 3-row structure. Each row gets an equal flex
+    // share of the card height, so header / day-selector / timeline each
+    // align visually with a single-row Mushroom card placed next to a
+    // same-height neighbour — regardless of `card_layout`.
     return html`
-      <ha-card @click=${this.handleCardTap}
+      <ha-card @click=${this.handleCardTap}>
         <div class="container ${isVertical ? "vertical" : "horizontal"}">
-          <div class="header">
-            <div class="state-item">
-              <div class="icon-wrap">
-                <div class="icon-shape" style=${styleMap(iconStyle)}>
-                  <ha-icon .icon=${config.icon ?? "mdi:clock-outline"}></ha-icon>
-                </div>
-              </div>
-              <div class="info">
-                <div class="primary">${config.name || friendlyName || tr(haLang(this.hass), "schedule.default_name")}</div>
-                <div class="secondary">${subtitle}</div>
-              </div>
-              ${showMode ? this.renderModeButton() : nothing}
-            </div>
-          </div>
-          <div class="body">
-            ${showDays ? this.renderDaySelector() : nothing}
-            ${this.renderTimeline()}
-          </div>
+          <div class="row row-header">${headerContent}</div>
+          ${showDays
+            ? html`<div class="row row-days">${this.renderDaySelector()}</div>`
+            : nothing}
+          <div class="row row-timeline">${this.renderTimeline()}</div>
         </div>
       </ha-card>
     `;
@@ -720,12 +735,35 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
       min-height: 0;
     }
 
-    .container.vertical {
-      justify-content: space-between;
+    /* Three sibling rows share the card height equally, so each row
+       looks like a single-row Mushroom card placed next to a same-
+       height card. The row count is 2 when the day selector is hidden
+       (header + timeline), otherwise 3.
+
+       Applies to BOTH horizontal and vertical card_layout settings —
+       the user-visible difference between those is now limited to
+       minor details (they used to control spread-vs-center stacking,
+       which the equal-rows layout replaces). */
+    .container {
+      justify-content: stretch;
     }
 
-    .container.horizontal {
+    .container > .row {
+      flex: 1 1 0;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
       justify-content: center;
+    }
+
+    /* Day-selector and timeline rows get only the horizontal padding
+       the legacy body wrapper used to provide. NO vertical padding —
+       that would shift the row's content off-center from the header's
+       icon position. Each row must be symmetrically centerable. */
+    .container > .row-days,
+    .container > .row-timeline {
+      padding-left: var(--control-spacing);
+      padding-right: var(--control-spacing);
     }
 
     /* --- Header --- */
@@ -835,21 +873,27 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
       color: var(--primary-text-color);
     }
 
-    /* --- Timeline --- */
+    /* --- Timeline ---
+       The track is the visual reference point: it sits vertically
+       centered inside the timeline row and always at the same position,
+       whether hour labels are shown or not. Labels float above the
+       track via absolute positioning so toggling them doesn't shift
+       the track vertically. */
 
     .timeline-container {
       position: relative;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
     }
 
     .time-labels {
-      position: relative;
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: calc(100% + 2px);
       height: 14px;
       font-size: 10px;
       color: var(--secondary-text-color);
       user-select: none;
+      pointer-events: none;
     }
 
     .time-label {
@@ -860,7 +904,9 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
 
     .timeline-track {
       position: relative;
-      height: var(--control-height);
+      /* Match the icon circle height so the timeline lines up with a
+         single-row card's icon when placed side-by-side. */
+      height: var(--icon-size);
       border-radius: var(--control-border-radius);
       background-color: rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.05);
       overflow: hidden;
