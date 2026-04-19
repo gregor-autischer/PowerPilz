@@ -247,7 +247,11 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
 
   protected updated(changedProps: Map<string, unknown>): void {
     this._originalUpdated(changedProps);
-    if (changedProps.has("_config")) {
+    // Re-bind actions on every render where:
+    //   (a) we haven't bound yet (ha-card was missing on firstUpdated
+    //       because render() short-circuited before hass arrived), OR
+    //   (b) the config changed (hold/tap actions may have new values)
+    if (!this._actionCleanup || changedProps.has("_config")) {
       this._bindActions();
     }
   }
