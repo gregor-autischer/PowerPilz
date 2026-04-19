@@ -11,6 +11,7 @@ interface SwitchCardConfig extends LovelaceCardConfig {
   subtitle?: string;
   icon?: string;
   icon_color?: string | number[];
+  dim_inactive_icon?: boolean;
   card_layout?: string;
   slider_size?: string;
   slider_color?: string | number[];
@@ -41,6 +42,7 @@ export class PowerPilzSwitchCardEditor extends LitElement implements LovelaceCar
     this._config = {
       ...config,
       use_custom_icons: config.use_custom_icons ?? false,
+      dim_inactive_icon: config.dim_inactive_icon ?? true,
       type: "custom:power-pilz-switch-card"
     };
   }
@@ -100,6 +102,10 @@ export class PowerPilzSwitchCardEditor extends LitElement implements LovelaceCar
                 selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } }
               }
             ]
+          },
+          {
+            name: "dim_inactive_icon",
+            selector: { boolean: {} }
           },
           {
             name: "entity",
@@ -193,6 +199,7 @@ export class PowerPilzSwitchCardEditor extends LitElement implements LovelaceCar
       subtitle: tr(lang, "switch.editor.subtitle"),
       icon: tr(lang, "switch.editor.icon"),
       icon_color: tr(lang, "switch.editor.icon_color"),
+      dim_inactive_icon: tr(lang, "switch.editor.dim_inactive_icon"),
       entity: tr(lang, "switch.editor.entity"),
       card_layout: tr(lang, "switch.editor.card_layout"),
       slider_size: tr(lang, "switch.editor.slider_size"),

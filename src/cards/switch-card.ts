@@ -34,6 +34,10 @@ interface PowerPilzSwitchCardConfig extends LovelaceCardConfig {
   subtitle?: string;
   icon?: string;
   icon_color?: ColorValue;
+  /** When true (default), dim the icon to the `disabled` color while the
+   *  entity is in its first state (treated as the "off" state). Set to
+   *  false to keep the configured `icon_color` regardless of state. */
+  dim_inactive_icon?: boolean;
   card_layout?: CardLayout;
   slider_size?: SliderSize;
   slider_color?: ColorValue;
@@ -308,7 +312,11 @@ export class PowerPilzSwitchCard extends LitElement implements LovelaceCard {
     const currentState = entity?.state ?? "";
     const options = this.getOptions(entity);
     const activeIdx = this.activeIndex(options, currentState);
-    const iconStyle = this.iconStyle(config.icon_color);
+    // First state (index 0) is treated as the "off" state: dim the icon
+    // to the disabled color unless the user explicitly opts out via
+    // `dim_inactive_icon: false`.
+    const dimIcon = activeIdx === 0 && config.dim_inactive_icon !== false;
+    const iconStyle = this.iconStyle(dimIcon ? "disabled" : config.icon_color);
     const segmentCount = options.length;
     const pillOffset = segmentCount > 0 ? (activeIdx / segmentCount) * 100 : 0;
     const pillWidth = segmentCount > 0 ? 100 / segmentCount : 100;
