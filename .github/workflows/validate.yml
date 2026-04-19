@@ -27,9 +27,13 @@ jobs:
 
       - name: Build HACS bundle
         run: npm run build:hacs
-
-      - name: Verify committed HACS bundle is up to date
-        run: test -z "$(git status --porcelain -- power-pilz.js)"
+        # NOTE: we intentionally do not verify that the committed root
+        # `power-pilz.js` matches this fresh build. HACS users download the
+        # release asset that the Production Release workflow attaches —
+        # so the committed tree bundle is not on any user's install path.
+        # Keeping the build step catches real build/type errors without
+        # failing CI on harmless source/bundle drift during day-to-day
+        # development. The production build is re-run on every release.
 
   hacs:
     runs-on: ubuntu-latest

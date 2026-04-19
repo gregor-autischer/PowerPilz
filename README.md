@@ -113,18 +113,14 @@ npm run dev
 
 ### Production release workflow
 
-Releases are built automatically when changes are merged into branch `build` (GitHub Action: `Production Release`).
+See **[RELEASING.md](RELEASING.md)** for the full end-to-end release procedure (version bump, bundle refresh, branch management, and how to recover from common problems).
 
-Before merging to `build`, you must bump the version in both files:
+Short version:
 
-1. `package.json`
-2. `src/version.ts` (`POWER_PILZ_VERSION`)
-
-Notes:
-
-- The workflow creates tag/release `v<package.json version>` and uploads `power-pilz.js`.
-- If that tag already exists, the workflow fails until you bump the version.
-- After updating in HACS, reload browser when prompted.
+1. Bump `package.json` and `src/version.ts`, commit.
+2. Run `npm run build:hacs` and commit `power-pilz.js`.
+3. Push `main`.
+4. Fast-forward merge `main` into `build` and push `build` — the `Production Release` workflow tags and publishes the release automatically.
 
 ## Troubleshooting
 

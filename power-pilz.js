@@ -1431,7 +1431,7 @@ const Ss = 4, Es = 8, fr = 2, Cs = /* @__PURE__ */ new Set(["solar", "home", "gr
           name: "",
           columns: 2,
           schema: [
-            { name: `${i}_entity`, selector: { entity: { filter: { domain: "sensor" } } } },
+            { name: `${i}_entity`, selector: { entity: { filter: { domain: ["sensor", "input_number", "number"] } } } },
             { name: `${i}_label`, selector: { text: {} } }
           ]
         },
@@ -1681,7 +1681,7 @@ const Ss = 4, Es = 8, fr = 2, Cs = /* @__PURE__ */ new Set(["solar", "home", "gr
             schema: [
               {
                 name: "solar_entity",
-                selector: { entity: { filter: { domain: "sensor" } } },
+                selector: { entity: { filter: { domain: ["sensor", "input_number", "number"] } } },
                 helper: Jt,
                 description: Jt
               },
@@ -1752,7 +1752,7 @@ const Ss = 4, Es = 8, fr = 2, Cs = /* @__PURE__ */ new Set(["solar", "home", "gr
             schema: [
               {
                 name: "grid_entity",
-                selector: { entity: { filter: { domain: "sensor" } } },
+                selector: { entity: { filter: { domain: ["sensor", "input_number", "number"] } } },
                 helper: oi,
                 description: oi
               },
@@ -1837,7 +1837,7 @@ const Ss = 4, Es = 8, fr = 2, Cs = /* @__PURE__ */ new Set(["solar", "home", "gr
             schema: [
               {
                 name: "grid_secondary_entity",
-                selector: { entity: { filter: { domain: "sensor" } } },
+                selector: { entity: { filter: { domain: ["sensor", "input_number", "number"] } } },
                 helper: si,
                 description: si
               },
@@ -1922,7 +1922,7 @@ const Ss = 4, Es = 8, fr = 2, Cs = /* @__PURE__ */ new Set(["solar", "home", "gr
             schema: [
               {
                 name: "home_entity",
-                selector: { entity: { filter: { domain: "sensor" } } },
+                selector: { entity: { filter: { domain: ["sensor", "input_number", "number"] } } },
                 helper: ei,
                 description: ei
               },
@@ -1993,11 +1993,11 @@ const Ss = 4, Es = 8, fr = 2, Cs = /* @__PURE__ */ new Set(["solar", "home", "gr
             schema: [
               {
                 name: "battery_entity",
-                selector: { entity: { filter: { domain: "sensor" } } },
+                selector: { entity: { filter: { domain: ["sensor", "input_number", "number"] } } },
                 helper: ii,
                 description: ii
               },
-              { name: "battery_percentage_entity", selector: { entity: { filter: { domain: "sensor" } } } }
+              { name: "battery_percentage_entity", selector: { entity: { filter: { domain: ["sensor", "input_number", "number"] } } } }
             ]
           },
           {
@@ -2096,11 +2096,11 @@ const Ss = 4, Es = 8, fr = 2, Cs = /* @__PURE__ */ new Set(["solar", "home", "gr
             schema: [
               {
                 name: "battery_secondary_entity",
-                selector: { entity: { filter: { domain: "sensor" } } },
+                selector: { entity: { filter: { domain: ["sensor", "input_number", "number"] } } },
                 helper: ni,
                 description: ni
               },
-              { name: "battery_secondary_percentage_entity", selector: { entity: { filter: { domain: "sensor" } } } }
+              { name: "battery_secondary_percentage_entity", selector: { entity: { filter: { domain: ["sensor", "input_number", "number"] } } } }
             ]
           },
           {
