@@ -32,6 +32,7 @@ All options are available in the Lovelace editor, but you can also use YAML.
 | `subtitle` | string | Entity state | Override subtitle text below the name |
 | `icon` | string | `mdi:toggle-switch-outline` | Icon in header |
 | `icon_color` | string \| rgb array | `state`/theme | Icon color |
+| `dim_inactive_icon` | boolean | `true` | Dim the icon to the theme's `disabled` color when the entity is in its first state (conventionally "off"). Set to `false` to keep the configured `icon_color` regardless of state. |
 | `card_layout` | string | `horizontal` | `horizontal` (1 row) or `vertical` (2 rows, slider below) |
 | `slider_size` | string | `medium` | Slider width: `small`, `medium`, or `large` (horizontal only) |
 | `slider_color` | string \| rgb array | theme default | Single color for the slider pill (all states) |

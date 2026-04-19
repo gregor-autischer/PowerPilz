@@ -16,10 +16,13 @@ The name is modeled after Mushroom. `Pilz` is German for `mushroom`, and the vis
 
 - Editor support for all cards and all important options
 - Mushroom-like spacing, typography and controls
-- Energy flow card with optional sub-nodes and trend overlays
-- Wallbox card focused on EV charging control and status
-- Switch card with sliding pill mode selector for input_select / select entities
-- Graph and stacked graph cards with up to 4 entities
+- **Energy flow** card with optional sub-nodes and trend overlays
+- **Wallbox** card focused on EV charging control and status
+- **Switch** card with sliding pill mode selector for input_select / select entities
+- **Schedule** card — 24h timeline with weekday picker and mode override button
+- **Timer** card — one-shot on/off time picker with countdown display
+- **Graph** and **Graph stack** cards with up to 4 entities
+- First-class integration with [PowerPilz Companion](https://github.com/gregor-autischer/PowerPilz-Companion) — a companion HA integration that collapses the Schedule card's 3 entities (or the Timer card's 4) down to a single Smart helper entity, and adds autonomous driving of the target device with no bridging automations needed
 - HACS-ready project structure
 
 ## Installation
@@ -75,8 +78,23 @@ All PowerPilz cards can be configured with the Home Assistant dashboard UI edito
 - ⚡ [Energy card](docs/cards/energy.md)
 - 🔌 [Wallbox card](docs/cards/wallbox.md)
 - 🎚️ [Switch card](docs/cards/switch.md)
+- 📅 [Schedule card](docs/cards/schedule.md)
+- ⏱ [Timer card](docs/cards/timer.md)
 - 📈 [Graph card](docs/cards/graph.md)
 - 🧱 [Graph stack card](docs/cards/graph-stack.md)
+
+## Companion integration
+
+The [PowerPilz Companion](https://github.com/gregor-autischer/PowerPilz-Companion) integration adds two new helper types to Home Assistant that pair naturally with the Schedule and Timer cards:
+
+| Companion helper | Paired card | What you save |
+| :-- | :-- | :-- |
+| **Smart Schedule** (`select` entity, 3 modes Off/On/Auto + linked native Schedule) | Schedule card | Configure 1 entity on the card instead of 3. The companion auto-creates the native HA Schedule helper, drives the target device when in Auto mode, supports manual overrides with optional auto-restore at the next schedule boundary. |
+| **Smart Timer** (`switch` entity that autonomously drives a target at on/off times) | Timer card | Configure 1 entity on the card instead of 4. The companion fires the configured events at the set times with no bridging automations, and can target `select`/`input_select` entities (including another Smart Schedule!) to change their option at a boundary. |
+
+The cards still work without the Companion integration — just fill in the legacy entity fields manually. But with it installed you get a drastically simpler setup and no YAML gluing.
+
+**Install both:** [PowerPilz-Companion on HACS (Integration)](https://github.com/gregor-autischer/PowerPilz-Companion) + this repository on HACS (Dashboard).
 
 ## Development
 
