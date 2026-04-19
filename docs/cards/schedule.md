@@ -1,15 +1,12 @@
 # 🍄‍🟫 Schedule card
 
+![Schedule card all options](https://raw.githubusercontent.com/gregor-autischer/PowerPilz/main/images/Schedule_Card_all_options.png)
+
 ## Description
 
 The Schedule card visualises a weekly on/off plan on a 24h timeline with a weekday picker at the top, and exposes a mode-override button (Off / On / Auto) so you can force the controlled device on or off without touching the plan.
 
-The card has two configuration dialects. Pick whichever fits your setup:
-
-- **Companion mode (default for fresh cards, recommended):** point at a single `select.*` entity created by the [PowerPilz Companion](https://github.com/gregor-autischer/PowerPilz-Companion) integration's _Smart Schedule_ helper. The card derives the linked schedule, target device and mode entities from its attributes. One entity to configure, no bridging automations.
-- **Manual mode (legacy):** configure three entities individually — a native HA `schedule.*`, the device to control, and an `input_select` with the three mode names. You then need two bridging automations in HA to actually turn the device on/off at schedule boundaries.
-
-Existing dashboards keep working: cards with `schedule_entity` already saved default to manual mode on load.
+Since v0.4 the card is built exclusively around the **PowerPilz Smart Schedule** helper from the [PowerPilz Companion](https://github.com/gregor-autischer/PowerPilz-Companion) integration. Configure one `select.*` entity — the card reads the weekly blocks, target device and mode options straight from its attributes. **Edit the weekly plan by long-pressing the card** — no separate schedule helper is involved anymore.
 
 ## Features
 
@@ -17,12 +14,12 @@ Existing dashboards keep working: cards with `schedule_entity` already saved def
 - Weekday picker — tap a day to preview its blocks
 - Live "now" indicator line while viewing today
 - Hour labels above the timeline (toggleable)
-- Mode button (Off / On / Auto) in the header
+- Mode button (Off / On / Auto) in the header with the helper's custom mode names (e.g. "Heizen" / "Aus" / "Zeitplan")
 - Horizontal (2-row) and vertical (3-row) card layout
-- Drop single blocks with one tap, remove with another
+- **Long-press the card** to open the inline weekly-plan editor — drag to create 15-minute-precision blocks, click any block for minute/second-precise time editing plus a free-form `data` payload, tap-to-delete, then save
+- **Timeline-tap** toggles 1-hour blocks on 30-minute snap as a quick-edit gesture
 - Soft placeholder when no entity is configured yet
 - Internal rows always line up visually with single-row Mushroom cards placed next to it
-- Full keyboard / voice compatibility via the underlying entities
 
 ## Configuration variables
 
@@ -31,13 +28,9 @@ All options are available in the Lovelace editor, but you can also use YAML.
 | Name | Type | Default | Description |
 | :-- | :-- | :-- | :-- |
 | `type` | string | Required | `custom:power-pilz-schedule-card` |
-| `use_companion` | boolean | `true` for new cards | `true` → configure one Companion helper; `false` → configure the three entities manually |
-| `companion_entity` | string | — | (Companion mode) The Smart Schedule `select.*` entity |
-| `schedule_entity` | string | — | (Manual mode) A native `schedule.*` helper |
-| `switch_entity` | string | — | (Manual mode) Device to control |
-| `mode_entity` | string | — | (Manual mode) `input_select` with three mode options |
+| `entity` | string | Required | The Smart Schedule `select.*` entity from PowerPilz Companion |
 | `name` | string | Entity name | Card title |
-| `subtitle` | string | Mode label | Subtitle override |
+| `subtitle` | string | Current mode | Subtitle override |
 | `icon` | string | `mdi:clock-outline` | Header icon |
 | `icon_color` | string \| rgb array | theme | Icon color when the device is on |
 | `card_layout` | string | `horizontal` | `horizontal` or `vertical` |
@@ -47,58 +40,71 @@ All options are available in the Lovelace editor, but you can also use YAML.
 | `show_mode_control` | boolean | `true` | Show the Off/On/Auto button |
 | `show_now_indicator` | boolean | `true` | Show the vertical line at the current time |
 | `show_time_labels` | boolean | `true` | Show hour labels above the timeline |
-| `long_press_opens_editor` | boolean | `true` | When enabled, a long-press on the card opens a modal with HA's native drag-and-drop weekly-plan editor (embedded `ha-schedule-form`). Saves write back to the linked schedule helper via the `schedule/update` websocket command. Set to `false` to disable the gesture entirely, or override it by setting `hold_action` below. |
+| `long_press_opens_editor` | boolean | `true` | When enabled, a long-press on the card opens the inline weekly-plan editor. Set to `false` to disable the gesture, or override it via `hold_action`. |
 | `tap_action` | ActionConfig | toggle mode | Standard HA action config. Default cycles through Off/On/Auto. |
-| `hold_action` | ActionConfig | schedule editor | Standard HA action config. When unset, opens the schedule edit modal if `long_press_opens_editor` is `true`. Power-user YAML: set `action: powerpilz-schedule-edit` to force the edit modal. |
+| `hold_action` | ActionConfig | schedule editor | Standard HA action config. When unset, opens the inline editor if `long_press_opens_editor` is `true`. Power-user YAML: set `action: powerpilz-schedule-edit` to force the edit modal. |
 | `double_tap_action` | ActionConfig | none | Standard HA action config. |
 
 ## Example YAML
 
-### Companion mode (one entity)
+### Minimal
 
 ```yaml
 type: custom:power-pilz-schedule-card
-use_companion: true
-companion_entity: select.living_room_heating
+entity: select.living_room_heating
 name: Heating
 icon: mdi:radiator
 icon_color: orange
-time_window: "24"
-```
-
-### Manual mode (three entities)
-
-```yaml
-type: custom:power-pilz-schedule-card
-use_companion: false
-schedule_entity: schedule.heating_plan
-switch_entity: switch.heating
-mode_entity: input_select.heating_mode
-name: Heating
-icon: mdi:radiator
 ```
 
 ### Compact (vertical, no day selector)
 
 ```yaml
 type: custom:power-pilz-schedule-card
-use_companion: true
-companion_entity: select.living_room_heating
+entity: select.living_room_heating
 card_layout: vertical
 show_day_selector: false
 time_window: "12"
 ```
 
-## Companion integration
+## How it pairs with the Companion integration
 
-If the [PowerPilz Companion](https://github.com/gregor-autischer/PowerPilz-Companion) integration is installed and the dashboard has at least one Smart Schedule helper, new Schedule cards start in companion mode with that entity pre-filled. You can also flip the toggle in the visual editor at any time; legacy entity fields you already filled in are preserved when you toggle back.
+The [PowerPilz Companion](https://github.com/gregor-autischer/PowerPilz-Companion) Smart Schedule helper bundles:
 
-In companion mode the card reads the following attributes from the helper, so you don't have to configure them manually:
+- A target device (switch / light / input_boolean / fan / climate)
+- Three renameable mode options with custom icons: Off / On / Auto
+- A weekly schedule — stored inside the integration, editable via this card
+- A companion `binary_sensor.<name>_active` that flips on/off with the schedule — use it as an automation state trigger
+
+The card reads the following attributes from the helper:
 
 | Attribute on the Smart Schedule entity | Used by the card for |
 | :-- | :-- |
-| `linked_schedule` | The weekly timeline blocks |
+| `week_blocks` | The weekly timeline blocks |
 | `target_entity` | The icon's on/off color state |
-| `mode_names` / `mode_icons` | Button label + icon |
+| `mode_names` / `mode_icons` | Button label + icon (custom names survive renaming) |
+| `schedule_active` | The card's on/off state detection in Auto mode |
 
-If a user renames a mode in the Smart Schedule helper's options, the card picks up the new display name automatically on the next state update.
+Saves from the inline editor or a timeline-tap go through the `powerpilz_companion.set_schedule_blocks` service.
+
+### Using the schedule in automations
+
+You don't need a separate `schedule.*` helper. Use the companion binary sensor:
+
+```yaml
+# Trigger when the schedule becomes active
+trigger:
+  platform: state
+  entity_id: binary_sensor.living_room_heating_active
+  to: "on"
+
+# Or condition
+condition:
+  condition: state
+  entity_id: binary_sensor.living_room_heating_active
+  state: "on"
+
+# Or template — rich attributes give you the next transition time
+template: >
+  Next schedule event: {{ state_attr('select.living_room_heating', 'next_event') }}
+```

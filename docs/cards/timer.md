@@ -1,5 +1,7 @@
 # 🍄‍🟫 Timer card
 
+![Timer card all options](https://raw.githubusercontent.com/gregor-autischer/PowerPilz/main/images/Timer_Card_all_options.png)
+
 ## Description
 
 The Timer card is a one-shot "turn this device on at X, optionally off at Y" picker with a compact countdown display and a cancel flow.

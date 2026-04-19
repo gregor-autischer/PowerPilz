@@ -87,12 +87,12 @@ All PowerPilz cards can be configured with the Home Assistant dashboard UI edito
 
 The [PowerPilz Companion](https://github.com/gregor-autischer/PowerPilz-Companion) integration adds two new helper types to Home Assistant that pair naturally with the Schedule and Timer cards:
 
-| Companion helper | Paired card | What you save |
+| Companion helper | Paired card | What you get |
 | :-- | :-- | :-- |
-| **Smart Schedule** (`select` entity, 3 modes Off/On/Auto + linked native Schedule) | Schedule card | Configure 1 entity on the card instead of 3. The companion auto-creates the native HA Schedule helper, drives the target device when in Auto mode, supports manual overrides with optional auto-restore at the next schedule boundary. |
-| **Smart Timer** (`switch` entity that autonomously drives a target at on/off times) | Timer card | Configure 1 entity on the card instead of 4. The companion fires the configured events at the set times with no bridging automations, and can target `select`/`input_select` entities (including another Smart Schedule!) to change their option at a boundary. |
+| **Smart Schedule** (`select` entity with 3 modes Off/On/Auto + companion `binary_sensor.*_active` + inline weekly plan) | Schedule card | Configure 1 entity on the card. The companion stores the weekly blocks, drives the target device in Auto mode, exposes `next_event`/`current_window`/`today_blocks`/`week_blocks` as rich attributes, and fires a binary-sensor state change at every boundary — drop-in trigger replacement for HA's native schedule helper. Edit the weekly plan by long-pressing the card. |
+| **Smart Timer** (`switch` entity that autonomously drives a target at on/off times) | Timer card | Configure 1 entity on the card. The companion fires the configured events at the set times with no bridging automations, and can target `select`/`input_select` entities (including another Smart Schedule!) to change their option at a boundary. |
 
-The cards still work without the Companion integration — just fill in the legacy entity fields manually. But with it installed you get a drastically simpler setup and no YAML gluing.
+The Schedule card **requires** the Companion integration (v0.4+). The Timer card works standalone in manual 4-entity mode if preferred, but Companion mode cuts it to a single entity.
 
 **Install both:** [PowerPilz-Companion on HACS (Integration)](https://github.com/gregor-autischer/PowerPilz-Companion) + this repository on HACS (Dashboard).
 
