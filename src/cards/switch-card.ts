@@ -530,7 +530,10 @@ export class PowerPilzSwitchCard extends LitElement implements LovelaceCard {
       position: relative;
       display: flex;
       align-items: stretch;
-      height: var(--control-height);
+      /* Match the icon circle height so the slider sits visually
+         centered at the same Y as the icon to its left (and the
+         schedule-card mode button, timer toggle, etc.). */
+      height: var(--icon-size);
       border-radius: var(--control-border-radius);
       background-color: rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.05);
       overflow: hidden;
@@ -538,8 +541,8 @@ export class PowerPilzSwitchCard extends LitElement implements LovelaceCard {
 
     .slider-pill {
       position: absolute;
-      top: 4px;
-      bottom: 4px;
+      top: 3px;
+      bottom: 3px;
       left: 0;
       border-radius: calc(var(--control-border-radius) - 4px);
       background-color: rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.08);
