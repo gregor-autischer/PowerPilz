@@ -475,19 +475,38 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
     return false;
   }
 
+  /** Returns the *logical* mode ("on"/"off"/"auto" or the raw state for
+   *  generic input_selects). For Smart Schedule targets we reverse-map
+   *  the current display name via the `mode_names` attribute so this is
+   *  stable across renames. */
   private modeValue(): string {
     const modeId = this._modeEntityId;
     if (!modeId) return "Auto";
     const entity = getEntity(this.hass, modeId);
-    return entity?.state ?? "Auto";
+    const state = entity?.state ?? "Auto";
+    const modeNames = entity?.attributes?.mode_names;
+    if (modeNames && typeof modeNames === "object") {
+      for (const [key, disp] of Object.entries(modeNames as Record<string, unknown>)) {
+        if (typeof disp === "string" && disp === state) return key;
+      }
+    }
+    return state;
   }
 
+  /** Maps a logical mode back to the user-facing display name. For
+   *  Smart Schedule this is the renamed value (e.g. "Heizen"); for a
+   *  generic input_select the `mode` input is already the display name
+   *  and is returned as-is. */
   private modeLabel(mode: string): string {
-    const lang = haLang(this.hass);
-    const normalized = mode.toLowerCase();
-    if (normalized === "auto") return tr(lang, "schedule.timer_label");
-    if (normalized === "on") return tr(lang, "common.on");
-    if (normalized === "off") return tr(lang, "common.off");
+    const modeId = this._modeEntityId;
+    if (modeId) {
+      const entity = getEntity(this.hass, modeId);
+      const modeNames = entity?.attributes?.mode_names;
+      if (modeNames && typeof modeNames === "object") {
+        const display = (modeNames as Record<string, unknown>)[mode.toLowerCase()];
+        if (typeof display === "string" && display) return display;
+      }
+    }
     return mode;
   }
 
@@ -713,7 +732,8 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
 
   private renderModeButton(): TemplateResult {
     const mode = this.modeValue();
-    const modeIcon = mode === "On" ? "mdi:power" : mode === "Off" ? "mdi:power-off" : "mdi:clock-outline";
+    const norm = mode.toLowerCase();
+    const modeIcon = norm === "on" ? "mdi:power" : norm === "off" ? "mdi:power-off" : "mdi:clock-outline";
     const modeLabel = this.modeLabel(mode);
 
     return html`

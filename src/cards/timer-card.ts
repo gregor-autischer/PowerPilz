@@ -89,6 +89,17 @@ export class PowerPilzTimerCard extends LitElement implements LovelaceCard {
   @state() private _config?: PowerPilzTimerCardConfig;
   @state() private _pickingOn = false;
   @state() private _pickingOff = false;
+  /** True if the user hit "skip on" in the first picker step. Prevents
+   *  a later "skip off" from activating a timer with NO boundaries at
+   *  all (which would just flip the switch to active with nothing to
+   *  fire — a silent no-op bug). */
+  @state() private _skippedOn = false;
+  /** For select-target timers: per-activation option overrides the user
+   *  picked in the picker. Initialised from the helper's configured
+   *  on_option / off_option when the picker opens, then the user can
+   *  change them for this activation. Empty string = use helper default. */
+  @state() private _pickOnOption: string = "";
+  @state() private _pickOffOption: string = "";
   @state() private _confirmingCancel = false;
   @state() private _pickDay = 0;
   @state() private _pickHour = 12;
@@ -197,20 +208,103 @@ export class PowerPilzTimerCard extends LitElement implements LovelaceCard {
     return typeof value === "string" && value ? value : undefined;
   }
 
+  /** For select-target Companion timers, the label the user configured
+   *  for the start-boundary option (e.g. "On" or "Boost"). Returns
+   *  undefined for non-select targets or manual-mode cards. */
+  private _onOptionLabel(): string | undefined {
+    if (this._config?.use_companion === false) return undefined;
+    const value = this._companionAttr("on_option_label");
+    return typeof value === "string" && value ? value : undefined;
+  }
+
+  /** Label for the end-boundary option. Same caveats as above. */
+  private _offOptionLabel(): string | undefined {
+    if (this._config?.use_companion === false) return undefined;
+    const value = this._companionAttr("off_option_label");
+    return typeof value === "string" && value ? value : undefined;
+  }
+
+  /** Raw stored on/off option values on the companion (logical keys for
+   *  Smart-Schedule targets, display names for generic selects). */
+  private _storedOnOption(): string {
+    if (this._config?.use_companion === false) return "";
+    const value = this._companionAttr("on_option");
+    return typeof value === "string" ? value : "";
+  }
+  private _storedOffOption(): string {
+    if (this._config?.use_companion === false) return "";
+    const value = this._companionAttr("off_option");
+    return typeof value === "string" ? value : "";
+  }
+
+  /** True if the target is a select/input_select whose options the
+   *  user can pick from in the picker. */
+  private _targetHasOptions(): boolean {
+    if (this._config?.use_companion === false) return false;
+    const targetId = this._switchEntityId;
+    if (!targetId) return false;
+    const state = this.hass?.states?.[targetId];
+    const opts = state?.attributes?.options;
+    return Array.isArray(opts) && opts.length > 0
+      && (targetId.startsWith("select.") || targetId.startsWith("input_select."));
+  }
+
+  /** Resolve a stored option value (logical key or display name) into
+   *  the user-facing display name using the target's option list.
+   *  Falls back to the value itself if not found. */
+  private _resolveOptionLabel(value: string): string {
+    if (!value) return "";
+    const opts = this._targetOptions();
+    return opts.find((o) => o.value === value)?.label ?? value;
+  }
+
+  /** Returns the selectable option pairs as [value, label] where value
+   *  is what gets sent to set_timer (logical key for Smart Schedule,
+   *  display name for generic selects) and label is the UI text. */
+  private _targetOptions(): Array<{ value: string; label: string }> {
+    const targetId = this._switchEntityId;
+    if (!targetId) return [];
+    const state = this.hass?.states?.[targetId];
+    if (!state) return [];
+    const opts = state.attributes?.options;
+    if (!Array.isArray(opts)) return [];
+
+    const modeNames = state.attributes?.mode_names;
+    if (modeNames && typeof modeNames === "object" && !Array.isArray(modeNames)) {
+      // Smart Schedule: options list contains display names; map
+      // display → logical key via reverse lookup of mode_names.
+      const reverse = new Map<string, string>();
+      for (const [key, disp] of Object.entries(modeNames as Record<string, unknown>)) {
+        if (typeof disp === "string") reverse.set(disp, key);
+      }
+      return (opts as string[]).map((display) => ({
+        value: reverse.get(display) ?? display,
+        label: display,
+      }));
+    }
+    // Generic select: value == label.
+    return (opts as string[]).map((display) => ({
+      value: display,
+      label: display,
+    }));
+  }
+
   private _resolvedIcon(): string {
     return this._companionStateIcon()
       ?? this._config?.icon
       ?? "mdi:timer-outline";
   }
 
-  private async _writeOnDatetime(iso: string): Promise<void> {
+  private async _writeOnDatetime(iso: string, option?: string): Promise<void> {
     if (this._config?.use_companion !== false) {
       const id = this._config?.companion_entity;
       if (!id) return;
-      await this.hass.callService(COMPANION_DOMAIN, "set_timer", {
+      const payload: Record<string, string> = {
         entity_id: id,
-        on: iso
-      });
+        on: iso,
+      };
+      if (option !== undefined) payload.on_option = option;
+      await this.hass.callService(COMPANION_DOMAIN, "set_timer", payload);
       return;
     }
     const id = this._config.on_datetime_entity;
@@ -221,14 +315,16 @@ export class PowerPilzTimerCard extends LitElement implements LovelaceCard {
     });
   }
 
-  private async _writeOffDatetime(iso: string): Promise<void> {
+  private async _writeOffDatetime(iso: string, option?: string): Promise<void> {
     if (this._config?.use_companion !== false) {
       const id = this._config?.companion_entity;
       if (!id) return;
-      await this.hass.callService(COMPANION_DOMAIN, "set_timer", {
+      const payload: Record<string, string> = {
         entity_id: id,
-        off: iso
-      });
+        off: iso,
+      };
+      if (option !== undefined) payload.off_option = option;
+      await this.hass.callService(COMPANION_DOMAIN, "set_timer", payload);
       return;
     }
     const id = this._config.off_datetime_entity;
@@ -236,6 +332,34 @@ export class PowerPilzTimerCard extends LitElement implements LovelaceCard {
     await this.hass.callService(id.split(".")[0], "set_datetime", {
       entity_id: id,
       datetime: iso
+    });
+  }
+
+  /** Clear the on-boundary so it won't fire on the next activation.
+   *  Companion: passes an empty string to `set_timer` which the
+   *  integration interprets as "clear this field". Manual mode: no-op,
+   *  since `input_datetime.set_datetime` doesn't accept an empty value
+   *  (the user's existing on time stays and their bridging automation
+   *  will still fire on that schedule). */
+  private async _clearOnDatetime(): Promise<void> {
+    if (this._config?.use_companion === false) return;
+    const id = this._config?.companion_entity;
+    if (!id) return;
+    await this.hass.callService(COMPANION_DOMAIN, "set_timer", {
+      entity_id: id,
+      on: ""
+    });
+  }
+
+  /** Clear the off-boundary so it won't fire on the next activation.
+   *  See `_clearOnDatetime` for the manual-mode caveat. */
+  private async _clearOffDatetime(): Promise<void> {
+    if (this._config?.use_companion === false) return;
+    const id = this._config?.companion_entity;
+    if (!id) return;
+    await this.hass.callService(COMPANION_DOMAIN, "set_timer", {
+      entity_id: id,
+      off: ""
     });
   }
 
@@ -319,6 +443,22 @@ export class PowerPilzTimerCard extends LitElement implements LovelaceCard {
       .pp-timer-portal .pp-hour-btn.active {
         background: rgba(var(--rgb-primary-color, 3, 169, 244), 0.15);
         color: var(--primary-color, rgb(3, 169, 244)); font-weight: 600;
+      }
+      .pp-timer-portal .pp-option-row {
+        display: flex; align-items: center; gap: 10px;
+        padding: 4px 0 2px;
+      }
+      .pp-timer-portal .pp-option-label {
+        font-size: 12px; font-weight: 600;
+        color: var(--primary-text-color);
+      }
+      .pp-timer-portal .pp-option-select {
+        flex: 1; font: inherit; font-size: 12px; font-weight: 500;
+        padding: 6px 8px; border-radius: 8px;
+        border: 1px solid var(--divider-color, rgba(0,0,0,0.12));
+        background: rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.05);
+        color: var(--primary-text-color);
+        cursor: pointer;
       }
       .pp-timer-portal .pp-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
       .pp-timer-portal .pp-act {
@@ -417,8 +557,50 @@ export class PowerPilzTimerCard extends LitElement implements LovelaceCard {
       return;
     }
 
-    const label = this._pickingOn ? tr(lang, "timer.turn_on_at") : tr(lang, "timer.turn_off_at_optional");
-    const showSkip = this._pickingOff;
+    // For select-target timers the on/off boundaries don't literally
+    // "turn the device on/off" — they set a specific option (e.g.
+    // "Auto" or "Boost"). Swap the hardcoded Einschalten/Ausschalten
+    // wording for the actual option label when available.
+    //
+    // Labels reflect the picker's tentative selection (so changing the
+    // Mode dropdown immediately updates the wording), falling back to
+    // whatever the helper currently has stored.
+    const onLabel = this._targetHasOptions()
+      ? (this._resolveOptionLabel(this._pickOnOption) || this._onOptionLabel())
+      : this._onOptionLabel();
+    const offLabel = this._targetHasOptions()
+      ? (this._resolveOptionLabel(this._pickOffOption) || this._offOptionLabel())
+      : this._offOptionLabel();
+    const pickingOnLabel = onLabel
+      ? tr(lang, "timer.set_to_at", { option: onLabel })
+      : tr(lang, "timer.turn_on_at");
+    const pickingOffLabel = offLabel
+      ? tr(lang, "timer.set_to_at", { option: offLabel })
+      : tr(lang, "timer.turn_off_at_optional");
+    const label = this._pickingOn ? pickingOnLabel : pickingOffLabel;
+    // Show a skip button whenever the user can jump to the *other*
+    // boundary — i.e. when both on and off are supported. Skipping
+    // clears the skipped boundary in Companion mode so it won't fire
+    // on the next activation.
+    //
+    // Exception: if the user already skipped the on-boundary and is now
+    // on the off-picker, they must NOT be able to also skip off —
+    // that would activate a timer with zero boundaries (a silent
+    // no-op). Force them to either pick an off time or cancel.
+    const showSkipOn = this._pickingOn && this._hasOffSupport() && this._hasOnSupport();
+    const showSkipOff = this._pickingOff && this._hasOnSupport() && this._hasOffSupport() && !this._skippedOn;
+    // The skip button label on the on-picker jumps straight to the
+    // off-boundary, so it advertises what that off-boundary will do.
+    // And vice versa on the off-picker.
+    const skipLabel = this._pickingOn
+      ? (offLabel
+          ? tr(lang, "timer.only_option", { option: offLabel })
+          : tr(lang, "timer.only_off"))
+      : (onLabel
+          ? tr(lang, "timer.only_option", { option: onLabel })
+          : tr(lang, "timer.only_on"));
+    const skipHandler = this._pickingOn ? this.handleSkipOn : this.handleSkipOff;
+    const showSkip = showSkipOn || showSkipOff;
     const confirmHandler = this._pickingOn ? this.handleSetOn : this.handleSetOff;
 
     const days = this.next7Days();
@@ -459,6 +641,43 @@ export class PowerPilzTimerCard extends LitElement implements LovelaceCard {
     });
     this._portal.append(hoursEl);
 
+    // For select-target timers add an option dropdown so the user can
+    // override, per activation, which option gets applied at this
+    // boundary (defaults to whatever the helper is configured with).
+    if (this._targetHasOptions()) {
+      const optionRow = document.createElement("div");
+      optionRow.className = "pp-option-row";
+
+      const optionLabel = document.createElement("span");
+      optionLabel.className = "pp-option-label";
+      optionLabel.textContent = tr(lang, "timer.mode_label");
+      optionRow.append(optionLabel);
+
+      const optionSelect = document.createElement("select");
+      optionSelect.className = "pp-option-select";
+      const current = this._pickingOn ? this._pickOnOption : this._pickOffOption;
+      for (const opt of this._targetOptions()) {
+        const o = document.createElement("option");
+        o.value = opt.value;
+        o.textContent = opt.label;
+        if (opt.value === current) o.selected = true;
+        optionSelect.append(o);
+      }
+      optionSelect.addEventListener("change", () => {
+        if (this._pickingOn) {
+          this._pickOnOption = optionSelect.value;
+        } else {
+          this._pickOffOption = optionSelect.value;
+        }
+        // Re-render so the header label ("Auf 'X' setzen um:") and
+        // the skip button label (which advertises the *other* option)
+        // pick up the new selection.
+        this.renderPortalContent();
+      });
+      optionRow.append(optionSelect);
+      this._portal.append(optionRow);
+    }
+
     const actions = document.createElement("div");
     actions.className = "pp-actions";
     const cancelBtn = document.createElement("button");
@@ -472,8 +691,8 @@ export class PowerPilzTimerCard extends LitElement implements LovelaceCard {
       const skipBtn = document.createElement("button");
       skipBtn.type = "button";
       skipBtn.className = "pp-act skip";
-      skipBtn.textContent = tr(lang, "timer.only_on");
-      skipBtn.addEventListener("click", () => { void this.handleSkipOff(); });
+      skipBtn.textContent = skipLabel;
+      skipBtn.addEventListener("click", () => { void skipHandler(); });
       actions.append(skipBtn);
     }
 
@@ -619,6 +838,12 @@ export class PowerPilzTimerCard extends LitElement implements LovelaceCard {
     this._pickDay = 0;
     this._pickHour = new Date().getHours() + 1;
     if (this._pickHour > 23) { this._pickHour = 0; this._pickDay = 1; }
+    this._skippedOn = false;
+    // Pre-fill the per-activation option overrides from whatever the
+    // helper currently has configured — the user can then tweak them
+    // before confirming. Empty = use helper default.
+    this._pickOnOption = this._storedOnOption();
+    this._pickOffOption = this._storedOffOption();
     // Off-only timer skips the on-picker entirely.
     if (this._hasOnSupport()) {
       this._pickingOn = true;
@@ -645,7 +870,11 @@ export class PowerPilzTimerCard extends LitElement implements LovelaceCard {
   private handleSetOn = async (): Promise<void> => {
     if (!this._config) return;
     const datetime = this.buildDatetime(this._pickDay, this._pickHour);
-    await this._writeOnDatetime(datetime);
+    // Pass on_option only if the target is a select (option is
+    // meaningful). For switch-like targets, leave it off.
+    const option = this._targetHasOptions() ? this._pickOnOption : undefined;
+    await this._writeOnDatetime(datetime, option);
+    this._skippedOn = false;
     this._pickingOn = false;
 
     if (this._hasOffSupport()) {
@@ -659,12 +888,32 @@ export class PowerPilzTimerCard extends LitElement implements LovelaceCard {
   private handleSetOff = async (): Promise<void> => {
     if (!this._hasOffSupport()) return;
     const datetime = this.buildDatetime(this._pickDay, this._pickHour);
-    await this._writeOffDatetime(datetime);
+    const option = this._targetHasOptions() ? this._pickOffOption : undefined;
+    await this._writeOffDatetime(datetime, option);
+    this._skippedOn = false;
     this._pickingOff = false;
     await this.activateTimer();
   };
 
+  /** Picking-on state: skip the on-boundary entirely and jump to the
+   *  off-picker. In Companion mode this clears the on time so only off
+   *  fires; in manual mode it leaves the existing on_datetime untouched
+   *  (input_datetime helpers can't be "unset" via the standard service). */
+  private handleSkipOn = async (): Promise<void> => {
+    if (!this._hasOffSupport()) return;
+    await this._clearOnDatetime();
+    this._skippedOn = true;
+    this._pickingOn = false;
+    this._pickHour = Math.min(this._pickHour + 1, 23);
+    this._pickingOff = true;
+  };
+
+  /** Picking-off state: skip the off-boundary and activate the timer.
+   *  In Companion mode this clears the off time so only on fires;
+   *  in manual mode it leaves the existing off_datetime untouched. */
   private handleSkipOff = async (): Promise<void> => {
+    await this._clearOffDatetime();
+    this._skippedOn = false;
     this._pickingOff = false;
     await this.activateTimer();
   };
@@ -692,6 +941,7 @@ export class PowerPilzTimerCard extends LitElement implements LovelaceCard {
     this._pickingOn = false;
     this._pickingOff = false;
     this._confirmingCancel = false;
+    this._skippedOn = false;
   };
 
   // --- Render ---
