@@ -219,6 +219,19 @@ interface PowerPilzEnergyCardConfig extends LovelaceCardConfig {
   battery_secondary_low_alert?: boolean;
   battery_secondary_low_threshold?: number;
   battery_secondary_low_alert_color?: string | number[];
+  // Two independent inversion toggles per battery to deal with vendors
+  // that use opposing sign conventions for charge/discharge:
+  //   - *_invert_flow: flips the animated arrow direction only
+  //   - *_invert_value_sign: flips the displayed power value (and the
+  //     trend curve when it plots power); does NOT affect SOC %.
+  // Both can be set independently — some users want the animation
+  // matching reality but the printed number kept positive (or vice
+  // versa). Underlying physics calculations (e.g. home auto-calc)
+  // always use the raw entity value regardless of these toggles.
+  battery_invert_flow?: boolean;
+  battery_invert_value_sign?: boolean;
+  battery_secondary_invert_flow?: boolean;
+  battery_secondary_invert_value_sign?: boolean;
   flow_color?: string | number[];
   unit?: string;
   decimals?: number;
@@ -392,6 +405,10 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       battery_secondary_low_alert: config.battery_secondary_low_alert ?? false,
       battery_secondary_low_threshold: this.normalizeBatteryThreshold(config.battery_secondary_low_threshold),
       battery_secondary_low_alert_color: config.battery_secondary_low_alert_color ?? DEFAULT_ALERT_COLOR,
+      battery_invert_flow: config.battery_invert_flow ?? false,
+      battery_invert_value_sign: config.battery_invert_value_sign ?? false,
+      battery_secondary_invert_flow: config.battery_secondary_invert_flow ?? false,
+      battery_secondary_invert_value_sign: config.battery_secondary_invert_value_sign ?? false,
       flow_color: config.flow_color,
       decimals
     };
@@ -525,15 +542,35 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     const gridCombinedFlow = (grid === null && gridSecondary === null)
       ? "none"
       : this.toBidirectionalFlow(gridCombinedValue);
-    const batteryFlow = this.toBidirectionalFlow(battery);
-    const batterySecondaryFlow = this.toBidirectionalFlow(batterySecondary);
+    // Per-battery effective values for *flow direction* — `invert_flow`
+    // flips the sign so `toBidirectionalFlow` returns the opposite arrow.
+    // Each battery is inverted independently; the combined arrow is
+    // computed from the sum of the post-inversion effective values so a
+    // mixed setup (e.g. one inverted, one not) animates coherently.
+    const batteryInvertFlow = config.battery_invert_flow === true;
+    const batterySecondaryInvertFlow = config.battery_secondary_invert_flow === true;
+    const batteryFlowValue = batteryInvertFlow && battery !== null ? -battery : battery;
+    const batterySecondaryFlowValue =
+      batterySecondaryInvertFlow && batterySecondary !== null ? -batterySecondary : batterySecondary;
+    const batteryFlow = this.toBidirectionalFlow(batteryFlowValue);
+    const batterySecondaryFlow = this.toBidirectionalFlow(batterySecondaryFlowValue);
     const batteryCombinedValue = this.sumComparableValues([
-      { value: battery, unit: batteryUnit },
-      { value: batterySecondary, unit: batterySecondaryUnit }
+      { value: batteryFlowValue, unit: batteryUnit },
+      { value: batterySecondaryFlowValue, unit: batterySecondaryUnit }
     ]);
     const batteryCombinedFlow = (battery === null && batterySecondary === null)
       ? "none"
       : this.toBidirectionalFlow(batteryCombinedValue);
+    // Per-battery effective values for *displayed label & power trend*.
+    // `invert_value_sign` flips the sign of the printed kW/W and of the
+    // trend graph when it plots power. SOC % is never affected (it
+    // comes from a separate sensor and remains its physical reading).
+    const batteryInvertValueSign = config.battery_invert_value_sign === true;
+    const batterySecondaryInvertValueSign = config.battery_secondary_invert_value_sign === true;
+    const batteryDisplayValue =
+      batteryInvertValueSign && battery !== null ? -battery : battery;
+    const batterySecondaryDisplayValue =
+      batterySecondaryInvertValueSign && batterySecondary !== null ? -batterySecondary : batterySecondary;
     const hasAction = this.hasConfiguredAction(config);
     const interactive = !this.isEditorPreview() && hasAction;
 
@@ -709,14 +746,14 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       : null;
     const batteryTrendValue = batteryHasPercentageSource
       ? batteryDisplayPercentage
-      : battery;
+      : batteryDisplayValue;
     const batterySecondaryTrendThreshold = batterySecondaryLowAlertEnabled
       && batterySecondaryHasPercentageSource
       ? batterySecondaryLowThreshold
       : null;
     const batterySecondaryTrendValue = batterySecondaryHasPercentageSource
       ? batterySecondaryDisplayPercentage
-      : batterySecondary;
+      : batterySecondaryDisplayValue;
 
     const flowSegments = this.buildFlowSegments(
       homePlacement,
@@ -908,7 +945,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
                             `
                           : nothing}
                       </div>
-                      <div class="energy-number">${this.formatValue(battery, batteryUnit, decimals)}</div>
+                      <div class="energy-number">${this.formatValue(batteryDisplayValue, batteryUnit, decimals)}</div>
                       <div class="energy-label">${config.battery_label}</div>
                     </div>
                   </div>
@@ -948,7 +985,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
                             `
                           : nothing}
                       </div>
-                      <div class="energy-number">${this.formatValue(batterySecondary, batterySecondaryUnit, decimals)}</div>
+                      <div class="energy-number">${this.formatValue(batterySecondaryDisplayValue, batterySecondaryUnit, decimals)}</div>
                       <div class="energy-label">${config.battery_secondary_label}</div>
                     </div>
                   </div>
@@ -1840,12 +1877,25 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     return toTrendCanvasPoints(points, width, height);
   }
 
+  /** Battery trend graphs are always excluded from the shared-scale
+   *  calculation: their natural unit is often `%` (SOC) which doesn't
+   *  share an axis with the kW/W power graphs, and even when a battery
+   *  graph plots power it represents a fundamentally different quantity
+   *  (storage flow vs. consumption/generation). Each battery keeps its
+   *  own independent y-range. */
+  private isSharedScaleParticipant(node: NodeKey): boolean {
+    return node !== "battery" && node !== "battery_secondary";
+  }
+
   private computeTrendValueRange(
     seriesByNode: Partial<Record<NodeKey, TrendPoint[]>>,
     canonicalFactors?: Partial<Record<NodeKey, number>>
   ): TrendValueRange | null {
     const values: number[] = [];
     (Object.entries(seriesByNode) as Array<[NodeKey, TrendPoint[]]>).forEach(([node, series]) => {
+      if (!this.isSharedScaleParticipant(node)) {
+        return;
+      }
       const factor = canonicalFactors?.[node] ?? 1;
       series.forEach((point) => values.push(point.value * factor));
     });
@@ -1866,7 +1916,9 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
   private resolveSharedTrendUnitFactors(
     seriesByNode: Partial<Record<NodeKey, TrendPoint[]>>
   ): Partial<Record<NodeKey, number>> | null {
-    const nodes = Object.keys(seriesByNode) as NodeKey[];
+    const nodes = (Object.keys(seriesByNode) as NodeKey[]).filter((node) =>
+      this.isSharedScaleParticipant(node)
+    );
     if (nodes.length === 0) {
       return null;
     }
@@ -2201,11 +2253,20 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
         return;
       }
 
-      const factor = sharedScaleFactors?.[node] ?? 1;
-      const pointsForDraw = sharedScaleFactors
+      // Battery nodes always render against their own y-range,
+      // bypassing the shared-scale conversion so their %/SOC or
+      // bidirectional power axis is never squashed against the larger
+      // grid/solar/home graphs.
+      const usesSharedScale =
+        sharedScaleEnabled
+        && sharedScaleFactors !== null
+        && this.isSharedScaleParticipant(node);
+      const factor = usesSharedScale ? (sharedScaleFactors?.[node] ?? 1) : 1;
+      const pointsForDraw = usesSharedScale
         ? this.scaleTrendSeries(points, factor)
         : points;
-      const coordinates = this.toTrendCoordinates(pointsForDraw, sharedRange);
+      const rangeForDraw = usesSharedScale ? sharedRange : null;
+      const coordinates = this.toTrendCoordinates(pointsForDraw, rangeForDraw);
       if (coordinates.length < 2) {
         return;
       }

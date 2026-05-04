@@ -86,6 +86,10 @@ interface EnergyCardConfig extends LovelaceCardConfig {
   battery_secondary_low_alert?: boolean;
   battery_secondary_low_threshold?: number;
   battery_secondary_low_alert_color?: string | number[];
+  battery_invert_flow?: boolean;
+  battery_invert_value_sign?: boolean;
+  battery_secondary_invert_flow?: boolean;
+  battery_secondary_invert_value_sign?: boolean;
   flow_color?: string | number[];
   unit?: string;
   decimals?: number;
@@ -281,6 +285,10 @@ const BATTERY_SECONDARY_FLOW_DIRECTION_HELP =
   "Flow direction: + value animates from Center to Battery 2 (charging). - value animates Battery 2 to Center (discharging).";
 const BATTERY_LOW_ALERT_COLOR_HELP =
   "Color used for battery low-threshold alert styling (icon and low trend section).";
+const BATTERY_INVERT_FLOW_HELP =
+  "Reverse the animated arrow direction (charge ↔ discharge). Use this when your inverter reports the opposite sign for charge/discharge than what PowerPilz expects.";
+const BATTERY_INVERT_VALUE_SIGN_HELP =
+  "Flip the sign of the displayed kW/W value and the power trend graph. Independent from the flow toggle. Does not affect the SOC %.";
 const GRID_FLOW_DIRECTION_HELP =
   "Flow direction: + value animates from Grid to Center (import). - value animates from Center to Grid (export).";
 const GRID_SECONDARY_FLOW_DIRECTION_HELP =
@@ -804,6 +812,34 @@ const SCHEMA: HaFormSchema[] = [
       {
         type: "expandable",
         name: "",
+        title: "Sign convention",
+        icon: "mdi:swap-vertical",
+        expanded: false,
+        schema: [
+          {
+            type: "grid",
+            name: "",
+            columns: 2,
+            schema: [
+              {
+                name: "battery_invert_flow",
+                selector: { boolean: {} },
+                helper: BATTERY_INVERT_FLOW_HELP,
+                description: BATTERY_INVERT_FLOW_HELP
+              },
+              {
+                name: "battery_invert_value_sign",
+                selector: { boolean: {} },
+                helper: BATTERY_INVERT_VALUE_SIGN_HELP,
+                description: BATTERY_INVERT_VALUE_SIGN_HELP
+              }
+            ]
+          }
+        ]
+      },
+      {
+        type: "expandable",
+        name: "",
         title: "Alert",
         icon: "mdi:alert-outline",
         expanded: true,
@@ -914,6 +950,34 @@ const SCHEMA: HaFormSchema[] = [
           selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
         }
       ]),
+      {
+        type: "expandable",
+        name: "",
+        title: "Sign convention",
+        icon: "mdi:swap-vertical",
+        expanded: false,
+        schema: [
+          {
+            type: "grid",
+            name: "",
+            columns: 2,
+            schema: [
+              {
+                name: "battery_secondary_invert_flow",
+                selector: { boolean: {} },
+                helper: BATTERY_INVERT_FLOW_HELP,
+                description: BATTERY_INVERT_FLOW_HELP
+              },
+              {
+                name: "battery_secondary_invert_value_sign",
+                selector: { boolean: {} },
+                helper: BATTERY_INVERT_VALUE_SIGN_HELP,
+                description: BATTERY_INVERT_VALUE_SIGN_HELP
+              }
+            ]
+          }
+        ]
+      },
       {
         type: "expandable",
         name: "",
@@ -1048,6 +1112,10 @@ const LABELS: Record<string, string> = {
   battery_secondary_low_alert: "Battery 2 low alert",
   battery_secondary_low_threshold: "Battery 2 low %",
   battery_secondary_low_alert_color: "Low alert color",
+  battery_invert_flow: "Reverse flow direction",
+  battery_invert_value_sign: "Flip displayed value sign",
+  battery_secondary_invert_flow: "Reverse flow direction",
+  battery_secondary_invert_value_sign: "Flip displayed value sign",
   core_icon: "Core icon",
   core_icon_color: "Core icon color",
   flow_color: "Flow line color",
@@ -1092,6 +1160,10 @@ export class PowerPilzEnergyCardEditor extends LitElement implements LovelaceCar
       grid_secondary_export_icon_color: config.grid_secondary_export_icon_color ?? "red",
       battery_low_alert_color: config.battery_low_alert_color ?? "red",
       battery_secondary_low_alert_color: config.battery_secondary_low_alert_color ?? "red",
+      battery_invert_flow: config.battery_invert_flow ?? false,
+      battery_invert_value_sign: config.battery_invert_value_sign ?? false,
+      battery_secondary_invert_flow: config.battery_secondary_invert_flow ?? false,
+      battery_secondary_invert_value_sign: config.battery_secondary_invert_value_sign ?? false,
       shared_trend_scale: config.shared_trend_scale ?? false,
       trend_data_source: toEditorTrendDataSource(config.trend_data_source),
       debug_performance: config.debug_performance ?? false,
