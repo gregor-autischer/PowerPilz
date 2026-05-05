@@ -1,15 +1,15 @@
 /**
  * Tap-zoom overlay for an Energy Card main node.
  *
- * On tap the node is rendered into a fixed-position container that
- * starts at the node's original on-screen rect and animates (FLIP-style
- * via CSS `transform`) to a centered, larger size. The enlarged view
- * keeps the node's icon, label and live value but adds a full-size
- * trend chart with a hover tooltip — the same primitives the detail
- * dialog uses, minus mode/range/entity controls.
+ * Renders an enlarged clone of the clicked node's visual: the same
+ * rounded card with a filled trend curve in the background and a
+ * compact header row of icon + value + label on top — just bigger.
+ * On hover the user gets a vertical guide line and a tooltip with the
+ * value at the cursor's timestamp, like in the graph cards.
  *
- * Tap on the dimmed backdrop (or ESC) reverses the animation and
- * removes the overlay from the DOM.
+ * The opening animation is a FLIP-style transform: the shell starts
+ * positioned at the original node's bounding rect and CSS-transitions
+ * to the centered, larger size. Backdrop tap or ESC reverses it.
  */
 
 import { LitElement, css, html, nothing, type CSSResultGroup, type TemplateResult } from "lit";
@@ -28,21 +28,30 @@ import {
   seriesPointsFor,
   type NodeSeriesDescriptor
 } from "../../utils/energy-series";
-import { renderChart, type ChartContext } from "../../utils/chart-renderer";
+import {
+  prepareCanvas,
+  fillAreaUnderPolyline,
+  resolveCssColor,
+  strokePolyline,
+  type CanvasPoint
+} from "../../utils/chart-primitives";
 import { mushroomIconStyle } from "../../utils/color";
 import { formatValueWithUnitScaling } from "../../utils/unit-scaling";
 
 const TAG = "power-pilz-energy-node-zoom-overlay";
 const OPEN_ANIMATION_MS = 280;
 const CLOSE_ANIMATION_MS = 200;
-const DEFAULT_WINDOW_HOURS = 24 * 7;
+/** History window — matches the small-node trend so the zoomed view
+ *  shows literally the same curve, just bigger. */
+const TREND_WINDOW_MS = 24 * 60 * 60 * 1000;
+const LINE_WIDTH = 1.8;
 
 export interface EnergyNodeZoomOptions {
   hass: HomeAssistant;
   config: LovelaceCardConfig;
   focusedNodeKey: string;
-  /** Bounding rect of the node element the user tapped — the overlay
-   *  uses it as the start frame of the zoom animation. */
+  /** Bounding rect of the node element the user tapped — used as the
+   *  start frame of the FLIP animation. */
   originRect: DOMRect | { left: number; top: number; width: number; height: number };
 }
 
@@ -71,16 +80,20 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
 
   @state() private _phase: "opening" | "open" | "closing" = "opening";
   @state() private _historyByEntity: Map<string, HistoryTrendPoint[]> = new Map();
-  @state() private _hover?: { canvasX: number; ts: number };
+  @state() private _hover?: { canvasX: number; canvasY: number; ts: number; value: number };
 
   private _series: NodeSeriesDescriptor[] = [];
   private _focused: NodeSeriesDescriptor | undefined;
   private _renderRaf?: number;
   private _resizeObserver?: ResizeObserver;
-  private _chartContext: ChartContext | null = null;
-  private _canvasLogicalSize = { width: 0, height: 0 };
-  private _fetchAbort = 0;
   private _liveTimer?: number;
+  private _fetchAbort = 0;
+  private _colorCache: { ctx?: CanvasRenderingContext2D | null } = {};
+  /** Last-rendered canvas-space points for the focused series. Used by
+   *  the pointer handler to derive the hover timestamp/value without
+   *  re-running the projection math. */
+  private _lastCanvasPoints: ReadonlyArray<CanvasPoint & { ts: number; value: number }> = [];
+  private _lastCanvasSize = { width: 0, height: 0 };
 
   // ------------------------------------------------------------
   // Lifecycle
@@ -92,8 +105,7 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
     this._focused = resolveFocusedSeries(this._series, this.focusedNodeKey);
     document.addEventListener("keydown", this._onKeyDown);
     void this._fetchHistory();
-    // Drive the live value (icon, kW number) like the card does — every
-    // 30s is plenty for a focused view.
+    // Refresh the live value text every 30s.
     this._liveTimer = window.setInterval(() => this.requestUpdate(), 30_000);
   }
 
@@ -113,16 +125,14 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
   }
 
   protected firstUpdated(): void {
-    // After the initial render at the origin rect, flip phase to "open"
-    // on the next frame so the CSS transition kicks in.
     requestAnimationFrame(() => {
       this._phase = "open";
     });
 
-    const canvas = this.renderRoot.querySelector<HTMLCanvasElement>(".pp-zoom-canvas");
-    if (canvas) {
+    const areaCanvas = this.renderRoot.querySelector<HTMLCanvasElement>(".pp-zoom-area");
+    if (areaCanvas) {
       this._resizeObserver = new ResizeObserver(() => this._scheduleRender());
-      this._resizeObserver.observe(canvas);
+      this._resizeObserver.observe(areaCanvas);
       this._scheduleRender();
     }
   }
@@ -155,15 +165,15 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
     const ids = entityIdsForSeries([this._focused]);
     if (ids.length === 0) return;
 
-    const windowMs = DEFAULT_WINDOW_HOURS * 3600 * 1000;
-    const dataSource: TrendDataSource = windowMs > 48 * 3600 * 1000 ? "statistics" : "hybrid";
-    const startMs = Date.now() - windowMs;
+    // 24h fits comfortably in the hybrid (history + statistics) path.
+    const dataSource: TrendDataSource = "hybrid";
+    const startMs = Date.now() - TREND_WINDOW_MS;
 
     try {
       const result = await fetchHistoryTrendPointsBatch(
         this.hass,
         ids,
-        windowMs,
+        TREND_WINDOW_MS,
         { startMs, dataSource }
       );
       if (myFetch !== this._fetchAbort) return;
@@ -171,79 +181,143 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
       for (const id of ids) next.set(id, result[id] ?? []);
       this._historyByEntity = next;
     } catch {
-      /* Silently ignore — the overlay still shows the live value. */
+      /* Silently ignore — the zoom shell still shows the live value. */
     }
   }
 
   // ------------------------------------------------------------
-  // Chart
+  // Trend drawing — direct area + line, no axes (matches the small
+  // node's visual exactly).
   // ------------------------------------------------------------
 
   private _scheduleRender(): void {
     if (this._renderRaf !== undefined) return;
     this._renderRaf = requestAnimationFrame(() => {
       this._renderRaf = undefined;
-      this._renderChart();
+      this._renderTrend();
     });
   }
 
-  private _renderChart(): void {
+  private _renderTrend(): void {
     if (!this._focused) return;
-    const canvas = this.renderRoot.querySelector<HTMLCanvasElement>(".pp-zoom-canvas");
-    if (!canvas) return;
-    const endMs = Date.now();
-    const startMs = endMs - DEFAULT_WINDOW_HOURS * 3600 * 1000;
+    const areaCanvas = this.renderRoot.querySelector<HTMLCanvasElement>(".pp-zoom-area");
+    const lineCanvas = this.renderRoot.querySelector<HTMLCanvasElement>(".pp-zoom-line");
+    if (!areaCanvas || !lineCanvas) return;
+    const area = prepareCanvas(areaCanvas);
+    const line = prepareCanvas(lineCanvas);
+    if (!area || !line) return;
+
     const points = seriesPointsFor(this._focused, this._historyByEntity);
-    this._chartContext = renderChart(canvas, {
-      mode: "single",
-      series: [{
-        id: this._focused.id,
-        label: this._focused.label,
-        color: this._focused.color,
-        unit: this._focused.unit,
-        isPercentage: this._focused.isPercentage,
-        points
-      }],
-      startMs,
-      endMs,
-      host: this.renderRoot as ParentNode & Element
-    });
-    const rect = canvas.getBoundingClientRect();
-    this._canvasLogicalSize = {
-      width: Math.max(1, rect.width),
-      height: Math.max(1, rect.height)
-    };
-    if (this._hover && this._chartContext) {
-      const x = this._chartContext.timestampToPixel(this._hover.ts);
-      this._hover = { canvasX: x, ts: this._hover.ts };
+    if (points.length < 2) {
+      this._lastCanvasPoints = [];
+      this._lastCanvasSize = { width: area.width, height: area.height };
+      return;
     }
+
+    const endMs = Date.now();
+    const startMs = endMs - TREND_WINDOW_MS;
+    const visible = points.filter((p) => p.ts >= startMs && p.ts <= endMs);
+    const series = visible.length >= 2 ? visible : points;
+
+    let min = Infinity;
+    let max = -Infinity;
+    for (const p of series) {
+      if (!Number.isFinite(p.value)) continue;
+      if (p.value < min) min = p.value;
+      if (p.value > max) max = p.value;
+    }
+    if (!Number.isFinite(min) || !Number.isFinite(max)) {
+      this._lastCanvasPoints = [];
+      return;
+    }
+    if (min === max) {
+      const pad = Math.abs(min) * 0.1 || 1;
+      min -= pad;
+      max += pad;
+    }
+    // Slight headroom so the curve isn't pinned to the canvas edge.
+    const yPad = (max - min) * 0.06;
+    const yMin = min - yPad;
+    const yMax = max + yPad;
+    const yRange = yMax - yMin;
+    const tRange = endMs - startMs;
+
+    const canvasPoints = series
+      .filter((p) => Number.isFinite(p.ts) && Number.isFinite(p.value))
+      .map((p) => {
+        const tNorm = Math.max(0, Math.min(1, (p.ts - startMs) / tRange));
+        const vNorm = Math.max(0, Math.min(1, (p.value - yMin) / yRange));
+        return {
+          x: tNorm * area.width,
+          y: (1 - vNorm) * area.height,
+          ts: p.ts,
+          value: p.value
+        };
+      });
+
+    if (canvasPoints.length < 2) {
+      this._lastCanvasPoints = [];
+      return;
+    }
+
+    const resolvedColor = resolveCssColor(this.renderRoot as ParentNode & Element, this._focused.color);
+    fillAreaUnderPolyline(area.ctx, canvasPoints, resolvedColor, area.height, 0.24, 0, this._colorCache);
+    strokePolyline(line.ctx, canvasPoints, resolvedColor, LINE_WIDTH);
+
+    this._lastCanvasPoints = canvasPoints;
+    this._lastCanvasSize = { width: area.width, height: area.height };
   }
 
   // ------------------------------------------------------------
-  // Hover tooltip — same approach as the detail dialog
+  // Hover
   // ------------------------------------------------------------
 
-  private _onChartPointerMove = (event: PointerEvent): void => {
-    if (!this._chartContext) return;
-    const canvas = this.renderRoot.querySelector<HTMLCanvasElement>(".pp-zoom-canvas");
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
+  private _onPointerMove = (event: PointerEvent): void => {
+    const areaCanvas = this.renderRoot.querySelector<HTMLCanvasElement>(".pp-zoom-area");
+    if (!areaCanvas || this._lastCanvasPoints.length < 2) return;
+    const rect = areaCanvas.getBoundingClientRect();
     const localX = event.clientX - rect.left;
     const localY = event.clientY - rect.top;
-    const ctx = this._chartContext;
-    if (
-      localX < ctx.innerLeft || localX > ctx.innerRight
-      || localY < ctx.innerTop || localY > ctx.innerBottom
-    ) {
+    if (localX < 0 || localX > rect.width || localY < 0 || localY > rect.height) {
       if (this._hover) this._hover = undefined;
       return;
     }
-    this._hover = { canvasX: localX, ts: ctx.pixelToTimestamp(localX) };
+    // Map back from rect-space to logical canvas-space for the lookup.
+    const logicalX = (localX / rect.width) * this._lastCanvasSize.width;
+    const nearest = this._nearestPoint(logicalX);
+    if (!nearest) {
+      if (this._hover) this._hover = undefined;
+      return;
+    }
+    this._hover = {
+      canvasX: localX,
+      canvasY: (nearest.y / this._lastCanvasSize.height) * rect.height,
+      ts: nearest.ts,
+      value: nearest.value
+    };
   };
 
-  private _onChartPointerLeave = (): void => {
+  private _onPointerLeave = (): void => {
     if (this._hover) this._hover = undefined;
   };
+
+  private _nearestPoint(logicalX: number): typeof this._lastCanvasPoints[number] | undefined {
+    const points = this._lastCanvasPoints;
+    if (points.length === 0) return undefined;
+    // Binary search by x.
+    let lo = 0;
+    let hi = points.length - 1;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (points[mid].x <= logicalX) lo = mid;
+      else hi = mid;
+    }
+    const a = points[lo];
+    const b = points[hi];
+    if (!a) return b;
+    if (!b) return a;
+    return Math.abs(a.x - logicalX) <= Math.abs(b.x - logicalX) ? a : b;
+  }
 
   // ------------------------------------------------------------
   // Render
@@ -251,63 +325,66 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
 
   protected render(): TemplateResult {
     if (!this._focused) {
-      // No focusable series — render an empty closeable backdrop so the
-      // user can dismiss without seeing a stuck overlay.
-      return html`<div class="pp-zoom-backdrop" @click=${this._onBackdropClick}></div>`;
+      return html`<div class="pp-zoom-backdrop opening" @click=${this._onBackdropClick}></div>`;
     }
 
-    // FLIP transform: starting frame puts the shell at the origin rect's
-    // exact size; the "open" phase removes the transform, letting the
-    // shell snap to its centered, full-size CSS layout via transition.
+    // FLIP transform — start at the origin rect via translate+scale.
     const targetWidth = Math.min(window.innerWidth - 32, 720);
-    const targetHeight = Math.min(window.innerHeight - 32, 520);
+    const targetHeight = Math.min(window.innerHeight - 32, 460);
     const targetLeft = (window.innerWidth - targetWidth) / 2;
     const targetTop = (window.innerHeight - targetHeight) / 2;
-
     const opening = this._phase !== "open";
     const closing = this._phase === "closing";
     const collapse = opening || closing;
+    const scaleX = this.originRect.width / targetWidth;
+    const scaleY = this.originRect.height / targetHeight;
+    const tx = this.originRect.left - targetLeft;
+    const ty = this.originRect.top - targetTop;
 
-    const startScaleX = this.originRect.width / targetWidth;
-    const startScaleY = this.originRect.height / targetHeight;
-    const startTranslateX = this.originRect.left - targetLeft;
-    const startTranslateY = this.originRect.top - targetTop;
+    const shellStyle = {
+      left: `${targetLeft}px`,
+      top: `${targetTop}px`,
+      width: `${targetWidth}px`,
+      height: `${targetHeight}px`,
+      transform: collapse
+        ? `translate(${tx}px, ${ty}px) scale(${scaleX}, ${scaleY})`
+        : "translate(0, 0) scale(1, 1)",
+      transformOrigin: "0 0",
+      opacity: closing ? "0" : "1"
+    };
 
-    const shellStyle = collapse
-      ? {
-          left: `${targetLeft}px`,
-          top: `${targetTop}px`,
-          width: `${targetWidth}px`,
-          height: `${targetHeight}px`,
-          transform: `translate(${startTranslateX}px, ${startTranslateY}px) scale(${startScaleX}, ${startScaleY})`,
-          transformOrigin: "0 0",
-          opacity: closing ? "0" : "1"
-        }
-      : {
-          left: `${targetLeft}px`,
-          top: `${targetTop}px`,
-          width: `${targetWidth}px`,
-          height: `${targetHeight}px`,
-          transform: "translate(0, 0) scale(1, 1)",
-          transformOrigin: "0 0",
-          opacity: "1"
-        };
+    const config = this.energyConfig as Record<string, unknown>;
+    const focused = this._focused;
+    const iconKey = this._iconConfigKey(focused.nodeKey);
+    const iconName = (config[`${iconKey}_icon`] as string | undefined) ?? this._fallbackIcon(focused.nodeKey);
+    const iconStyle = mushroomIconStyle(config[`${iconKey}_icon_color`] as string | number[] | undefined);
+    const liveValue = this._liveValueText(focused);
 
     return html`
       <div
         class="pp-zoom-backdrop ${closing ? "closing" : ""} ${this._phase === "opening" ? "opening" : ""}"
         @click=${this._onBackdropClick}
       >
-        <div class="pp-zoom-shell" style=${styleMap(shellStyle)}>
-          ${this._renderHeader()}
-          <div
-            class="pp-zoom-chart-wrap"
-            @pointermove=${this._onChartPointerMove}
-            @pointerleave=${this._onChartPointerLeave}
-          >
-            <canvas class="pp-zoom-canvas"></canvas>
-            ${this._renderHoverOverlay()}
+        <div
+          class="pp-zoom-shell ${focused.category}"
+          style=${styleMap(shellStyle)}
+          @pointermove=${this._onPointerMove}
+          @pointerleave=${this._onPointerLeave}
+        >
+          <div class="pp-zoom-trend" aria-hidden="true">
+            <canvas class="pp-zoom-area"></canvas>
           </div>
+          <div class="pp-zoom-line-layer" aria-hidden="true">
+            <canvas class="pp-zoom-line"></canvas>
+          </div>
+          <div class="pp-zoom-content">
+            <div class="pp-zoom-icon-shape" style=${styleMap(iconStyle)}>
+              <ha-icon class="pp-zoom-icon" .icon=${iconName}></ha-icon>
+            </div>
+            <div class="pp-zoom-value">${liveValue}</div>
+            <div class="pp-zoom-label">${focused.label}</div>
+          </div>
+          ${this._renderHoverOverlay()}
           <button class="pp-zoom-close" aria-label="Close" @click=${this._close}>
             <ha-icon icon="mdi:close"></ha-icon>
           </button>
@@ -316,40 +393,18 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
     `;
   }
 
-  private _renderHeader(): TemplateResult {
-    const focused = this._focused!;
-    const config = this.energyConfig as Record<string, unknown>;
-    const iconKey = `${this._iconConfigKey(focused.nodeKey)}_icon`;
-    const fallbackIcon = this._fallbackIcon(focused.nodeKey);
-    const icon = (config[iconKey] as string | undefined) ?? fallbackIcon;
-    const iconColor = config[`${this._iconConfigKey(focused.nodeKey)}_icon_color`];
-    const iconStyle = mushroomIconStyle(iconColor as string | number[] | undefined);
-    const liveValue = this._liveValueText(focused);
-
-    return html`
-      <div class="pp-zoom-header">
-        <div class="pp-zoom-icon-wrap" style=${styleMap(iconStyle)}>
-          <ha-icon class="pp-zoom-icon" .icon=${icon}></ha-icon>
-        </div>
-        <div class="pp-zoom-text">
-          <div class="pp-zoom-value">${liveValue}</div>
-          <div class="pp-zoom-label">${focused.label}</div>
-        </div>
-      </div>
-    `;
-  }
-
   private _renderHoverOverlay(): TemplateResult | typeof nothing {
-    if (!this._hover || !this._chartContext) return nothing;
-    const ctx = this._chartContext;
-    const { width, height } = this._canvasLogicalSize;
+    if (!this._hover || !this._focused) return nothing;
+    const { width, height } = this._lastCanvasSize;
     if (width <= 0 || height <= 0) return nothing;
-    const xPct = (this._hover.canvasX / width) * 100;
-    const values = ctx.valuesAt(this._hover.ts).filter((entry) => Number.isFinite(entry.value));
+    const xPct = (this._hover.canvasX / this._areaCanvasRect().width) * 100;
     const showOnRight = xPct < 60;
-
     return html`
-      <div class="pp-zoom-hover-line" style=${styleMap({ left: `${xPct}%` })} aria-hidden="true"></div>
+      <div
+        class="pp-zoom-hover-line"
+        style=${styleMap({ left: `${xPct}%` })}
+        aria-hidden="true"
+      ></div>
       <div
         class="pp-zoom-tooltip ${showOnRight ? "right" : "left"}"
         style=${styleMap({
@@ -358,28 +413,25 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
         })}
       >
         <div class="pp-zoom-tooltip-time">${_formatHoverTime(this._hover.ts)}</div>
-        ${values.length === 0
-          ? html`<div class="pp-zoom-tooltip-row muted">—</div>`
-          : values.map((entry) => html`
-              <div class="pp-zoom-tooltip-row">
-                <span class="pp-zoom-tooltip-swatch" style=${styleMap({ background: entry.resolvedColor })}></span>
-                <span class="pp-zoom-tooltip-label">${entry.label}</span>
-                <span class="pp-zoom-tooltip-value">${_formatHoverValue(entry.value, entry.rawUnit)}</span>
-              </div>
-            `)}
+        <div class="pp-zoom-tooltip-row">
+          <span class="pp-zoom-tooltip-swatch" style=${styleMap({ background: this._focused.color })}></span>
+          <span class="pp-zoom-tooltip-label">${this._focused.label}</span>
+          <span class="pp-zoom-tooltip-value">${_formatHoverValue(this._hover.value, this._focused.unit)}</span>
+        </div>
       </div>
     `;
   }
 
+  private _areaCanvasRect(): DOMRect {
+    const c = this.renderRoot.querySelector<HTMLCanvasElement>(".pp-zoom-area");
+    return c?.getBoundingClientRect() ?? new DOMRect(0, 0, 1, 1);
+  }
+
   // ------------------------------------------------------------
-  // Helpers
+  // Helpers (mirror the small node's icon/label semantics)
   // ------------------------------------------------------------
 
-  /** Maps a node key (which can be a sub-block like "home_sub_3") to the
-   *  prefix used for icon/icon_color config keys in the energy card. */
   private _iconConfigKey(nodeKey: string): string {
-    // For battery_percentage / battery_secondary_percentage we want the
-    // matching battery node's icon, not a separate one.
     if (nodeKey === "battery_percentage") return "battery";
     if (nodeKey === "battery_secondary_percentage") return "battery_secondary";
     return nodeKey;
@@ -400,8 +452,7 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
     if (!state) return "—";
     const num = Number(state.state);
     if (!Number.isFinite(num)) return state.state;
-    const unit = focused.unit;
-    return formatValueWithUnitScaling(num, unit, 1, {
+    return formatValueWithUnitScaling(num, focused.unit, 1, {
       enabled: (this.energyConfig as Record<string, unknown>).auto_scale_units === true,
       baseDecimals: 1,
       prefixedDecimals: 1,
@@ -410,7 +461,7 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
   }
 
   // ------------------------------------------------------------
-  // Styles
+  // Styles (mirror energy-card .energy-value visual at a larger scale)
   // ------------------------------------------------------------
 
   static styles: CSSResultGroup = css`
@@ -436,14 +487,14 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
       backdrop-filter: blur(2px);
     }
 
+    /* The shell mirrors the .energy-value styling from the card, scaled up. */
     .pp-zoom-shell {
       position: fixed;
-      background: var(--card-background-color, var(--primary-background-color, #fff));
-      color: var(--primary-text-color);
+      box-sizing: border-box;
       border-radius: 18px;
+      background: var(--ha-card-background, var(--card-background-color, #fff));
+      border: 1px solid rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.1);
       box-shadow: 0 18px 60px rgba(0, 0, 0, 0.32);
-      display: flex;
-      flex-direction: column;
       overflow: hidden;
       transition:
         transform ${OPEN_ANIMATION_MS}ms cubic-bezier(0.2, 0.85, 0.3, 1),
@@ -451,15 +502,35 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
       will-change: transform, opacity;
     }
 
-    .pp-zoom-header {
+    /* Trend canvases fill the entire shell behind the content — same z-order
+       as in the small node. */
+    .pp-zoom-trend,
+    .pp-zoom-line-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .pp-zoom-line-layer { opacity: 0.96; }
+    .pp-zoom-area,
+    .pp-zoom-line {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Top-row content: icon left, value next to it, label right. */
+    .pp-zoom-content {
+      position: relative;
+      z-index: 1;
       display: flex;
       align-items: center;
       gap: 14px;
-      padding: 18px 20px 6px;
+      padding: 18px 22px;
     }
-    .pp-zoom-icon-wrap {
-      width: 56px;
-      height: 56px;
+    .pp-zoom-icon-shape {
+      width: 48px;
+      height: 48px;
       border-radius: 50%;
       display: flex;
       align-items: center;
@@ -468,13 +539,10 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
       flex: none;
     }
     .pp-zoom-icon {
-      --mdc-icon-size: 32px;
+      --mdc-icon-size: 28px;
       color: var(--icon-color, var(--primary-text-color));
-    }
-    .pp-zoom-text {
       display: flex;
-      flex-direction: column;
-      min-width: 0;
+      line-height: 0;
     }
     .pp-zoom-value {
       font-size: 28px;
@@ -482,40 +550,26 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
       line-height: 1.1;
       font-variant-numeric: tabular-nums;
       color: var(--primary-text-color);
-      overflow: hidden;
-      text-overflow: ellipsis;
       white-space: nowrap;
     }
     .pp-zoom-label {
+      margin-left: auto;
       font-size: 14px;
+      font-weight: 500;
       color: var(--secondary-text-color);
-      margin-top: 2px;
+      white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .pp-zoom-chart-wrap {
-      position: relative;
-      flex: 1;
-      min-height: 0;
-      margin: 6px 16px 18px;
-      border-radius: 14px;
-      background: rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.04);
-      overflow: hidden;
-    }
-    .pp-zoom-canvas {
-      width: 100%;
-      height: 100%;
-      display: block;
+      padding-left: 12px;
     }
 
     .pp-zoom-close {
       position: absolute;
-      top: 10px;
-      right: 10px;
-      width: 32px;
-      height: 32px;
+      top: 8px;
+      right: 8px;
+      z-index: 3;
+      width: 28px;
+      height: 28px;
       border-radius: 50%;
       border: none;
       background: rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.06);
@@ -528,9 +582,9 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
     .pp-zoom-close:hover {
       background: rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.12);
     }
-    .pp-zoom-close ha-icon { --mdc-icon-size: 18px; }
+    .pp-zoom-close ha-icon { --mdc-icon-size: 16px; }
 
-    /* Hover overlay (mirrors the detail dialog tooltip styling). */
+    /* Hover overlay: vertical guide + floating tooltip. */
     .pp-zoom-hover-line {
       position: absolute;
       top: 0;
@@ -540,10 +594,11 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
       opacity: 0.55;
       pointer-events: none;
       transform: translateX(-0.5px);
+      z-index: 2;
     }
     .pp-zoom-tooltip {
       position: absolute;
-      top: 8px;
+      top: 12px;
       background: var(--card-background-color, var(--primary-background-color, #fff));
       color: var(--primary-text-color);
       border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.12));
@@ -555,7 +610,7 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
       pointer-events: none;
       max-width: 240px;
       min-width: 140px;
-      z-index: 5;
+      z-index: 3;
     }
     .pp-zoom-tooltip.right { transform: translateX(8px); }
     .pp-zoom-tooltip.left { transform: translateX(-8px); }
@@ -570,7 +625,6 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
       gap: 6px;
       white-space: nowrap;
     }
-    .pp-zoom-tooltip-row.muted { color: var(--secondary-text-color); }
     .pp-zoom-tooltip-swatch {
       width: 8px;
       height: 8px;
@@ -586,6 +640,12 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
       font-variant-numeric: tabular-nums;
       font-weight: 500;
     }
+
+    @media (max-width: 520px) {
+      .pp-zoom-value { font-size: 22px; }
+      .pp-zoom-icon-shape { width: 40px; height: 40px; }
+      .pp-zoom-icon { --mdc-icon-size: 22px; }
+    }
   `;
 }
 
@@ -599,13 +659,13 @@ declare global {
   }
 }
 
-// ---------- Hover formatting (kept local, mirrors the detail dialog) ----------
+// ---------- Hover formatting (kept local) ----------
 
 const _pad2 = (n: number): string => String(n).padStart(2, "0");
 
 const _formatHoverTime = (ts: number): string => {
   const date = new Date(ts);
-  return `${_pad2(date.getDate())}.${_pad2(date.getMonth() + 1)}.${date.getFullYear()} `
+  return `${_pad2(date.getDate())}.${_pad2(date.getMonth() + 1)}. `
     + `${_pad2(date.getHours())}:${_pad2(date.getMinutes())}`;
 };
 
