@@ -120,8 +120,11 @@ interface AxisDomain {
   max: number;
 }
 
-const PADDING_LEFT = 44;
-const PADDING_RIGHT = 44;
+// Padding around the inner plot rect. The left padding has to fit the
+// widest y-axis tick label ("1.5 MW"-class strings up to ~6 chars +
+// unit), otherwise text overflows the canvas and gets clipped.
+const PADDING_LEFT = 64;
+const PADDING_RIGHT = 56;
 const PADDING_TOP = 12;
 const PADDING_BOTTOM = 24;
 const AXIS_TICK_FONT = "11px system-ui, -apple-system, sans-serif";

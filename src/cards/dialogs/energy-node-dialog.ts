@@ -104,6 +104,7 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
   @state() private _loading = false;
   @state() private _loadError?: string;
   @state() private _hover?: { canvasX: number; ts: number };
+  @state() private _openPopover: "entities" | "date" | null = null;
 
   private _renderRaf?: number;
   private _resizeObserver?: ResizeObserver;
@@ -128,17 +129,37 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
     }
     this._selectedIds = new Set(this._defaultSelection().map((s) => s.id));
     this.dialogTitle = this._titleForFocusedNode();
+    document.addEventListener("mousedown", this._onDocumentMouseDown, true);
     void this._fetchHistory();
   }
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
+    document.removeEventListener("mousedown", this._onDocumentMouseDown, true);
     this._resizeObserver?.disconnect();
     this._resizeObserver = undefined;
     if (this._renderRaf !== undefined) {
       cancelAnimationFrame(this._renderRaf);
       this._renderRaf = undefined;
     }
+  }
+
+  /** Closes any open popover when the user clicks outside both its
+   *  trigger and panel. Uses capture phase so we react before the
+   *  trigger's own click handler that would re-open the popover. */
+  private _onDocumentMouseDown = (event: MouseEvent): void => {
+    if (this._openPopover === null) return;
+    const path = event.composedPath();
+    const stillInside = path.some((node) => {
+      if (!(node instanceof HTMLElement)) return false;
+      return node.dataset.ppPopover === this._openPopover
+        || node.dataset.ppPopoverTrigger === this._openPopover;
+    });
+    if (!stillInside) this._openPopover = null;
+  };
+
+  private _togglePopover(name: "entities" | "date"): void {
+    this._openPopover = this._openPopover === name ? null : name;
   }
 
   protected firstUpdated(): void {
@@ -478,13 +499,9 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
   private _onPresetClick(presetId: string): void {
     this._presetId = presetId;
     this._useCustomRange = false;
+    this._openPopover = null;
     void this._fetchHistory();
   }
-
-  private _onCustomRangeToggle = (): void => {
-    this._useCustomRange = !this._useCustomRange;
-    if (this._useCustomRange) void this._fetchHistory();
-  };
 
   private _onCustomStartChange = (e: Event): void => {
     this._customStartIso = (e.target as HTMLInputElement).value;
@@ -558,6 +575,7 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
       <div class="pp-toolbar">
         ${this._renderModeSwitch()}
         ${this._renderRangeBar()}
+        ${this._mode !== "single" ? this._renderEntityTrigger() : nothing}
       </div>
       <div
         class="pp-chart-wrap"
@@ -569,7 +587,6 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
         ${this._loading ? html`<div class="pp-chart-overlay">Lade…</div>` : nothing}
         ${this._loadError ? html`<div class="pp-chart-overlay error">${this._loadError}</div>` : nothing}
       </div>
-      ${this._renderEntityList()}
     `;
   }
 
@@ -633,6 +650,8 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
   }
 
   private _renderRangeBar(): TemplateResult {
+    const dateOpen = this._openPopover === "date";
+    const dateInvalid = this._customRangeInvalid();
     return html`
       <div class="pp-range-bar">
         ${RANGE_PRESETS.map((p) => html`
@@ -641,88 +660,130 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
             @click=${() => this._onPresetClick(p.id)}
           >${p.label}</button>
         `)}
-        <button
-          class="pp-range-btn ${this._useCustomRange ? "active" : ""}"
-          @click=${this._onCustomRangeToggle}
-          title="Eigener Zeitraum"
-        >
-          <ha-icon icon="mdi:calendar-range"></ha-icon>
-        </button>
-        ${this._useCustomRange
-          ? html`
-              <div class="pp-custom-range ${this._customRangeInvalid() ? "invalid" : ""}">
-                <input
-                  type="datetime-local"
-                  .value=${this._customStartIso}
-                  @change=${this._onCustomStartChange}
-                />
-                <span>–</span>
-                <input
-                  type="datetime-local"
-                  .value=${this._customEndIso}
-                  @change=${this._onCustomEndChange}
-                />
-                ${this._customRangeInvalid()
-                  ? html`<span class="pp-range-err" title="Bitte gültigen Zeitraum wählen (Start vor Ende).">!</span>`
-                  : nothing}
-              </div>
-            `
+        <div class="pp-popover-anchor">
+          <button
+            class="pp-range-btn ${this._useCustomRange ? "active" : ""} ${dateInvalid ? "invalid" : ""}"
+            data-pp-popover-trigger="date"
+            @click=${() => this._onDateTriggerClick()}
+            title="Eigener Zeitraum"
+          >
+            <ha-icon icon="mdi:calendar-range"></ha-icon>
+          </button>
+          ${dateOpen ? this._renderDatePopover() : nothing}
+        </div>
+      </div>
+    `;
+  }
+
+  private _renderDatePopover(): TemplateResult {
+    const invalid = this._customRangeInvalid();
+    return html`
+      <div class="pp-popover" data-pp-popover="date">
+        <div class="pp-popover-title">Eigener Zeitraum</div>
+        <label class="pp-popover-field">
+          <span>Von</span>
+          <input
+            type="datetime-local"
+            class=${invalid ? "invalid" : ""}
+            .value=${this._customStartIso}
+            @change=${this._onCustomStartChange}
+          />
+        </label>
+        <label class="pp-popover-field">
+          <span>Bis</span>
+          <input
+            type="datetime-local"
+            class=${invalid ? "invalid" : ""}
+            .value=${this._customEndIso}
+            @change=${this._onCustomEndChange}
+          />
+        </label>
+        ${invalid
+          ? html`<div class="pp-popover-err">Start muss vor Ende liegen.</div>`
           : nothing}
       </div>
     `;
   }
 
-  private _renderEntityList(): TemplateResult {
-    if (this._mode === "single") {
-      return html`
-        <div class="pp-entity-hint">
-          Im Einzel-Modus wird nur der angeklickte Node (<strong>${this.dialogTitle}</strong>) angezeigt.
-        </div>
-      `;
-    }
+  private _renderEntityTrigger(): TemplateResult {
+    const open = this._openPopover === "entities";
+    const total = this._allSeries.length;
+    const selected = this._selectedIds.size;
+    return html`
+      <div class="pp-popover-anchor pp-entity-trigger-wrap">
+        <button
+          class="pp-range-btn ${open ? "active" : ""}"
+          data-pp-popover-trigger="entities"
+          @click=${() => this._togglePopover("entities")}
+          title="Entitäten auswählen"
+        >
+          <ha-icon icon="mdi:format-list-checkbox"></ha-icon>
+          <span class="pp-entity-trigger-count">${selected}/${total}</span>
+        </button>
+        ${open ? this._renderEntityPopover() : nothing}
+      </div>
+    `;
+  }
 
+  private _renderEntityPopover(): TemplateResult {
     const grouped = this._groupSeriesByCategory();
     const stackedExcludes = this._mode === "stacked-percent";
 
     return html`
-      <div class="pp-entity-list">
-        <div class="pp-entity-list-header">
-          <strong>Entitäten</strong>
+      <div class="pp-popover pp-entity-popover" data-pp-popover="entities">
+        <div class="pp-popover-title">
+          <span>Entitäten</span>
           <div class="pp-entity-quick">
             <button class="pp-link" @click=${() => this._onSelectFocused()}>Nur fokussiert</button>
             <button class="pp-link" @click=${() => this._onSelectAll()}>Alle</button>
           </div>
         </div>
         ${stackedExcludes
-          ? html`<div class="pp-entity-note">Hinweis: Prozent-Entitäten sind in der Stacked-Ansicht ausgeschlossen.</div>`
+          ? html`<div class="pp-popover-hint">Prozent-Entitäten sind in der Stacked-Ansicht ausgeschlossen.</div>`
           : nothing}
-        ${grouped.map((group) => html`
-          <div class="pp-entity-group">
-            <div class="pp-entity-group-title">${group.title}</div>
-            ${group.items.map((item) => {
-              const disabled = stackedExcludes && item.isPercentage;
-              const checked = this._selectedIds.has(item.id) && !disabled;
-              return html`
-                <label
-                  class="pp-entity-row ${disabled ? "disabled" : ""}"
-                  title=${item.entityId}
-                >
-                  <input
-                    type="checkbox"
-                    .checked=${checked}
-                    ?disabled=${disabled}
-                    @change=${() => this._onToggleSeries(item.id)}
-                  />
-                  <span class="pp-entity-swatch" style=${styleMap({ background: item.color })}></span>
-                  <span class="pp-entity-label">${item.label}</span>
-                  <span class="pp-entity-unit">${item.unit}</span>
-                </label>
-              `;
-            })}
-          </div>
-        `)}
+        <div class="pp-entity-scroll">
+          ${grouped.map((group) => html`
+            <div class="pp-entity-group">
+              <div class="pp-entity-group-title">${group.title}</div>
+              ${group.items.map((item) => {
+                const disabled = stackedExcludes && item.isPercentage;
+                const checked = this._selectedIds.has(item.id) && !disabled;
+                return html`
+                  <label
+                    class="pp-entity-row ${disabled ? "disabled" : ""}"
+                    title=${item.entityId}
+                  >
+                    <input
+                      type="checkbox"
+                      .checked=${checked}
+                      ?disabled=${disabled}
+                      @change=${() => this._onToggleSeries(item.id)}
+                    />
+                    <span class="pp-entity-swatch" style=${styleMap({ background: item.color })}></span>
+                    <span class="pp-entity-label">${item.label}</span>
+                    <span class="pp-entity-unit">${item.unit}</span>
+                  </label>
+                `;
+              })}
+            </div>
+          `)}
+        </div>
       </div>
     `;
+  }
+
+  private _onDateTriggerClick(): void {
+    // First click: enable custom range (and open the popover so the
+    // user lands on the date inputs immediately).
+    if (!this._useCustomRange) {
+      this._useCustomRange = true;
+      this._openPopover = "date";
+      void this._fetchHistory();
+      return;
+    }
+    // If custom is already on, the trigger toggles the popover only —
+    // tapping a preset is the documented way to leave custom mode.
+    this._togglePopover("date");
   }
 
   private _groupSeriesByCategory(): Array<{ title: string; items: NodeSeriesDescriptor[] }> {
@@ -806,30 +867,92 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
       }
       .pp-range-btn ha-icon { --mdc-icon-size: 16px; }
 
-      .pp-custom-range {
-        display: inline-flex;
-        gap: 4px;
-        align-items: center;
-        margin-left: 8px;
-        font-size: 12px;
-        color: var(--primary-text-color);
+      .pp-range-btn.invalid {
+        color: var(--error-color, #c62828);
       }
-      .pp-custom-range input {
-        font: inherit;
+
+      /* ----- Popovers (entity list, date picker) ----- */
+      .pp-popover-anchor {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+      }
+      .pp-popover {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        min-width: 240px;
+        background: var(--card-background-color, var(--primary-background-color, #fff));
+        color: var(--primary-text-color);
+        border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.12));
+        border-radius: 10px;
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
+        padding: 12px;
+        z-index: 20;
+        animation: pp-pop-fade 0.12s ease;
+      }
+      @keyframes pp-pop-fade {
+        from { opacity: 0; transform: translateY(-4px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .pp-popover-title {
         font-size: 12px;
-        padding: 4px 6px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        color: var(--secondary-text-color);
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .pp-popover-title > span { flex: 1; }
+      .pp-popover-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        font-size: 12px;
+        margin-bottom: 8px;
+      }
+      .pp-popover-field span {
+        color: var(--secondary-text-color);
+        font-size: 11px;
+      }
+      .pp-popover-field input {
+        font: inherit;
+        font-size: 13px;
+        padding: 6px 8px;
         border-radius: 6px;
         border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.12));
         background: var(--secondary-background-color, #fafafa);
         color: var(--primary-text-color);
       }
-      .pp-custom-range.invalid input {
+      .pp-popover-field input.invalid {
         border-color: var(--error-color, #c62828);
       }
-      .pp-range-err {
-        color: var(--error-color, #c62828);
-        font-weight: 700;
-        cursor: help;
+      .pp-popover-hint,
+      .pp-popover-err {
+        font-size: 11px;
+        margin-top: 4px;
+      }
+      .pp-popover-hint { color: var(--secondary-text-color); }
+      .pp-popover-err { color: var(--error-color, #c62828); }
+
+      .pp-entity-popover {
+        min-width: 280px;
+        max-width: 360px;
+      }
+      .pp-entity-trigger-wrap { margin-left: auto; }
+      .pp-entity-trigger-count {
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        margin-left: 2px;
+      }
+      .pp-entity-scroll {
+        max-height: min(50vh, 360px);
+        overflow-y: auto;
+        margin: 0 -4px;
+        padding: 0 4px;
       }
 
       .pp-chart-wrap {
@@ -919,34 +1042,19 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
         font-weight: 500;
       }
 
-      .pp-entity-list {
-        margin-top: 4px;
-        font-size: 13px;
-      }
-      .pp-entity-list-header {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        margin-bottom: 8px;
-      }
-      .pp-entity-list-header strong { font-size: 14px; flex: 1; }
       .pp-entity-quick { display: inline-flex; gap: 6px; }
       .pp-link {
         font: inherit;
-        font-size: 12px;
+        font-size: 11px;
         background: transparent;
         border: none;
         color: var(--primary-color, #03a9f4);
         cursor: pointer;
         padding: 2px 4px;
+        text-transform: none;
+        letter-spacing: 0;
       }
       .pp-link:hover { text-decoration: underline; }
-
-      .pp-entity-note {
-        margin-bottom: 8px;
-        font-size: 11px;
-        color: var(--secondary-text-color);
-      }
 
       .pp-entity-group {
         margin-bottom: 10px;
@@ -989,12 +1097,6 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
         color: var(--secondary-text-color);
         font-size: 12px;
         flex: none;
-      }
-
-      .pp-entity-hint {
-        font-size: 12px;
-        color: var(--secondary-text-color);
-        padding: 8px 4px;
       }
 
       @media (max-width: 700px) {
