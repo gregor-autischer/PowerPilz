@@ -463,16 +463,26 @@ const drawYAxis = (
   decimals: number | undefined,
   tickColor: string
 ): void => {
-  const ticks = niceTickValues(domain.min, domain.max, tickCount);
   const range = Math.max(1e-9, domain.max - domain.min);
+  // Always pin labels at the domain endpoints (the user wants to see
+  // the axis bounds — e.g. 0 % and 100 %), then fill in nice
+  // intermediate ticks. Drop intermediates that visually collide with
+  // the endpoints so labels never overlap.
+  const collisionDistance = range * 0.07;
+  const intermediates = niceTickValues(domain.min, domain.max, tickCount).filter(
+    (tick) =>
+      tick > domain.min + collisionDistance
+      && tick < domain.max - collisionDistance
+  );
+  const finalTicks = [domain.min, ...intermediates, domain.max];
+
   ctx.save();
   ctx.font = AXIS_TICK_FONT;
   ctx.fillStyle = tickColor;
   ctx.textBaseline = "middle";
   ctx.textAlign = side === "left" ? "right" : "left";
 
-  for (const tick of ticks) {
-    if (tick < domain.min - 1e-9 || tick > domain.max + 1e-9) continue;
+  for (const tick of finalTicks) {
     const norm = (tick - domain.min) / range;
     const y = innerTop + (1 - norm) * innerHeight;
     const labelX = side === "left" ? x - 6 : x + 6;
@@ -497,15 +507,28 @@ const drawXAxis = (
   innerWidth: number,
   tickColor: string
 ): void => {
-  const ticks = pickTimeTicks(config.startMs, config.endMs);
   const range = Math.max(1, config.endMs - config.startMs);
+  // Pin the start and end timestamps as labelled ticks, then keep the
+  // auto-generated nice ticks that don't visually collide with them.
+  const collisionMs = range * 0.07;
+  const formatter = pickTimeFormatter(range);
+  const intermediates = pickTimeTicks(config.startMs, config.endMs).filter(
+    (tick) =>
+      tick.ms > config.startMs + collisionMs
+      && tick.ms < config.endMs - collisionMs
+  );
+  const finalTicks: Array<{ ms: number; label: string; align: CanvasTextAlign }> = [
+    { ms: config.startMs, label: formatter(new Date(config.startMs)), align: "left" },
+    ...intermediates.map((t) => ({ ms: t.ms, label: t.label, align: "center" as CanvasTextAlign })),
+    { ms: config.endMs, label: formatter(new Date(config.endMs)), align: "right" }
+  ];
+
   ctx.save();
   ctx.font = AXIS_TICK_FONT;
   ctx.fillStyle = tickColor;
   ctx.textBaseline = "top";
-  ctx.textAlign = "center";
 
-  for (const tick of ticks) {
+  for (const tick of finalTicks) {
     const tNorm = (tick.ms - config.startMs) / range;
     if (tNorm < 0 || tNorm > 1) continue;
     const x = innerLeft + tNorm * innerWidth;
@@ -515,6 +538,7 @@ const drawXAxis = (
     ctx.moveTo(x + 0.5, innerBottom - 4);
     ctx.lineTo(x + 0.5, innerBottom);
     ctx.stroke();
+    ctx.textAlign = tick.align;
     ctx.fillText(tick.label, x, innerBottom + 4);
   }
   ctx.restore();
@@ -525,31 +549,29 @@ interface TimeTick {
   label: string;
 }
 
+const HOUR_MS = 3600 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+
+const pickTimeFormatter = (rangeMs: number): (date: Date) => string => {
+  if (rangeMs <= 6 * HOUR_MS) return (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  if (rangeMs <= 2 * DAY_MS) return (d) => `${pad(d.getHours())}:00`;
+  if (rangeMs <= 200 * DAY_MS) return (d) => `${pad(d.getDate())}.${pad(d.getMonth() + 1)}`;
+  return (d) => `${pad(d.getMonth() + 1)}/${String(d.getFullYear()).slice(2)}`;
+};
+
+const pickTimeStep = (rangeMs: number): number => {
+  if (rangeMs <= 6 * HOUR_MS) return HOUR_MS;
+  if (rangeMs <= 2 * DAY_MS) return 6 * HOUR_MS;
+  if (rangeMs <= 14 * DAY_MS) return DAY_MS;
+  if (rangeMs <= 90 * DAY_MS) return 7 * DAY_MS;
+  if (rangeMs <= 200 * DAY_MS) return 14 * DAY_MS;
+  return 30 * DAY_MS;
+};
+
 const pickTimeTicks = (startMs: number, endMs: number): TimeTick[] => {
   const range = endMs - startMs;
-  const HOUR = 3600 * 1000;
-  const DAY = 24 * HOUR;
-  let stepMs: number;
-  let formatter: (date: Date) => string;
-  if (range <= 6 * HOUR) {
-    stepMs = HOUR;
-    formatter = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  } else if (range <= 2 * DAY) {
-    stepMs = 6 * HOUR;
-    formatter = (d) => `${pad(d.getHours())}:00`;
-  } else if (range <= 14 * DAY) {
-    stepMs = DAY;
-    formatter = (d) => `${pad(d.getDate())}.${pad(d.getMonth() + 1)}`;
-  } else if (range <= 90 * DAY) {
-    stepMs = 7 * DAY;
-    formatter = (d) => `${pad(d.getDate())}.${pad(d.getMonth() + 1)}`;
-  } else if (range <= 200 * DAY) {
-    stepMs = 14 * DAY;
-    formatter = (d) => `${pad(d.getDate())}.${pad(d.getMonth() + 1)}`;
-  } else {
-    stepMs = 30 * DAY;
-    formatter = (d) => `${pad(d.getMonth() + 1)}/${String(d.getFullYear()).slice(2)}`;
-  }
+  const stepMs = pickTimeStep(range);
+  const formatter = pickTimeFormatter(range);
 
   const first = Math.ceil(startMs / stepMs) * stepMs;
   const ticks: TimeTick[] = [];
