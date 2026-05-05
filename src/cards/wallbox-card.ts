@@ -339,11 +339,17 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
     const translationKey = `wallbox.status_${normalized}`;
     const translated = tr(lang, translationKey);
     if (translated !== translationKey) return translated;
+    // Capitalize the first letter of every space-separated word. We can't
+    // use /\b\w/g here because JavaScript's \w only matches ASCII, so a
+    // German "lädt" would incorrectly capitalize the "d" right after the
+    // non-ASCII "ä" (rendering as "LäDt").
     return status
       .replace(/[_-]+/g, " ")
       .replace(/\s+/g, " ")
       .trim()
-      .replace(/\b\w/g, (char) => char.toUpperCase());
+      .split(" ")
+      .map((word) => (word ? word.charAt(0).toLocaleUpperCase() + word.slice(1) : word))
+      .join(" ");
   }
 
   private formatPower(value: number | null, unit: string, decimals: number): string {
