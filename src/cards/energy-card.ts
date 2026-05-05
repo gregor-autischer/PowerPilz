@@ -25,6 +25,11 @@ import {
   resolveComparableUnitContext
 } from "../utils/unit-scaling";
 import { bindActionHandler, type ActionHandlerCleanup } from "../utils/action-handler";
+import {
+  prepareCanvas,
+  resolveCssColor as resolveCanvasCssColor,
+  withAlpha as withAlphaPrim
+} from "../utils/chart-primitives";
 import { openEnergyNodeDialog } from "./dialogs/energy-node-dialog";
 import "./editors/energy-card-editor";
 
@@ -274,19 +279,11 @@ interface PowerPilzEnergyCardConfig extends LovelaceCardConfig {
   battery_secondary_hold_action?: ActionConfig;
   battery_secondary_double_tap_action?: ActionConfig;
   // Sub-block per-action config is read dynamically — see
-  // `nodeActionConfig()`. Up to 4 solar, 2 grid, 2 grid_secondary, 8 home.
-  [k: `solar_sub_${number}_tap_action`]: ActionConfig | undefined;
-  [k2: `solar_sub_${number}_hold_action`]: ActionConfig | undefined;
-  [k3: `solar_sub_${number}_double_tap_action`]: ActionConfig | undefined;
-  [k4: `home_sub_${number}_tap_action`]: ActionConfig | undefined;
-  [k5: `home_sub_${number}_hold_action`]: ActionConfig | undefined;
-  [k6: `home_sub_${number}_double_tap_action`]: ActionConfig | undefined;
-  [k7: `grid_sub_${number}_tap_action`]: ActionConfig | undefined;
-  [k8: `grid_sub_${number}_hold_action`]: ActionConfig | undefined;
-  [k9: `grid_sub_${number}_double_tap_action`]: ActionConfig | undefined;
-  [k10: `grid_secondary_sub_${number}_tap_action`]: ActionConfig | undefined;
-  [k11: `grid_secondary_sub_${number}_hold_action`]: ActionConfig | undefined;
-  [k12: `grid_secondary_sub_${number}_double_tap_action`]: ActionConfig | undefined;
+  // `nodeActionConfig()`. Keys follow the pattern
+  // `${prefix}_sub_${index}_(tap|hold|double_tap)_action` for prefix in
+  // {solar, home, grid, grid_secondary} with up to 4 / 8 / 2 / 2 slots.
+  // A single template-literal index signature covers all of them.
+  [subActionKey: `${"solar" | "home" | "grid" | "grid_secondary"}_sub_${number}_${"tap" | "hold" | "double_tap"}_action`]: ActionConfig | undefined;
 }
 
 @customElement("power-pilz-energy-card")
@@ -383,7 +380,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       { currentValue: number | null; unit: string; color: string; threshold: number | null; thresholdColor: string }
     >
   > = {};
-  private _canvasColorContext?: CanvasRenderingContext2D | null;
+  private _canvasColorContextCache: { ctx?: CanvasRenderingContext2D | null } = {};
 
   public setConfig(config: PowerPilzEnergyCardConfig): void {
     const homeEntity = config.home_entity ?? config.consumption_entity ?? "sensor.dev_home_power";
@@ -2378,28 +2375,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
   private prepareTrendCanvas(
     canvas: HTMLCanvasElement
   ): { ctx: CanvasRenderingContext2D; width: number; height: number } | null {
-    const ctx = canvas.getContext("2d");
-    if (!ctx) {
-      return null;
-    }
-
-    const rect = canvas.getBoundingClientRect();
-    const width = Math.max(1, Math.round(rect.width));
-    const height = Math.max(1, Math.round(rect.height));
-    const dpr = Math.max(1, window.devicePixelRatio || 1);
-    const pixelWidth = Math.max(1, Math.round(width * dpr));
-    const pixelHeight = Math.max(1, Math.round(height * dpr));
-
-    if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
-      canvas.width = pixelWidth;
-      canvas.height = pixelHeight;
-    }
-
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-    return { ctx, width, height };
+    return prepareCanvas(canvas);
   }
 
   private drawTrendArea(
@@ -2549,62 +2525,11 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
   }
 
   private resolveCanvasColor(color: string): string {
-    const probe = document.createElement("span");
-    probe.style.position = "absolute";
-    probe.style.opacity = "0";
-    probe.style.pointerEvents = "none";
-    probe.style.color = color;
-    this.renderRoot.appendChild(probe);
-    const resolved = getComputedStyle(probe).color;
-    probe.remove();
-    return resolved || "rgb(158, 158, 158)";
+    return resolveCanvasCssColor(this.renderRoot as ParentNode & Element, color);
   }
 
   private withAlpha(color: string, alpha: number): string {
-    const channels = this.parseColorChannels(color);
-    if (!channels) {
-      return color;
-    }
-
-    const clamped = Math.max(0, Math.min(1, alpha));
-    return `rgba(${channels[0]}, ${channels[1]}, ${channels[2]}, ${clamped})`;
-  }
-
-  private parseColorChannels(color: string): [number, number, number] | null {
-    const candidate = color.trim();
-    const rgbMatch = candidate.match(/^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i);
-    if (rgbMatch) {
-      const channels = rgbMatch
-        .slice(1, 4)
-        .map((value) => Math.max(0, Math.min(255, Math.round(Number(value)))));
-      if (channels.every((value) => Number.isFinite(value))) {
-        return [channels[0], channels[1], channels[2]];
-      }
-    }
-
-    if (!this._canvasColorContext) {
-      this._canvasColorContext = document.createElement("canvas").getContext("2d");
-    }
-    const ctx = this._canvasColorContext;
-    if (!ctx) {
-      return null;
-    }
-    ctx.fillStyle = "#000000";
-    ctx.fillStyle = candidate;
-    const normalized = ctx.fillStyle;
-
-    const hex = typeof normalized === "string" ? normalized.trim() : "";
-    const hexMatch = hex.match(/^#([a-f\d]{6})$/i);
-    if (!hexMatch) {
-      return null;
-    }
-
-    const value = hexMatch[1];
-    return [
-      parseInt(value.slice(0, 2), 16),
-      parseInt(value.slice(2, 4), 16),
-      parseInt(value.slice(4, 6), 16)
-    ];
+    return withAlphaPrim(color, alpha, this._canvasColorContextCache);
   }
 
   public connectedCallback(): void {

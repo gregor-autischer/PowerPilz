@@ -345,6 +345,15 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
     return { startMs, endMs };
   }
 
+  /** True when the user has the custom range toggle on but their start
+   *  / end inputs are not a valid window (start ≥ end or unparseable). */
+  private _customRangeInvalid(): boolean {
+    if (!this._useCustomRange) return false;
+    const startMs = _parseLocalIso(this._customStartIso);
+    const endMs = _parseLocalIso(this._customEndIso);
+    return startMs === null || endMs === null || endMs <= startMs;
+  }
+
   // ------------------------------------------------------------
   // History fetching
   // ------------------------------------------------------------
@@ -641,7 +650,7 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
         </button>
         ${this._useCustomRange
           ? html`
-              <div class="pp-custom-range">
+              <div class="pp-custom-range ${this._customRangeInvalid() ? "invalid" : ""}">
                 <input
                   type="datetime-local"
                   .value=${this._customStartIso}
@@ -653,6 +662,9 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
                   .value=${this._customEndIso}
                   @change=${this._onCustomEndChange}
                 />
+                ${this._customRangeInvalid()
+                  ? html`<span class="pp-range-err" title="Bitte gültigen Zeitraum wählen (Start vor Ende).">!</span>`
+                  : nothing}
               </div>
             `
           : nothing}
@@ -810,6 +822,14 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
         border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.12));
         background: var(--secondary-background-color, #fafafa);
         color: var(--primary-text-color);
+      }
+      .pp-custom-range.invalid input {
+        border-color: var(--error-color, #c62828);
+      }
+      .pp-range-err {
+        color: var(--error-color, #c62828);
+        font-weight: 700;
+        cursor: help;
       }
 
       .pp-chart-wrap {
