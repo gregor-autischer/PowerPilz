@@ -94,7 +94,9 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
 
   @state() private _phase: "opening" | "open" | "closing" = "opening";
   @state() private _historyByEntity: Map<string, HistoryTrendPoint[]> = new Map();
-  @state() private _hover?: { canvasX: number; canvasY: number; ts: number; value: number };
+  /** Hovered point in LOGICAL canvas coordinates (same space as
+   *  `_lastCanvasPoints`). Converted to screen pixels at render time. */
+  @state() private _hover?: { logicalX: number; logicalY: number; ts: number; value: number };
 
   private _series: NodeSeriesDescriptor[] = [];
   private _focused: NodeSeriesDescriptor | undefined;
@@ -300,7 +302,6 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
       if (this._hover) this._hover = undefined;
       return;
     }
-    // Map back from rect-space to logical canvas-space for the lookup.
     const logicalX = (localX / rect.width) * this._lastCanvasSize.width;
     const nearest = this._nearestPoint(logicalX);
     if (!nearest) {
@@ -308,8 +309,8 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
       return;
     }
     this._hover = {
-      canvasX: localX,
-      canvasY: (nearest.y / this._lastCanvasSize.height) * rect.height,
+      logicalX: nearest.x,
+      logicalY: nearest.y,
       ts: nearest.ts,
       value: nearest.value
     };
@@ -417,42 +418,46 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
               .icon=${iconName}
               style=${styleMap(iconStyle)}
             ></ha-icon>
-            <div class="pp-zoom-value">${liveValue}</div>
+            <div class="pp-zoom-value">${this._displayValueText(liveValue)}</div>
             <div class="pp-zoom-label">${focused.label}</div>
           </div>
-          ${this._renderHoverOverlay()}
+          ${this._renderHoverDot()}
         </div>
       </div>
     `;
   }
 
-  private _renderHoverOverlay(): TemplateResult | typeof nothing {
+  /** Renders just a small dot at the hovered data point. The value is
+   *  shown via `_displayValueText` in the header (graph-card UX). */
+  private _renderHoverDot(): TemplateResult | typeof nothing {
     if (!this._hover || !this._focused) return nothing;
+    const canvas = this.renderRoot.querySelector<HTMLCanvasElement>(".pp-zoom-area");
+    if (!canvas) return nothing;
     const { width, height } = this._lastCanvasSize;
     if (width <= 0 || height <= 0) return nothing;
-    const xPct = (this._hover.canvasX / this._areaCanvasRect().width) * 100;
-    const showOnRight = xPct < 60;
+    const screenW = canvas.offsetWidth || canvas.getBoundingClientRect().width;
+    const screenH = canvas.offsetHeight || canvas.getBoundingClientRect().height;
+    const xPx = canvas.offsetLeft + (this._hover.logicalX / width) * screenW;
+    const yPx = canvas.offsetTop + (this._hover.logicalY / height) * screenH;
     return html`
       <div
-        class="pp-zoom-hover-line"
-        style=${styleMap({ left: `${xPct}%` })}
+        class="pp-zoom-hover-dot"
         aria-hidden="true"
-      ></div>
-      <div
-        class="pp-zoom-tooltip ${showOnRight ? "right" : "left"}"
         style=${styleMap({
-          left: showOnRight ? `${xPct}%` : "auto",
-          right: showOnRight ? "auto" : `${100 - xPct}%`
+          left: `${xPx}px`,
+          top: `${yPx}px`,
+          background: this._focused.color
         })}
-      >
-        <div class="pp-zoom-tooltip-time">${_formatHoverTime(this._hover.ts)}</div>
-        <div class="pp-zoom-tooltip-row">
-          <span class="pp-zoom-tooltip-swatch" style=${styleMap({ background: this._focused.color })}></span>
-          <span class="pp-zoom-tooltip-label">${this._focused.label}</span>
-          <span class="pp-zoom-tooltip-value">${_formatHoverValue(this._hover.value, this._focused.unit)}</span>
-        </div>
-      </div>
+      ></div>
     `;
+  }
+
+  /** Header value text: live state when not hovering, hovered value
+   *  + timestamp during hover. Mirrors the graph card's header swap. */
+  private _displayValueText(liveValue: string): string {
+    if (!this._hover || !this._focused) return liveValue;
+    const formatted = _formatHoverValue(this._hover.value, this._focused.unit);
+    return `${formatted} · ${_formatHoverTime(this._hover.ts)}`;
   }
 
   private _areaCanvasRect(): DOMRect {
@@ -572,29 +577,25 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
       display: block;
     }
 
-    /* Mirror the energy-card's .energy-content stack: icon, value,
-       label centered both axes. Sizes are pulled from the same vars
-       the small node uses, so a zoomed view's content matches the
-       small node pixel-for-pixel. */
+    /* Header bar at the top: icon left, value middle, label right.
+       Same font and icon sizes as the small node's content so the
+       text feels identical, just laid out horizontally to take
+       advantage of the wider zoomed shell. The trend canvases
+       continue to fill the entire shell behind this header. */
     .pp-zoom-content {
       position: relative;
       z-index: 1;
       display: flex;
-      flex-direction: column;
       align-items: center;
-      justify-content: center;
-      width: 100%;
-      height: 100%;
-      padding: 8px 10px;
+      gap: 10px;
+      padding: 10px 14px;
       box-sizing: border-box;
-      text-align: center;
-      pointer-events: none; /* let pointermove pass to the shell */
+      pointer-events: none; /* clicks fall through to backdrop catcher */
     }
     .pp-zoom-icon {
       --mdc-icon-size: calc(var(--icon-size) * 0.667);
-      margin-bottom: 4px;
       color: var(--icon-color);
-      flex: 0 0 auto;
+      flex: none;
       display: flex;
       line-height: 0;
     }
@@ -608,7 +609,7 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
       font-variant-numeric: tabular-nums;
     }
     .pp-zoom-label {
-      margin-top: 2px;
+      margin-left: auto;
       font-size: var(--card-secondary-font-size);
       line-height: var(--card-secondary-line-height);
       font-weight: var(--card-secondary-font-weight);
@@ -617,70 +618,21 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      max-width: 100%;
+      padding-left: 8px;
     }
 
-    /* Hover overlay: vertical guide + floating tooltip. */
-    .pp-zoom-hover-line {
+    /* Hover indicator: a small dot at the data point — same look as
+       the graph card's hover-dot. The header value swap (handled in
+       _displayValueText) carries the actual reading. */
+    .pp-zoom-hover-dot {
       position: absolute;
-      top: 0;
-      bottom: 0;
-      width: 1px;
-      background: var(--secondary-text-color, #757575);
-      opacity: 0.55;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 0 2px var(--card-background-color, #fff);
       pointer-events: none;
-      transform: translateX(-0.5px);
       z-index: 2;
-    }
-    .pp-zoom-tooltip {
-      position: absolute;
-      top: 12px;
-      background: var(--card-background-color, var(--primary-background-color, #fff));
-      color: var(--primary-text-color);
-      border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.12));
-      border-radius: 8px;
-      padding: 8px 10px;
-      font-size: 12px;
-      line-height: 1.45;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
-      pointer-events: none;
-      max-width: 240px;
-      min-width: 140px;
-      z-index: 3;
-    }
-    .pp-zoom-tooltip.right { transform: translateX(8px); }
-    .pp-zoom-tooltip.left { transform: translateX(-8px); }
-    .pp-zoom-tooltip-time {
-      font-weight: 600;
-      margin-bottom: 4px;
-      white-space: nowrap;
-    }
-    .pp-zoom-tooltip-row {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      white-space: nowrap;
-    }
-    .pp-zoom-tooltip-swatch {
-      width: 8px;
-      height: 8px;
-      border-radius: 2px;
-      flex: none;
-    }
-    .pp-zoom-tooltip-label {
-      flex: 1;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .pp-zoom-tooltip-value {
-      font-variant-numeric: tabular-nums;
-      font-weight: 500;
-    }
-
-    @media (max-width: 520px) {
-      .pp-zoom-value { font-size: 22px; }
-      .pp-zoom-icon-shape { width: 40px; height: 40px; }
-      .pp-zoom-icon { --mdc-icon-size: 22px; }
     }
   `;
 }

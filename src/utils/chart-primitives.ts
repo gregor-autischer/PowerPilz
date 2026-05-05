@@ -21,6 +21,14 @@ export interface CanvasPoint {
  * Sizes the canvas for the device pixel ratio, clears it, and returns a
  * context already scaled to logical pixels. Returns null when 2D is
  * unavailable.
+ *
+ * Uses `offsetWidth`/`offsetHeight` for the logical size — these are
+ * the layout dimensions of the canvas and are unaffected by CSS
+ * transforms applied to ancestor elements (FLIP zoom animations,
+ * pop-in dialog scaling). `getBoundingClientRect()` would report the
+ * visually scaled rect, leading to a too-small pixel buffer that gets
+ * CSS-stretched once the transform settles — which made trend lines
+ * look pixelated on the first render of the zoom overlay.
  */
 export const prepareCanvas = (canvas: HTMLCanvasElement): PreparedCanvas | null => {
   const ctx = canvas.getContext("2d");
@@ -28,9 +36,10 @@ export const prepareCanvas = (canvas: HTMLCanvasElement): PreparedCanvas | null 
     return null;
   }
 
-  const rect = canvas.getBoundingClientRect();
-  const width = Math.max(1, Math.round(rect.width));
-  const height = Math.max(1, Math.round(rect.height));
+  const layoutWidth = canvas.offsetWidth || canvas.getBoundingClientRect().width;
+  const layoutHeight = canvas.offsetHeight || canvas.getBoundingClientRect().height;
+  const width = Math.max(1, Math.round(layoutWidth));
+  const height = Math.max(1, Math.round(layoutHeight));
   const dpr = Math.max(1, window.devicePixelRatio || 1);
   const pixelWidth = Math.max(1, Math.round(width * dpr));
   const pixelHeight = Math.max(1, Math.round(height * dpr));
