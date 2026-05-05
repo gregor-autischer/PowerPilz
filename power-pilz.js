@@ -1403,7 +1403,7 @@ const Cn = "important", xs = " !" + Cn, M = vs(class extends ws {
       c(), d(), o !== void 0 && clearTimeout(o), e.removeEventListener("pointerdown", h), e.removeEventListener("pointerup", _), e.removeEventListener("pointercancel", u), e.removeEventListener("pointerleave", u), e.removeEventListener("click", m), e.removeEventListener("contextmenu", C), e.style.touchAction = l;
     }
   };
-}, ye = "0.4.2";
+}, ye = "0.4.3";
 var Gs = Object.defineProperty, Ks = Object.getOwnPropertyDescriptor, Di = (e, t, i, r) => {
   for (var n = r > 1 ? void 0 : r ? Ks(t, i) : t, o = e.length - 1, s; o >= 0; o--)
     (s = e[o]) && (n = (r ? s(t, i, n) : s(n)) || n);
@@ -8521,7 +8521,7 @@ const Na = 0.01, an = "power-pilz-wallbox-mode-menu-portal-style", Gi = class Gi
     if (!t)
       return i ? p(r, "wallbox.status_charging") : p(r, "wallbox.status_idle");
     const o = `wallbox.status_${t.toLowerCase().replace(/[_\s-]+/g, "_")}`, s = p(r, o);
-    return s !== o ? s : t.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim().replace(/\b\w/g, (a) => a.toUpperCase());
+    return s !== o ? s : t.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim().split(" ").map((a) => a && a.charAt(0).toLocaleUpperCase() + a.slice(1)).join(" ");
   }
   formatPower(t, i, r) {
     var o, s, a;
