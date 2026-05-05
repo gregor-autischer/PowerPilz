@@ -1,1 +1,1 @@
-export const POWER_PILZ_VERSION = "0.5.0-dev.4";
+export const POWER_PILZ_VERSION = "0.5.0-dev.5";

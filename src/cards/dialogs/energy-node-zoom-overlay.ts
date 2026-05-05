@@ -35,7 +35,19 @@ import {
   type CanvasPoint
 } from "../../utils/chart-primitives";
 import { mushroomIconStyle } from "../../utils/color";
-import { formatValueWithUnitScaling } from "../../utils/unit-scaling";
+
+const readString = (value: unknown): string | undefined => {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+import {
+  clampUnitDecimals,
+  formatValueWithUnitScaling,
+  parseConvertibleUnit,
+  type UnitFormatOptions
+} from "../../utils/unit-scaling";
+import { readNumber, readUnit } from "../../utils/entity";
 
 const TAG = "power-pilz-energy-node-zoom-overlay";
 const OPEN_ANIMATION_MS = 280;
@@ -118,11 +130,18 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
   connectedCallback(): void {
     super.connectedCallback();
     this._series = collectEnergySeries(this.hass, this.energyConfig);
-    // Zoom view always plots exactly the entity behind the clicked
-    // node — no SOC redirect, no override. That keeps the displayed
-    // value (e.g. "1158 W") and the trend curve consistent and matches
-    // what the small node shows for that node key.
-    this._focused = this._series.find((s) => s.nodeKey === this.focusedNodeKey);
+    // Zoom view plots the entity behind the clicked node, with one
+    // intentional override: a battery node's chart plots the SOC
+    // entity (when configured) so the trend matches the value shown
+    // in the header (battery view shows SOC %, not power).
+    const direct = this._series.find((s) => s.nodeKey === this.focusedNodeKey);
+    if (this.focusedNodeKey === "battery") {
+      this._focused = this._series.find((s) => s.nodeKey === "battery_percentage") ?? direct;
+    } else if (this.focusedNodeKey === "battery_secondary") {
+      this._focused = this._series.find((s) => s.nodeKey === "battery_secondary_percentage") ?? direct;
+    } else {
+      this._focused = direct;
+    }
     document.addEventListener("keydown", this._onKeyDown);
     void this._fetchHistory();
     // Refresh the live value text every 30s.
@@ -387,12 +406,7 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
       opacity: closing ? "0" : "1"
     };
 
-    const config = this.energyConfig as Record<string, unknown>;
-    const focused = this._focused;
-    const iconKey = this._iconConfigKey(focused.nodeKey);
-    const iconName = (config[`${iconKey}_icon`] as string | undefined) ?? this._fallbackIcon(focused.nodeKey);
-    const iconStyle = mushroomIconStyle(config[`${iconKey}_icon_color`] as string | number[] | undefined);
-    const liveValue = this._liveValueText(focused);
+    const view = this._buildView();
 
     return html`
       <div
@@ -400,7 +414,7 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
         @click=${this._onBackdropClick}
       >
         <div
-          class="pp-zoom-shell ${focused.category}"
+          class="pp-zoom-shell ${this._focused.category}"
           style=${styleMap(shellStyle)}
           @click=${(e: MouseEvent) => e.stopPropagation()}
           @pointermove=${this._onPointerMove}
@@ -415,11 +429,11 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
           <div class="pp-zoom-content">
             <ha-icon
               class="pp-zoom-icon"
-              .icon=${iconName}
-              style=${styleMap(iconStyle)}
+              .icon=${view.iconName}
+              style=${styleMap(view.iconStyle)}
             ></ha-icon>
-            <div class="pp-zoom-value">${this._displayValueText(liveValue)}</div>
-            <div class="pp-zoom-label">${focused.label}</div>
+            <div class="pp-zoom-value">${this._displayValueText(view.formattedValue)}</div>
+            <div class="pp-zoom-label">${view.label}</div>
           </div>
           ${this._renderHoverDot()}
         </div>
@@ -453,10 +467,19 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
   }
 
   /** Header value text: live state when not hovering, hovered value
-   *  + timestamp during hover. Mirrors the graph card's header swap. */
+   *  + timestamp during hover. Hover formatting uses the same auto-
+   *  scaling and decimal options the small node would use, so a
+   *  paused-on-trend header reads the same way as the live one. */
   private _displayValueText(liveValue: string): string {
     if (!this._hover || !this._focused) return liveValue;
-    const formatted = _formatHoverValue(this._hover.value, this._focused.unit);
+    const config = this.energyConfig as Record<string, unknown>;
+    const decimals = this._configDecimals(config);
+    const formatted = formatValueWithUnitScaling(
+      this._hover.value,
+      this._focused.unit,
+      decimals,
+      this._unitFormatOptions(config)
+    );
     return `${formatted} · ${_formatHoverTime(this._hover.ts)}`;
   }
 
@@ -480,13 +503,197 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
   }
 
   // ------------------------------------------------------------
-  // Helpers (mirror the small node's icon/label semantics)
+  // View construction — mirrors the small node's render-time logic so
+  // the zoomed shell shows the SAME icon, color, formatted value and
+  // label that the user sees on the energy card. Anything that affects
+  // the small node visually has to be reflected here.
   // ------------------------------------------------------------
 
-  private _iconConfigKey(nodeKey: string): string {
-    if (nodeKey === "battery_percentage") return "battery";
-    if (nodeKey === "battery_secondary_percentage") return "battery_secondary";
-    return nodeKey;
+  private _buildView(): {
+    iconName: string;
+    iconStyle: Record<string, string>;
+    formattedValue: string;
+    label: string;
+  } {
+    const focused = this._focused!;
+    const config = this.energyConfig as Record<string, unknown>;
+    const formatOpts = this._unitFormatOptions(config);
+    const decimals = this._configDecimals(config);
+
+    // Branch on the ORIGINAL clicked node key — `_focused` may have
+    // been swapped to the SOC descriptor for batteries, but the view
+    // logic needs to know it's still a battery node so it picks the
+    // dynamic battery icon and SOC formatting.
+    if (this.focusedNodeKey === "battery" || this.focusedNodeKey === "battery_secondary") {
+      return this._buildBatteryView(this.focusedNodeKey, config, focused.label);
+    }
+    return this._buildPowerView(focused, config, formatOpts, decimals);
+  }
+
+  private _configDecimals(config: Record<string, unknown>): number {
+    const raw = config.decimals;
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+      return Math.min(3, Math.max(0, Math.round(raw)));
+    }
+    return 1;
+  }
+
+  private _unitFormatOptions(config: Record<string, unknown>): UnitFormatOptions {
+    const decimals = this._configDecimals(config);
+    return {
+      enabled: config.auto_scale_units === true,
+      baseDecimals: clampUnitDecimals(config.decimals_base_unit, decimals),
+      prefixedDecimals: clampUnitDecimals(config.decimals_prefixed_unit, decimals),
+      nullWithUnit: true
+    };
+  }
+
+  /** Power/energy nodes — also handles auto-calculated home/solar by
+   *  replaying the descriptor's compute spec on current entity states. */
+  private _buildPowerView(
+    focused: NodeSeriesDescriptor,
+    config: Record<string, unknown>,
+    formatOpts: UnitFormatOptions,
+    decimals: number
+  ): { iconName: string; iconStyle: Record<string, string>; formattedValue: string; label: string } {
+    const liveValue = this._liveValueOf(focused);
+    const formattedValue = formatValueWithUnitScaling(liveValue, focused.unit, decimals, formatOpts);
+
+    const iconName = (config[`${focused.nodeKey}_icon`] as string | undefined) ?? this._fallbackIcon(focused.nodeKey);
+
+    // Grid nodes flip to the export icon color when their live value is
+    // negative AND the user enabled the export-icon-highlight option.
+    let iconColorValue = config[`${focused.nodeKey}_icon_color`];
+    const exportsToGrid = liveValue !== null && Number.isFinite(liveValue) && liveValue < 0;
+    if (focused.nodeKey === "grid"
+        && config.grid_export_icon_highlight === true
+        && exportsToGrid) {
+      iconColorValue = config.grid_export_icon_color ?? "red";
+    } else if (focused.nodeKey === "grid_secondary"
+        && config.grid_secondary_export_icon_highlight === true
+        && exportsToGrid) {
+      iconColorValue = config.grid_secondary_export_icon_color ?? "red";
+    }
+
+    return {
+      iconName,
+      iconStyle: mushroomIconStyle(iconColorValue as string | number[] | undefined),
+      formattedValue,
+      label: focused.label
+    };
+  }
+
+  /** Battery nodes — show the SOC value, the dynamic battery icon
+   *  reflecting both charge direction and SOC level, and the low-alert
+   *  color override when the configured threshold is reached. */
+  private _buildBatteryView(
+    nodeKey: "battery" | "battery_secondary",
+    config: Record<string, unknown>,
+    fallbackLabel: string
+  ): { iconName: string; iconStyle: Record<string, string>; formattedValue: string; label: string } {
+    const pctEntityKey = nodeKey === "battery" ? "battery_percentage_entity" : "battery_secondary_percentage_entity";
+    const powerEntityKey = nodeKey === "battery" ? "battery_entity" : "battery_secondary_entity";
+    const iconKey = `${nodeKey}_icon`;
+    const iconColorKey = `${nodeKey}_icon_color`;
+    const lowAlertKey = `${nodeKey}_low_alert`;
+    const lowThresholdKey = `${nodeKey}_low_threshold`;
+    const lowAlertColorKey = `${nodeKey}_low_alert_color`;
+
+    const pctEntity = readString(config[pctEntityKey]);
+    const powerEntity = readString(config[powerEntityKey]);
+    const powerUnit = powerEntity ? readUnit(this.hass, powerEntity) : undefined;
+    const isPctUnit = typeof powerUnit === "string" && powerUnit.trim() === "%";
+
+    const pctValue = pctEntity ? readNumber(this.hass, pctEntity) : null;
+    const powerValue = powerEntity ? readNumber(this.hass, powerEntity) : null;
+
+    // Resolved SOC (mirrors energy-card.resolveBatteryPercentage).
+    const soc = pctValue !== null
+      ? pctValue
+      : (isPctUnit ? powerValue : null);
+
+    const formattedValue = soc !== null
+      ? `${Math.round(Math.max(0, Math.min(100, soc)))}%`
+      : "—";
+
+    // Charge direction is read from the raw power entity. When the
+    // power "entity" itself reports percentage units, the small node
+    // skips this hint — match that behaviour exactly.
+    const iconName = this._batteryIcon(
+      soc,
+      isPctUnit ? null : powerValue,
+      config[iconKey] as string | undefined
+    );
+
+    // Low-alert color override.
+    const lowEnabled = config[lowAlertKey] === true;
+    const lowThreshold = this._normalizeBatteryThreshold(config[lowThresholdKey]);
+    const isLow = lowEnabled && soc !== null && soc <= lowThreshold;
+    const iconColorValue = isLow
+      ? (config[lowAlertColorKey] ?? "red")
+      : config[iconColorKey];
+
+    const labelText = readString(config[`${nodeKey}_label`]) ?? fallbackLabel;
+
+    return {
+      iconName,
+      iconStyle: mushroomIconStyle(iconColorValue as string | number[] | undefined),
+      formattedValue,
+      label: labelText
+    };
+  }
+
+  /** Mirrors energy-card.batteryIcon. Different MDI variants by SOC
+   *  bucket; charging gets its own icon regardless of level. */
+  private _batteryIcon(
+    percentage: number | null,
+    batteryPower: number | null,
+    fallbackIcon: string | undefined
+  ): string {
+    const EPSILON = 0.01;
+    if (batteryPower !== null && batteryPower > EPSILON) {
+      return "mdi:battery-charging";
+    }
+    if (percentage === null) {
+      return fallbackIcon ?? "mdi:battery-outline";
+    }
+    const clamped = Math.max(0, Math.min(100, percentage));
+    if (clamped < 5) return "mdi:battery-outline";
+    if (clamped >= 95) return "mdi:battery";
+    const step = Math.max(10, Math.min(90, Math.round(clamped / 10) * 10));
+    return `mdi:battery-${step}`;
+  }
+
+  private _normalizeBatteryThreshold(value: unknown): number {
+    if (typeof value !== "number" || !Number.isFinite(value)) return 20;
+    return Math.max(0, Math.min(100, value));
+  }
+
+  /** Live value for a non-battery descriptor. Replays auto-calc on
+   *  current entity states for home/solar when the descriptor was
+   *  built with a compute spec, so the zoom header shows the same
+   *  computed value the small node displays. */
+  private _liveValueOf(focused: NodeSeriesDescriptor): number | null {
+    if (focused.computed) {
+      let canonical = 0;
+      let outputFamily: "power" | "energy" | null = null;
+      for (const depId of focused.computed.dependencies) {
+        const stateVal = readNumber(this.hass, depId);
+        if (stateVal === null) return null;
+        const depUnit = focused.computed.unitsByEntityId[depId] ?? "";
+        const sign = focused.computed.signsByEntityId[depId] ?? 1;
+        const parsed = parseConvertibleUnit(depUnit);
+        const factor = parsed?.factor ?? 1;
+        canonical += sign * stateVal * factor;
+        outputFamily ??= parsed?.family ?? null;
+      }
+      const outputParsed = parseConvertibleUnit(focused.computed.outputUnit);
+      const outputFactor = outputParsed && outputParsed.family === outputFamily
+        ? outputParsed.factor
+        : 1;
+      return outputFactor > 0 ? canonical / outputFactor : canonical;
+    }
+    return readNumber(this.hass, focused.entityId);
   }
 
   private _fallbackIcon(nodeKey: string): string {
@@ -497,19 +704,6 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
     if (nodeKey.startsWith("battery_secondary")) return "mdi:battery-outline";
     if (nodeKey.startsWith("battery")) return "mdi:battery";
     return "mdi:flash";
-  }
-
-  private _liveValueText(focused: NodeSeriesDescriptor): string {
-    const state = this.hass.states[focused.entityId];
-    if (!state) return "—";
-    const num = Number(state.state);
-    if (!Number.isFinite(num)) return state.state;
-    return formatValueWithUnitScaling(num, focused.unit, 1, {
-      enabled: (this.energyConfig as Record<string, unknown>).auto_scale_units === true,
-      baseDecimals: 1,
-      prefixedDecimals: 1,
-      nullWithUnit: true
-    });
   }
 
   // ------------------------------------------------------------
@@ -657,10 +851,3 @@ const _formatHoverTime = (ts: number): string => {
     + `${_pad2(date.getHours())}:${_pad2(date.getMinutes())}`;
 };
 
-const _formatHoverValue = (value: number, unit: string): string => {
-  if (!Number.isFinite(value)) return "—";
-  const abs = Math.abs(value);
-  const decimals = abs >= 100 ? 0 : abs >= 10 ? 1 : 2;
-  const text = value.toFixed(decimals);
-  return unit ? `${text} ${unit}` : text;
-};
