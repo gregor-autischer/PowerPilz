@@ -19,8 +19,13 @@ import {
   type HistoryTrendPoint,
   type TrendDataSource
 } from "../../utils/history";
-import { resolveColor as resolveColorValue } from "../../utils/color";
-import { parseConvertibleUnit } from "../../utils/unit-scaling";
+import {
+  collectEnergySeries,
+  entityIdsForSeries,
+  resolveFocusedSeries,
+  seriesPointsFor,
+  type NodeSeriesDescriptor
+} from "../../utils/energy-series";
 import {
   renderChart,
   type ChartContext,
@@ -50,47 +55,6 @@ const RANGE_PRESETS: RangePreset[] = [
 const DEFAULT_PRESET_ID = "7d";
 
 /** A single entity available for charting in the dialog. */
-/** A computed series rebuilds its points at fetch time from the
- *  histories of dependency entities, mirroring the auto-calc that the
- *  energy card performs at render time. The two supported modes mirror
- *  the card's `home_auto_calculate` and `solar_auto_calculate`. */
-interface ComputedSeriesSpec {
-  mode: "auto_home" | "auto_solar";
-  /** Entity IDs whose histories must be fetched in addition to the
-   *  descriptor's own `entityId` to satisfy the formula. */
-  dependencies: ReadonlyArray<string>;
-  /** Per-dependency unit, used to convert each value to canonical
-   *  (W/Wh) before combining. */
-  unitsByEntityId: Readonly<Record<string, string>>;
-  /** Per-dependency sign multiplier. For auto_home: solar/grid → +1,
-   *  battery/battery_secondary → −1. For auto_solar: all sub-blocks
-   *  contribute with +1. */
-  signsByEntityId: Readonly<Record<string, 1 | -1>>;
-  /** Output unit the descriptor expects (so the result is converted
-   *  back from canonical W/Wh to e.g. kW/kWh). */
-  outputUnit: string;
-}
-
-interface NodeSeriesDescriptor {
-  /** Stable id (the entity_id when present, otherwise the synthesised key). */
-  id: string;
-  /** Logical node key (e.g. "solar", "home_sub_2", "battery_percentage"). */
-  nodeKey: string;
-  entityId: string;
-  label: string;
-  color: string;
-  unit: string;
-  isPercentage: boolean;
-  /** True when this came from a sub-block — used purely for grouping in
-   *  the entity selector UI. */
-  isSubBlock: boolean;
-  /** Display category for grouping (Solar / Grid / Home / Battery). */
-  category: "solar" | "grid" | "grid_secondary" | "home" | "battery" | "battery_secondary" | "other";
-  /** Set when the series is not a direct entity history but a formula
-   *  over other entities' histories. */
-  computed?: ComputedSeriesSpec;
-}
-
 export interface EnergyNodeDialogOptions {
   hass: HomeAssistant;
   config: LovelaceCardConfig;
@@ -150,7 +114,7 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
 
   connectedCallback(): void {
     super.connectedCallback();
-    this._allSeries = this._collectSeries();
+    this._allSeries = collectEnergySeries(this.hass, this.energyConfig);
     if (!this._customStartIso || !this._customEndIso) {
       const now = new Date();
       const start = new Date(now.getTime() - 7 * 24 * 3600 * 1000);
@@ -206,346 +170,23 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
   }
 
   // ------------------------------------------------------------
-  // Series collection from energy-card config
+  // Series resolution helpers (data layer in utils/energy-series)
   // ------------------------------------------------------------
 
-  private _readConfigString(value: unknown): string | undefined {
-    if (typeof value !== "string") return undefined;
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : undefined;
-  }
-
-  private _collectSeries(): NodeSeriesDescriptor[] {
-    const config = this.energyConfig as Record<string, unknown>;
-    const out: NodeSeriesDescriptor[] = [];
-
-    const push = (
-      nodeKey: string,
-      category: NodeSeriesDescriptor["category"],
-      entityKey: string,
-      labelKey: string | undefined,
-      iconColorKey: string | undefined,
-      trendColorKey: string | undefined,
-      isPercentage: boolean,
-      isSubBlock: boolean
-    ): NodeSeriesDescriptor | undefined => {
-      const entityId = this._readConfigString(config[entityKey]);
-      if (!entityId) return undefined;
-      const label = this._readConfigString(labelKey ? config[labelKey] : undefined)
-        ?? this._friendlyName(entityId)
-        ?? entityId;
-      const color = this._resolveSeriesColor(
-        iconColorKey ? config[iconColorKey] : undefined,
-        trendColorKey ? config[trendColorKey] : undefined,
-        category
-      );
-      const unit = isPercentage
-        ? "%"
-        : (this._unit(entityId) ?? "");
-      const descriptor: NodeSeriesDescriptor = {
-        id: entityId,
-        nodeKey,
-        entityId,
-        label,
-        color,
-        unit,
-        isPercentage: isPercentage || unit === "%",
-        isSubBlock,
-        category
-      };
-      out.push(descriptor);
-      return descriptor;
-    };
-
-    let solarDescriptor: NodeSeriesDescriptor | undefined;
-    let homeDescriptor: NodeSeriesDescriptor | undefined;
-
-    if (config.solar_visible !== false) {
-      solarDescriptor = push(
-        "solar", "solar",
-        "solar_entity", "solar_label",
-        "solar_icon_color", "solar_trend_color",
-        false, false
-      );
-    }
-    if (config.grid_visible !== false) {
-      push(
-        "grid", "grid",
-        "grid_entity", "grid_label",
-        "grid_icon_color", "grid_trend_color",
-        false, false
-      );
-      if (config.grid_secondary_visible === true) {
-        push(
-          "grid_secondary", "grid_secondary",
-          "grid_secondary_entity", "grid_secondary_label",
-          "grid_secondary_icon_color", "grid_secondary_trend_color",
-          false, false
-        );
-      }
-    }
-    if (config.home_visible !== false) {
-      homeDescriptor = push(
-        "home", "home",
-        "home_entity", "home_label",
-        "home_icon_color", "home_trend_color",
-        false, false
-      );
-    }
-    if (config.battery_visible !== false) {
-      push(
-        "battery", "battery",
-        "battery_entity", "battery_label",
-        "battery_icon_color", "battery_trend_color",
-        false, false
-      );
-      const batteryPctEntity = this._readConfigString(config.battery_percentage_entity);
-      if (batteryPctEntity) {
-        out.push({
-          id: batteryPctEntity,
-          nodeKey: "battery_percentage",
-          entityId: batteryPctEntity,
-          label: `${this._readConfigString(config.battery_label) ?? "Battery"} %`,
-          color: this._resolveSeriesColor(config.battery_icon_color, undefined, "battery"),
-          unit: "%",
-          isPercentage: true,
-          isSubBlock: false,
-          category: "battery"
-        });
-      }
-      if (config.battery_secondary_visible === true) {
-        push(
-          "battery_secondary", "battery_secondary",
-          "battery_secondary_entity", "battery_secondary_label",
-          "battery_secondary_icon_color", "battery_secondary_trend_color",
-          false, false
-        );
-        const battery2PctEntity = this._readConfigString(config.battery_secondary_percentage_entity);
-        if (battery2PctEntity) {
-          out.push({
-            id: battery2PctEntity,
-            nodeKey: "battery_secondary_percentage",
-            entityId: battery2PctEntity,
-            label: `${this._readConfigString(config.battery_secondary_label) ?? "Battery 2"} %`,
-            color: this._resolveSeriesColor(config.battery_secondary_icon_color, undefined, "battery_secondary"),
-            unit: "%",
-            isPercentage: true,
-            isSubBlock: false,
-            category: "battery_secondary"
-          });
-        }
-      }
-    }
-
-    // Sub-blocks: solar 1..4, grid 1..2, grid_secondary 1..2, home 1..8.
-    const subSpecs: Array<{ prefix: NodeSeriesDescriptor["category"]; count: number; nodePrefix: string }> = [
-      { prefix: "solar", count: 4, nodePrefix: "solar" },
-      { prefix: "grid", count: 2, nodePrefix: "grid" },
-      { prefix: "grid_secondary", count: 2, nodePrefix: "grid_secondary" },
-      { prefix: "home", count: 8, nodePrefix: "home" }
-    ];
-    const solarSubDescriptors: NodeSeriesDescriptor[] = [];
-    for (const spec of subSpecs) {
-      for (let index = 1; index <= spec.count; index += 1) {
-        const slot = `${spec.nodePrefix}_sub_${index}`;
-        const enabled = config[`${slot}_enabled`] === true;
-        if (!enabled) continue;
-        const descriptor = push(
-          slot,
-          spec.prefix,
-          `${slot}_entity`,
-          `${slot}_label`,
-          `${slot}_icon_color`,
-          undefined,
-          false,
-          true
-        );
-        if (descriptor && spec.nodePrefix === "solar"
-            && config[`${slot}_state_mode`] !== true) {
-          solarSubDescriptors.push(descriptor);
-        }
-      }
-    }
-
-    // Wire up auto-calc specs so the dialog mirrors what the energy
-    // card displays at render time. Without this the home/solar trend
-    // would just plot the raw entity values, which are typically a
-    // static fallback (e.g. an input_number).
-    if (homeDescriptor && config.home_auto_calculate === true) {
-      const spec = this._buildAutoHomeSpec(config, homeDescriptor.unit, solarDescriptor);
-      if (spec) homeDescriptor.computed = spec;
-    }
-    if (solarDescriptor && config.solar_auto_calculate === true && solarSubDescriptors.length > 0) {
-      const spec = this._buildAutoSolarSpec(solarDescriptor.unit, solarSubDescriptors);
-      if (spec) solarDescriptor.computed = spec;
-    }
-
-    // De-duplicate by entityId — the same entity can appear under several
-    // logical node keys (e.g. battery + battery_percentage), but for the
-    // chart we want one series per entity.
-    const seen = new Set<string>();
-    return out.filter((descriptor) => {
-      if (seen.has(descriptor.entityId)) return false;
-      seen.add(descriptor.entityId);
-      return true;
-    });
-  }
-
-  private _buildAutoHomeSpec(
-    config: Record<string, unknown>,
-    outputUnit: string,
-    solarDescriptor: NodeSeriesDescriptor | undefined
-  ): ComputedSeriesSpec | undefined {
-    // Mirror energy-card.ts homeComputationDependencies(): only nodes
-    // that are visible and have an entity contribute to the formula.
-    const dependencies: string[] = [];
-    const units: Record<string, string> = {};
-    const signs: Record<string, 1 | -1> = {};
-
-    const include = (entityKey: string, sign: 1 | -1): void => {
-      const id = this._readConfigString(config[entityKey]);
-      if (!id) return;
-      dependencies.push(id);
-      units[id] = this._unit(id) ?? "";
-      signs[id] = sign;
-    };
-
-    if (config.solar_visible !== false) include("solar_entity", 1);
-    if (config.grid_visible !== false) include("grid_entity", 1);
-    if (config.grid_secondary_visible === true) include("grid_secondary_entity", 1);
-    if (config.battery_visible !== false) include("battery_entity", -1);
-    if (config.battery_secondary_visible === true) include("battery_secondary_entity", -1);
-
-    if (dependencies.length === 0) return undefined;
-
-    // If solar itself is also auto-calculated, the dialog needs to
-    // resolve solar to its sub-block sum on the fly. We hoist the
-    // dependencies of solar's auto-calc into the home formula by
-    // replacing the solar entity with the chain of solar sub-block
-    // entities. Mirrors the card behaviour (resolveAutoSolarUnit).
-    if (config.solar_auto_calculate === true && solarDescriptor?.computed?.mode === "auto_solar") {
-      const solarId = solarDescriptor.entityId;
-      const idx = dependencies.indexOf(solarId);
-      if (idx >= 0) {
-        dependencies.splice(idx, 1);
-        delete units[solarId];
-        delete signs[solarId];
-        for (const depId of solarDescriptor.computed.dependencies) {
-          if (dependencies.includes(depId)) continue;
-          dependencies.push(depId);
-          units[depId] = solarDescriptor.computed.unitsByEntityId[depId] ?? "";
-          signs[depId] = 1;
-        }
-      }
-    }
-
-    return {
-      mode: "auto_home",
-      dependencies,
-      unitsByEntityId: units,
-      signsByEntityId: signs,
-      outputUnit
-    };
-  }
-
-  private _buildAutoSolarSpec(
-    outputUnit: string,
-    solarSubDescriptors: ReadonlyArray<NodeSeriesDescriptor>
-  ): ComputedSeriesSpec | undefined {
-    if (solarSubDescriptors.length === 0) return undefined;
-    const dependencies: string[] = [];
-    const units: Record<string, string> = {};
-    const signs: Record<string, 1> = {};
-    for (const desc of solarSubDescriptors) {
-      dependencies.push(desc.entityId);
-      units[desc.entityId] = desc.unit;
-      signs[desc.entityId] = 1;
-    }
-    return {
-      mode: "auto_solar",
-      dependencies,
-      unitsByEntityId: units,
-      signsByEntityId: signs,
-      outputUnit
-    };
-  }
-
-  private _friendlyName(entityId: string): string | undefined {
-    const friendly = this.hass.states[entityId]?.attributes?.friendly_name;
-    return typeof friendly === "string" && friendly.length > 0 ? friendly : undefined;
-  }
-
-  private _unit(entityId: string): string | undefined {
-    const unit = this.hass.states[entityId]?.attributes?.unit_of_measurement;
-    return typeof unit === "string" ? unit : undefined;
-  }
-
-  /** Picks a chart color for a series. Prefers the node's icon color
-   *  (the dominant visible color the user sees on the energy card), falls
-   *  back to the trend color and finally to a category default. The
-   *  string "state" — HA's "use entity state color" sentinel — is treated
-   *  as "no explicit color" so the next fallback wins. */
-  private _resolveSeriesColor(
-    iconColor: unknown,
-    trendColor: unknown,
-    category: NodeSeriesDescriptor["category"]
-  ): string {
-    const fallbackByCategory: Record<NodeSeriesDescriptor["category"], string> = {
-      solar: "amber",
-      grid: "blue",
-      grid_secondary: "indigo",
-      home: "green",
-      battery: "purple",
-      battery_secondary: "deep-purple",
-      other: "grey"
-    };
-    const fallback = fallbackByCategory[category];
-    const candidates = [iconColor, trendColor];
-    for (const value of candidates) {
-      if (Array.isArray(value)) {
-        return resolveColorValue(value as number[], fallback);
-      }
-      if (typeof value === "string") {
-        const trimmed = value.trim();
-        if (trimmed.length > 0 && trimmed !== "state") {
-          return resolveColorValue(trimmed, fallback);
-        }
-      }
-    }
-    return resolveColorValue(fallback, fallback);
-  }
-
-  /** When the user long-presses a battery node, the dialog should focus
-   *  the SOC entity by default — the node visually represents charge
-   *  level, not instantaneous power. This map redirects battery node
-   *  keys to their percentage counterpart, falling back to the original
-   *  key when no SOC entity is configured. */
-  private static readonly _PREFERRED_FOCUS_REDIRECT: Record<string, string> = {
-    battery: "battery_percentage",
-    battery_secondary: "battery_secondary_percentage"
-  };
-
   private _resolveFocusedSeries(): NodeSeriesDescriptor | undefined {
-    if (this._focusedEntityIdOverride) {
-      const override = this._allSeries.find((s) => s.id === this._focusedEntityIdOverride);
-      if (override) return override;
-    }
-    const preferredKey = PowerPilzEnergyNodeDialog._PREFERRED_FOCUS_REDIRECT[this.focusedNodeKey];
-    if (preferredKey) {
-      const preferred = this._allSeries.find((s) => s.nodeKey === preferredKey);
-      if (preferred) return preferred;
-    }
-    return this._allSeries.find((s) => s.nodeKey === this.focusedNodeKey);
+    return resolveFocusedSeries(this._allSeries, this.focusedNodeKey, this._focusedEntityIdOverride);
   }
 
   private _titleForFocusedNode(): string {
     const focused = this._resolveFocusedSeries();
     if (focused) return focused.label;
-    // Friendly fallback for a node key that has no entity (rare, but possible).
-    const config = this.energyConfig as Record<string, unknown>;
-    const labelKey = `${this.focusedNodeKey}_label`;
-    const label = this._readConfigString(config[labelKey]);
-    return label ?? this.focusedNodeKey;
+    // Fallback for a node key that has no entity (rare).
+    const config = this.energyConfig as unknown as Record<string, unknown>;
+    const labelValue = config[`${this.focusedNodeKey}_label`];
+    if (typeof labelValue === "string" && labelValue.trim().length > 0) {
+      return labelValue.trim();
+    }
+    return this.focusedNodeKey;
   }
 
   private _defaultSelection(): NodeSeriesDescriptor[] {
@@ -625,24 +266,13 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
   }
 
   /** Entity ids that need fetching for the current selection + mode.
-   *  Computed series (auto_home, auto_solar) drag in their dependency
-   *  entities so the formula has data to interpolate from. */
+   *  Always includes the focused series so the canvas keeps something
+   *  to draw even after the user un-checks it. */
   private _activeEntityIds(): string[] {
-    const ids = new Set<string>();
-    const addDescriptorIds = (descriptor: NodeSeriesDescriptor): void => {
-      ids.add(descriptor.entityId);
-      if (descriptor.computed) {
-        for (const dep of descriptor.computed.dependencies) ids.add(dep);
-      }
-    };
-    for (const descriptor of this._allSeries) {
-      if (this._selectedIds.has(descriptor.id)) addDescriptorIds(descriptor);
-    }
-    // Always include the focused series so the canvas keeps something
-    // to draw even after the user un-checks it.
+    const active = this._allSeries.filter((s) => this._selectedIds.has(s.id));
     const focused = this._resolveFocusedSeries();
-    if (focused) addDescriptorIds(focused);
-    return Array.from(ids);
+    if (focused && !active.includes(focused)) active.push(focused);
+    return entityIdsForSeries(active);
   }
 
   // ------------------------------------------------------------
@@ -696,73 +326,14 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
   }
 
   private _descriptorToChartSeries(d: NodeSeriesDescriptor): ChartSeries {
-    const points = d.computed
-      ? this._computeSeriesPoints(d.computed)
-      : (this._historyByEntity.get(d.entityId) ?? []);
     return {
       id: d.id,
       label: d.label,
       color: d.color,
       unit: d.unit,
       isPercentage: d.isPercentage,
-      points
+      points: seriesPointsFor(d, this._historyByEntity)
     };
-  }
-
-  /** Builds a synthetic time series for an auto_home / auto_solar
-   *  descriptor by walking the union of dependency timestamps and
-   *  evaluating the formula at each. Each dependency value is converted
-   *  to canonical (W or Wh) using its unit, summed with its sign, then
-   *  converted back to the descriptor's output unit. */
-  private _computeSeriesPoints(spec: ComputedSeriesSpec): HistoryTrendPoint[] {
-    const series = spec.dependencies
-      .map((id) => ({
-        id,
-        unit: spec.unitsByEntityId[id] ?? "",
-        sign: spec.signsByEntityId[id] ?? 1,
-        points: this._historyByEntity.get(id) ?? []
-      }))
-      .filter((entry) => entry.points.length > 0);
-
-    if (series.length === 0) return [];
-
-    const tsSet = new Set<number>();
-    for (const entry of series) {
-      for (const point of entry.points) tsSet.add(point.ts);
-    }
-    const timestamps = Array.from(tsSet).sort((a, b) => a - b);
-
-    // Per-entity factor to canonical unit (W / Wh). Missing parses
-    // contribute the raw value, which keeps the line readable when
-    // units aren't in the recognised power/energy family.
-    const factors = new Map<string, number>();
-    let outputFamily: "power" | "energy" | null = null;
-    for (const entry of series) {
-      const parsed = parseConvertibleUnit(entry.unit);
-      if (parsed) {
-        factors.set(entry.id, parsed.factor);
-        outputFamily ??= parsed.family;
-      }
-    }
-    const outputParsed = parseConvertibleUnit(spec.outputUnit);
-    const outputFactor = outputParsed && outputParsed.family === outputFamily
-      ? outputParsed.factor
-      : 1;
-
-    const out: HistoryTrendPoint[] = [];
-    for (const ts of timestamps) {
-      let canonical = 0;
-      for (const entry of series) {
-        const value = _interpolateAt(entry.points, ts);
-        const factor = factors.get(entry.id) ?? 1;
-        canonical += entry.sign * value * factor;
-      }
-      const display = outputFactor > 0 ? canonical / outputFactor : canonical;
-      if (Number.isFinite(display)) {
-        out.push({ ts, value: display });
-      }
-    }
-    return out;
   }
 
   // ------------------------------------------------------------
@@ -1540,29 +1111,6 @@ const _formatHoverTime = (ts: number): string => {
   const datePart = `${_pad2(date.getDate())}.${_pad2(date.getMonth() + 1)}.${date.getFullYear()}`;
   const timePart = `${_pad2(date.getHours())}:${_pad2(date.getMinutes())}`;
   return `${datePart} ${timePart}`;
-};
-
-/** Linear interpolation of a series at the given timestamp. Outside
- *  the series' bounds returns the nearest endpoint value. Mirrors the
- *  helper inside chart-renderer; kept private here to avoid an internal
- *  dependency leak. */
-const _interpolateAt = (points: ReadonlyArray<HistoryTrendPoint>, ts: number): number => {
-  if (points.length === 0) return 0;
-  if (ts <= points[0].ts) return points[0].value;
-  if (ts >= points[points.length - 1].ts) return points[points.length - 1].value;
-  let lo = 0;
-  let hi = points.length - 1;
-  while (hi - lo > 1) {
-    const mid = (lo + hi) >> 1;
-    if (points[mid].ts <= ts) lo = mid;
-    else hi = mid;
-  }
-  const a = points[lo];
-  const b = points[hi];
-  const span = b.ts - a.ts;
-  if (span <= 0) return a.value;
-  const t = (ts - a.ts) / span;
-  return a.value + (b.value - a.value) * t;
 };
 
 const _formatHoverValue = (value: number, unit: string): string => {

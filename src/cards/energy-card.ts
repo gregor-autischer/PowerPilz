@@ -31,6 +31,7 @@ import {
   withAlpha as withAlphaPrim
 } from "../utils/chart-primitives";
 import { openEnergyNodeDialog } from "./dialogs/energy-node-dialog";
+import { openEnergyNodeZoomOverlay } from "./dialogs/energy-node-zoom-overlay";
 import "./editors/energy-card-editor";
 
 type FlowDirection = "none" | "forward" | "backward";
@@ -67,6 +68,8 @@ interface ActionConfig {
 
 /** Custom action marker that opens the energy node-detail dialog. */
 const ACTION_ENERGY_NODE_DETAIL = "powerpilz-energy-node-detail";
+/** Custom action marker that opens the tap-zoom overlay. */
+const ACTION_ENERGY_NODE_ZOOM = "powerpilz-energy-node-zoom";
 
 /** Logical node identifiers used as `data-pp-node-key` and as the prefix
  *  for per-node action config keys. Sub-block keys are
@@ -2619,9 +2622,9 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       const cleanup = bindActionHandler(
         node,
         {
-          onTap: () => this.fireNodeAction(key, "tap"),
-          onHold: () => this.fireNodeAction(key, "hold"),
-          onDoubleTap: () => this.fireNodeAction(key, "double_tap")
+          onTap: () => this.fireNodeAction(key, "tap", node),
+          onHold: () => this.fireNodeAction(key, "hold", node),
+          onDoubleTap: () => this.fireNodeAction(key, "double_tap", node)
         },
         { hasHold, hasDoubleTap, stopPropagation: true }
       );
@@ -2640,12 +2643,22 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     return Boolean(cfg && cfg.action && cfg.action !== "none");
   }
 
-  private fireNodeAction(nodeKey: string, action: "tap" | "hold" | "double_tap"): void {
+  private fireNodeAction(
+    nodeKey: string,
+    action: "tap" | "hold" | "double_tap",
+    nodeElement?: HTMLElement
+  ): void {
     if (this.isEditorPreview() || !this._config) return;
 
     let actionConfig = this.nodeActionConfig(nodeKey, action);
 
-    // Default hold: open node-detail dialog.
+    // Defaults when nothing is configured for this gesture:
+    //   tap   → zoom the node into a focused full-trend view
+    //   hold  → open the full node-detail dialog
+    //   dbl   → no-op
+    if (action === "tap" && (!actionConfig || !actionConfig.action)) {
+      actionConfig = { action: ACTION_ENERGY_NODE_ZOOM };
+    }
     if (action === "hold" && (!actionConfig || !actionConfig.action)) {
       actionConfig = { action: ACTION_ENERGY_NODE_DETAIL };
     }
@@ -2656,6 +2669,10 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
 
     if (actionConfig.action === ACTION_ENERGY_NODE_DETAIL) {
       this.openNodeDetailDialog(nodeKey);
+      return;
+    }
+    if (actionConfig.action === ACTION_ENERGY_NODE_ZOOM) {
+      this.openNodeZoomOverlay(nodeKey, nodeElement);
       return;
     }
 
@@ -2688,6 +2705,20 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     const direct = config[`${nodeKey}_entity`];
     if (typeof direct === "string" && direct.trim().length > 0) return direct.trim();
     return undefined;
+  }
+
+  private openNodeZoomOverlay(nodeKey: string, nodeElement?: HTMLElement): void {
+    if (!this._config || !this.hass) return;
+    const target = nodeElement
+      ?? this.renderRoot.querySelector<HTMLElement>(`[data-pp-node-key="${nodeKey}"]`);
+    if (!target) return;
+    const rect = target.getBoundingClientRect();
+    openEnergyNodeZoomOverlay({
+      hass: this.hass,
+      config: this._config,
+      focusedNodeKey: nodeKey,
+      originRect: rect
+    });
   }
 
   /** Stub — wired up to the energy-node-dialog module in a separate
