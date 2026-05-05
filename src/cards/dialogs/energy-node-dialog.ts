@@ -333,8 +333,27 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
     return resolveColorValue(fallbackByCategory[category], fallbackByCategory[category]);
   }
 
+  /** When the user long-presses a battery node, the dialog should focus
+   *  the SOC entity by default — the node visually represents charge
+   *  level, not instantaneous power. This map redirects battery node
+   *  keys to their percentage counterpart, falling back to the original
+   *  key when no SOC entity is configured. */
+  private static readonly _PREFERRED_FOCUS_REDIRECT: Record<string, string> = {
+    battery: "battery_percentage",
+    battery_secondary: "battery_secondary_percentage"
+  };
+
+  private _resolveFocusedSeries(): NodeSeriesDescriptor | undefined {
+    const preferredKey = PowerPilzEnergyNodeDialog._PREFERRED_FOCUS_REDIRECT[this.focusedNodeKey];
+    if (preferredKey) {
+      const preferred = this._allSeries.find((s) => s.nodeKey === preferredKey);
+      if (preferred) return preferred;
+    }
+    return this._allSeries.find((s) => s.nodeKey === this.focusedNodeKey);
+  }
+
   private _titleForFocusedNode(): string {
-    const focused = this._allSeries.find((s) => s.nodeKey === this.focusedNodeKey);
+    const focused = this._resolveFocusedSeries();
     if (focused) return focused.label;
     // Friendly fallback for a node key that has no entity (rare, but possible).
     const config = this.energyConfig as Record<string, unknown>;
@@ -344,7 +363,7 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
   }
 
   private _defaultSelection(): NodeSeriesDescriptor[] {
-    const focused = this._allSeries.find((s) => s.nodeKey === this.focusedNodeKey);
+    const focused = this._resolveFocusedSeries();
     return focused ? [focused] : this._allSeries.slice(0, 1);
   }
 
@@ -425,7 +444,7 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
     for (const id of this._selectedIds) ids.add(id);
     // Always include the focused series so the canvas keeps something
     // to draw even after the user un-checks it.
-    const focused = this._allSeries.find((s) => s.nodeKey === this.focusedNodeKey);
+    const focused = this._resolveFocusedSeries();
     if (focused) ids.add(focused.entityId);
     return Array.from(ids);
   }
@@ -473,8 +492,7 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
     const selectedDescriptors = this._allSeries.filter((s) => this._selectedIds.has(s.id));
     // Single mode: only the focused descriptor (or first selected).
     if (this._mode === "single") {
-      const focused = this._allSeries.find((s) => s.nodeKey === this.focusedNodeKey)
-        ?? selectedDescriptors[0];
+      const focused = this._resolveFocusedSeries() ?? selectedDescriptors[0];
       if (!focused) return [];
       return [this._descriptorToChartSeries(focused)];
     }
@@ -534,7 +552,7 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
   }
 
   private _onSelectFocused(): void {
-    const focused = this._allSeries.find((s) => s.nodeKey === this.focusedNodeKey);
+    const focused = this._resolveFocusedSeries();
     this._selectedIds = focused ? new Set([focused.id]) : new Set();
     void this._fetchHistory();
   }
