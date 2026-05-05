@@ -16,8 +16,13 @@ import {
   normalizeTrendDataSource,
   type TrendDataSource
 } from "../utils/history";
-import { mushroomIconStyle, resolveColor as resolveCssColor } from "../utils/color";
+import { mushroomIconStyle, resolveColor as resolveColorValue } from "../utils/color";
 import { toTrendCanvasPoints } from "../utils/trend";
+import {
+  prepareCanvas,
+  resolveCssColor,
+  withAlpha
+} from "../utils/chart-primitives";
 import {
   formatGraphValue,
   normalizeLegendLayout as normalizeLegendLayoutValue,
@@ -275,7 +280,7 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
   private _isVisible = false;
   private _configRefreshTimer?: number;
   private _liveRuntimeActive = false;
-  private _canvasColorContext?: CanvasRenderingContext2D | null;
+  private _canvasColorContextCache: { ctx?: CanvasRenderingContext2D | null } = {};
   private _stackCanonicalMode = false;
   private _stackCanonicalFactors: Partial<Record<GraphSlot, number>> = {};
   private _stackNormalizeToPercent = false;
@@ -755,7 +760,7 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
   }
 
   private resolveColor(value?: string | number[], fallback = ""): string {
-    return resolveCssColor(value, fallback);
+    return resolveColorValue(value, fallback);
   }
 
   private trendPoints(slot: GraphSlot, currentValue: number | null): TrendPoint[] {
@@ -1225,28 +1230,7 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
   private prepareTrendCanvas(
     canvas: HTMLCanvasElement
   ): { ctx: CanvasRenderingContext2D; width: number; height: number } | null {
-    const ctx = canvas.getContext("2d");
-    if (!ctx) {
-      return null;
-    }
-
-    const rect = canvas.getBoundingClientRect();
-    const width = Math.max(1, Math.round(rect.width));
-    const height = Math.max(1, Math.round(rect.height));
-    const dpr = Math.max(1, window.devicePixelRatio || 1);
-    const pixelWidth = Math.max(1, Math.round(width * dpr));
-    const pixelHeight = Math.max(1, Math.round(height * dpr));
-
-    if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
-      canvas.width = pixelWidth;
-      canvas.height = pixelHeight;
-    }
-
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-    return { ctx, width, height };
+    return prepareCanvas(canvas);
   }
 
   private drawTrendArea(
@@ -1483,62 +1467,11 @@ export class PowerPilzGraphStackCard extends LitElement implements LovelaceCard 
   }
 
   private resolveCanvasColor(color: string): string {
-    const probe = document.createElement("span");
-    probe.style.position = "absolute";
-    probe.style.opacity = "0";
-    probe.style.pointerEvents = "none";
-    probe.style.color = color;
-    this.renderRoot.appendChild(probe);
-    const resolved = getComputedStyle(probe).color;
-    probe.remove();
-    return resolved || "rgb(158, 158, 158)";
+    return resolveCssColor(this.renderRoot as ParentNode & Element, color);
   }
 
   private withAlpha(color: string, alpha: number): string {
-    const channels = this.parseColorChannels(color);
-    if (!channels) {
-      return color;
-    }
-
-    const clamped = Math.max(0, Math.min(1, alpha));
-    return `rgba(${channels[0]}, ${channels[1]}, ${channels[2]}, ${clamped})`;
-  }
-
-  private parseColorChannels(color: string): [number, number, number] | null {
-    const candidate = color.trim();
-    const rgbMatch = candidate.match(/^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i);
-    if (rgbMatch) {
-      const channels = rgbMatch
-        .slice(1, 4)
-        .map((value) => Math.max(0, Math.min(255, Math.round(Number(value)))));
-      if (channels.every((value) => Number.isFinite(value))) {
-        return [channels[0], channels[1], channels[2]];
-      }
-    }
-
-    if (!this._canvasColorContext) {
-      this._canvasColorContext = document.createElement("canvas").getContext("2d");
-    }
-    const ctx = this._canvasColorContext;
-    if (!ctx) {
-      return null;
-    }
-    ctx.fillStyle = "#000000";
-    ctx.fillStyle = candidate;
-    const normalized = ctx.fillStyle;
-
-    const hex = typeof normalized === "string" ? normalized.trim() : "";
-    const hexMatch = hex.match(/^#([a-f\d]{6})$/i);
-    if (!hexMatch) {
-      return null;
-    }
-
-    const value = hexMatch[1];
-    return [
-      parseInt(value.slice(0, 2), 16),
-      parseInt(value.slice(2, 4), 16),
-      parseInt(value.slice(4, 6), 16)
-    ];
+    return withAlpha(color, alpha, this._canvasColorContextCache);
   }
 
   public connectedCallback(): void {
