@@ -325,14 +325,26 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
 
   protected render(): TemplateResult {
     if (!this._focused) {
-      return html`<div class="pp-zoom-backdrop opening" @click=${this._onBackdropClick}></div>`;
+      return html`<div class="pp-zoom-catcher" @click=${this._onBackdropClick}></div>`;
     }
 
-    // FLIP transform — start at the origin rect via translate+scale.
-    const targetWidth = Math.min(window.innerWidth - 32, 720);
-    const targetHeight = Math.min(window.innerHeight - 32, 460);
-    const targetLeft = (window.innerWidth - targetWidth) / 2;
-    const targetTop = (window.innerHeight - targetHeight) / 2;
+    // Popover sizing: ~2x the original node, capped to a sensible
+    // maximum and to the viewport. Anchored on the original node's
+    // center so it expands in-place rather than jumping to the screen
+    // middle.
+    const VIEWPORT_PADDING = 8;
+    const SCALE_FACTOR = 2.2;
+    const originCenterX = this.originRect.left + this.originRect.width / 2;
+    const originCenterY = this.originRect.top + this.originRect.height / 2;
+    const desiredW = Math.min(this.originRect.width * SCALE_FACTOR, 460);
+    const desiredH = Math.min(this.originRect.height * SCALE_FACTOR, 320);
+    const targetWidth = Math.min(window.innerWidth - VIEWPORT_PADDING * 2, desiredW);
+    const targetHeight = Math.min(window.innerHeight - VIEWPORT_PADDING * 2, desiredH);
+    let targetLeft = originCenterX - targetWidth / 2;
+    let targetTop = originCenterY - targetHeight / 2;
+    targetLeft = Math.max(VIEWPORT_PADDING, Math.min(window.innerWidth - targetWidth - VIEWPORT_PADDING, targetLeft));
+    targetTop = Math.max(VIEWPORT_PADDING, Math.min(window.innerHeight - targetHeight - VIEWPORT_PADDING, targetTop));
+
     const opening = this._phase !== "open";
     const closing = this._phase === "closing";
     const collapse = opening || closing;
@@ -362,12 +374,13 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
 
     return html`
       <div
-        class="pp-zoom-backdrop ${closing ? "closing" : ""} ${this._phase === "opening" ? "opening" : ""}"
+        class="pp-zoom-catcher"
         @click=${this._onBackdropClick}
       >
         <div
           class="pp-zoom-shell ${focused.category}"
           style=${styleMap(shellStyle)}
+          @click=${(e: MouseEvent) => e.stopPropagation()}
           @pointermove=${this._onPointerMove}
           @pointerleave=${this._onPointerLeave}
         >
@@ -385,9 +398,6 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
             <div class="pp-zoom-label">${focused.label}</div>
           </div>
           ${this._renderHoverOverlay()}
-          <button class="pp-zoom-close" aria-label="Close" @click=${this._close}>
-            <ha-icon icon="mdi:close"></ha-icon>
-          </button>
         </div>
       </div>
     `;
@@ -472,29 +482,23 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
       font-family: var(--paper-font-body1_-_font-family, inherit);
     }
 
-    .pp-zoom-backdrop {
+    /* Transparent click-catcher so taps outside the shell close the
+       popover, but the page underneath stays fully visible. */
+    .pp-zoom-catcher {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0);
-      transition: background 0.22s ease;
-    }
-    .pp-zoom-backdrop.opening,
-    .pp-zoom-backdrop.closing {
-      background: rgba(0, 0, 0, 0);
-    }
-    .pp-zoom-backdrop:not(.opening):not(.closing) {
-      background: rgba(0, 0, 0, 0.45);
-      backdrop-filter: blur(2px);
+      background: transparent;
     }
 
-    /* The shell mirrors the .energy-value styling from the card, scaled up. */
+    /* The shell mirrors .energy-value styling from the card, scaled up,
+       and floats like a dropdown anchored on the clicked node. */
     .pp-zoom-shell {
       position: fixed;
       box-sizing: border-box;
-      border-radius: 18px;
+      border-radius: 16px;
       background: var(--ha-card-background, var(--card-background-color, #fff));
       border: 1px solid rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.1);
-      box-shadow: 0 18px 60px rgba(0, 0, 0, 0.32);
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22);
       overflow: hidden;
       transition:
         transform ${OPEN_ANIMATION_MS}ms cubic-bezier(0.2, 0.85, 0.3, 1),
@@ -525,12 +529,12 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
       z-index: 1;
       display: flex;
       align-items: center;
-      gap: 14px;
-      padding: 18px 22px;
+      gap: 10px;
+      padding: 12px 14px;
     }
     .pp-zoom-icon-shape {
-      width: 48px;
-      height: 48px;
+      width: 36px;
+      height: 36px;
       border-radius: 50%;
       display: flex;
       align-items: center;
@@ -539,13 +543,13 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
       flex: none;
     }
     .pp-zoom-icon {
-      --mdc-icon-size: 28px;
+      --mdc-icon-size: 22px;
       color: var(--icon-color, var(--primary-text-color));
       display: flex;
       line-height: 0;
     }
     .pp-zoom-value {
-      font-size: 28px;
+      font-size: 20px;
       font-weight: 600;
       line-height: 1.1;
       font-variant-numeric: tabular-nums;
@@ -554,35 +558,14 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
     }
     .pp-zoom-label {
       margin-left: auto;
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 500;
       color: var(--secondary-text-color);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      padding-left: 12px;
+      padding-left: 8px;
     }
-
-    .pp-zoom-close {
-      position: absolute;
-      top: 8px;
-      right: 8px;
-      z-index: 3;
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
-      border: none;
-      background: rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.06);
-      color: var(--secondary-text-color);
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .pp-zoom-close:hover {
-      background: rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.12);
-    }
-    .pp-zoom-close ha-icon { --mdc-icon-size: 16px; }
 
     /* Hover overlay: vertical guide + floating tooltip. */
     .pp-zoom-hover-line {
