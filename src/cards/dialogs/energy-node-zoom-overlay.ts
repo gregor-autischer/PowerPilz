@@ -28,13 +28,17 @@ import {
   type NodeSeriesDescriptor
 } from "../../utils/energy-series";
 import {
-  prepareCanvas,
+  buildRunsFromSegments,
   fillAreaUnderPolyline,
+  prepareCanvas,
   resolveCssColor,
+  splitByThresholdSegments,
   strokePolyline,
-  type CanvasPoint
+  strokeSegmentedPolyline,
+  type CanvasPoint,
+  type CanvasValuePoint
 } from "../../utils/chart-primitives";
-import { mushroomIconStyle } from "../../utils/color";
+import { mushroomIconStyle, resolveColor } from "../../utils/color";
 
 const readString = (value: unknown): string | undefined => {
   if (typeof value !== "string") return undefined;
@@ -299,12 +303,91 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
       return;
     }
 
-    const resolvedColor = resolveCssColor(this.renderRoot as ParentNode & Element, this._focused.color);
-    fillAreaUnderPolyline(area.ctx, canvasPoints, resolvedColor, area.height, 0.24, 0, this._colorCache);
-    strokePolyline(line.ctx, canvasPoints, resolvedColor, LINE_WIDTH);
+    const host = this.renderRoot as ParentNode & Element;
+    const resolvedColor = resolveCssColor(host, this._focused.color);
+    const threshold = this._thresholdConfig();
+
+    if (threshold.threshold === null) {
+      fillAreaUnderPolyline(area.ctx, canvasPoints, resolvedColor, area.height, 0.24, 0, this._colorCache);
+      strokePolyline(line.ctx, canvasPoints, resolvedColor, LINE_WIDTH);
+    } else {
+      // Bichromatic rendering for thresholds (grid export, battery low).
+      // Same approach the small node uses: split at the crossing, fill
+      // each contiguous run with its own gradient, stroke per segment.
+      const valuePoints: CanvasValuePoint[] = canvasPoints.map((p) => ({
+        x: p.x, y: p.y, value: p.value
+      }));
+      const lowColor = resolveCssColor(host, threshold.color);
+      const segments = splitByThresholdSegments(valuePoints, threshold.threshold);
+      const runs = buildRunsFromSegments(segments);
+      for (const run of runs) {
+        fillAreaUnderPolyline(
+          area.ctx,
+          run.points,
+          run.low ? lowColor : resolvedColor,
+          area.height,
+          0.24,
+          0,
+          this._colorCache
+        );
+      }
+      strokeSegmentedPolyline(line.ctx, segments, resolvedColor, lowColor, LINE_WIDTH);
+    }
 
     this._lastCanvasPoints = canvasPoints;
     this._lastCanvasSize = { width: area.width, height: area.height };
+  }
+
+  /**
+   * Returns the per-node threshold + color override that the small
+   * node uses for bichromatic rendering, or `{threshold: null}` when
+   * no threshold applies for the focused node.
+   *
+   * - Grid / Grid 2: when `*_export_highlight` is on, samples below 0
+   *   render in `*_export_trend_color`.
+   * - Battery / Battery 2 (zoomed → SOC chart): when
+   *   `*_low_alert` is on AND we're plotting a percentage entity,
+   *   samples below `*_low_threshold` render in `*_low_alert_color`.
+   */
+  private _thresholdConfig(): { threshold: number | null; color: string } {
+    const config = this.energyConfig as Record<string, unknown>;
+    const node = this.focusedNodeKey;
+    const GRID_EXPORT_THRESHOLD = -0.000001;
+
+    if (node === "grid" && config.grid_export_highlight === true) {
+      return {
+        threshold: GRID_EXPORT_THRESHOLD,
+        color: resolveColor(
+          (config.grid_export_trend_color as string | number[] | undefined) ?? "red",
+          "red"
+        )
+      };
+    }
+    if (node === "grid_secondary" && config.grid_secondary_export_highlight === true) {
+      return {
+        threshold: GRID_EXPORT_THRESHOLD,
+        color: resolveColor(
+          (config.grid_secondary_export_trend_color as string | number[] | undefined) ?? "red",
+          "red"
+        )
+      };
+    }
+    if ((node === "battery" || node === "battery_secondary")
+        && this._focused?.isPercentage
+        && config[`${node}_low_alert`] === true) {
+      const rawThreshold = config[`${node}_low_threshold`];
+      const threshold = typeof rawThreshold === "number" && Number.isFinite(rawThreshold)
+        ? Math.max(0, Math.min(100, rawThreshold))
+        : 20;
+      return {
+        threshold,
+        color: resolveColor(
+          (config[`${node}_low_alert_color`] as string | number[] | undefined) ?? "red",
+          "red"
+        )
+      };
+    }
+    return { threshold: null, color: "" };
   }
 
   // ------------------------------------------------------------

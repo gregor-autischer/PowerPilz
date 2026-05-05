@@ -237,6 +237,113 @@ export const niceStep = (rawStep: number): number => {
   return nice * magnitude;
 };
 
+// ---------------------------------------------------------------------
+// Threshold splitting — used by the energy card's small-node trend and
+// the zoom overlay to recolor portions of a curve that fall on either
+// side of a configured threshold (e.g. grid export below 0, battery
+// SOC below the low-alert threshold).
+// ---------------------------------------------------------------------
+
+/** Canvas-space point that also carries the original data value, so
+ *  threshold logic can decide which side of the threshold the
+ *  endpoints sit on. */
+export interface CanvasValuePoint extends CanvasPoint {
+  value: number;
+}
+
+export interface ThresholdSegment {
+  start: CanvasValuePoint;
+  end: CanvasValuePoint;
+  low: boolean;
+}
+
+export interface ThresholdRun {
+  low: boolean;
+  points: CanvasValuePoint[];
+}
+
+/**
+ * Walks pairs of consecutive points and emits one or two segments per
+ * pair. Pairs that cross the threshold get split at the linear-
+ * interpolation crossing so each segment is purely above or purely
+ * below.
+ */
+export const splitByThresholdSegments = (
+  points: ReadonlyArray<CanvasValuePoint>,
+  threshold: number
+): ThresholdSegment[] => {
+  const segments: ThresholdSegment[] = [];
+  for (let index = 1; index < points.length; index += 1) {
+    const start = points[index - 1];
+    const end = points[index];
+    const startIsLow = start.value <= threshold;
+    const endIsLow = end.value <= threshold;
+    if (startIsLow === endIsLow || Math.abs(end.value - start.value) <= 1e-9) {
+      segments.push({ start, end, low: startIsLow });
+      continue;
+    }
+    const t = Math.max(0, Math.min(1, (threshold - start.value) / (end.value - start.value)));
+    const cross: CanvasValuePoint = {
+      x: start.x + (end.x - start.x) * t,
+      y: start.y + (end.y - start.y) * t,
+      value: threshold
+    };
+    segments.push({ start, end: cross, low: startIsLow });
+    segments.push({ start: cross, end, low: endIsLow });
+  }
+  return segments;
+};
+
+/**
+ * Stitches consecutive same-low segments into runs of points. A run
+ * is the list of points that should be drawn as one continuous area
+ * fill (so the gradient looks unbroken across many same-color
+ * segments).
+ */
+export const buildRunsFromSegments = (
+  segments: ReadonlyArray<ThresholdSegment>
+): ThresholdRun[] => {
+  const runs: ThresholdRun[] = [];
+  for (const segment of segments) {
+    if (runs.length === 0) {
+      runs.push({ low: segment.low, points: [segment.start, segment.end] });
+      continue;
+    }
+    const current = runs[runs.length - 1];
+    const currentLast = current.points[current.points.length - 1];
+    const continues = Math.abs(currentLast.x - segment.start.x) <= 0.01
+      && Math.abs(currentLast.y - segment.start.y) <= 0.01;
+    if (current.low === segment.low && continues) {
+      current.points.push(segment.end);
+    } else {
+      runs.push({ low: segment.low, points: [segment.start, segment.end] });
+    }
+  }
+  return runs;
+};
+
+/** Strokes a polyline as individual colored segments — used to render
+ *  the threshold-recoloured trend line where the curve switches color
+ *  exactly at the crossing point. */
+export const strokeSegmentedPolyline = (
+  ctx: CanvasRenderingContext2D,
+  segments: ReadonlyArray<ThresholdSegment>,
+  normalColor: string,
+  lowColor: string,
+  lineWidth: number
+): void => {
+  ctx.lineWidth = lineWidth;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  for (const segment of segments) {
+    ctx.beginPath();
+    ctx.moveTo(segment.start.x, segment.start.y);
+    ctx.lineTo(segment.end.x, segment.end.y);
+    ctx.strokeStyle = segment.low ? lowColor : normalColor;
+    ctx.stroke();
+  }
+};
+
 /**
  * Generates ~`tickCount` evenly spaced "nice" tick values across [min, max].
  */
