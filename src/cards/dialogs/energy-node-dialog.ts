@@ -105,6 +105,11 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
   @state() private _loadError?: string;
   @state() private _hover?: { canvasX: number; ts: number };
   @state() private _openPopover: "entities" | "date" | null = null;
+  /** Set when the user picks a different entity from the popover while
+   *  the dialog is in single mode. Overrides the implicit focus that
+   *  comes from `focusedNodeKey` so the chart re-bases on the chosen
+   *  entity without losing the original click context. */
+  @state() private _focusedEntityIdOverride: string | null = null;
 
   private _renderRaf?: number;
   private _resizeObserver?: ResizeObserver;
@@ -344,6 +349,10 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
   };
 
   private _resolveFocusedSeries(): NodeSeriesDescriptor | undefined {
+    if (this._focusedEntityIdOverride) {
+      const override = this._allSeries.find((s) => s.id === this._focusedEntityIdOverride);
+      if (override) return override;
+    }
     const preferredKey = PowerPilzEnergyNodeDialog._PREFERRED_FOCUS_REDIRECT[this.focusedNodeKey];
     if (preferredKey) {
       const preferred = this._allSeries.find((s) => s.nodeKey === preferredKey);
@@ -593,7 +602,7 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
       <div class="pp-toolbar">
         ${this._renderModeSwitch()}
         ${this._renderRangeBar()}
-        ${this._mode !== "single" ? this._renderEntityTrigger() : nothing}
+        ${this._renderEntityTrigger()}
       </div>
       <div
         class="pp-chart-wrap"
@@ -725,18 +734,33 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
 
   private _renderEntityTrigger(): TemplateResult {
     const open = this._openPopover === "entities";
+    const isSingle = this._mode === "single";
+    const focused = this._resolveFocusedSeries();
     const total = this._allSeries.length;
     const selected = this._selectedIds.size;
+
+    const labelContent = isSingle
+      ? html`
+          ${focused
+            ? html`<span class="pp-dropdown-swatch" style=${styleMap({ background: focused.color })}></span>`
+            : nothing}
+          <span class="pp-dropdown-label">${focused?.label ?? "—"}</span>
+        `
+      : html`
+          <ha-icon icon="mdi:format-list-checkbox"></ha-icon>
+          <span class="pp-dropdown-label">${selected}/${total}</span>
+        `;
+
     return html`
       <div class="pp-popover-anchor pp-entity-trigger-wrap">
         <button
-          class="pp-range-btn ${open ? "active" : ""}"
+          class="pp-dropdown-btn ${open ? "open" : ""}"
           data-pp-popover-trigger="entities"
           @click=${() => this._togglePopover("entities")}
-          title="Entitäten auswählen"
+          title=${isSingle ? "Entität wechseln" : "Entitäten auswählen"}
         >
-          <ha-icon icon="mdi:format-list-checkbox"></ha-icon>
-          <span class="pp-entity-trigger-count">${selected}/${total}</span>
+          ${labelContent}
+          <ha-icon class="pp-dropdown-caret" icon="mdi:chevron-down"></ha-icon>
         </button>
         ${open ? this._renderEntityPopover() : nothing}
       </div>
@@ -745,16 +769,22 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
 
   private _renderEntityPopover(): TemplateResult {
     const grouped = this._groupSeriesByCategory();
+    const isSingle = this._mode === "single";
     const stackedExcludes = this._mode === "stacked-percent";
+    const focusedId = this._resolveFocusedSeries()?.id;
 
     return html`
       <div class="pp-popover pp-entity-popover" data-pp-popover="entities">
         <div class="pp-popover-title">
-          <span>Entitäten</span>
-          <div class="pp-entity-quick">
-            <button class="pp-link" @click=${() => this._onSelectFocused()}>Nur fokussiert</button>
-            <button class="pp-link" @click=${() => this._onSelectAll()}>Alle</button>
-          </div>
+          <span>${isSingle ? "Entität" : "Entitäten"}</span>
+          ${isSingle
+            ? nothing
+            : html`
+                <div class="pp-entity-quick">
+                  <button class="pp-link" @click=${() => this._onSelectFocused()}>Nur fokussiert</button>
+                  <button class="pp-link" @click=${() => this._onSelectAll()}>Alle</button>
+                </div>
+              `}
         </div>
         ${stackedExcludes
           ? html`<div class="pp-popover-hint">Prozent-Entitäten sind in der Stacked-Ansicht ausgeschlossen.</div>`
@@ -763,31 +793,62 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
           ${grouped.map((group) => html`
             <div class="pp-entity-group">
               <div class="pp-entity-group-title">${group.title}</div>
-              ${group.items.map((item) => {
-                const disabled = stackedExcludes && item.isPercentage;
-                const checked = this._selectedIds.has(item.id) && !disabled;
-                return html`
-                  <label
-                    class="pp-entity-row ${disabled ? "disabled" : ""}"
-                    title=${item.entityId}
-                  >
-                    <input
-                      type="checkbox"
-                      .checked=${checked}
-                      ?disabled=${disabled}
-                      @change=${() => this._onToggleSeries(item.id)}
-                    />
-                    <span class="pp-entity-swatch" style=${styleMap({ background: item.color })}></span>
-                    <span class="pp-entity-label">${item.label}</span>
-                    <span class="pp-entity-unit">${item.unit}</span>
-                  </label>
-                `;
-              })}
+              ${group.items.map((item) => this._renderEntityRow(item, {
+                isSingle, stackedExcludes, focusedId
+              }))}
             </div>
           `)}
         </div>
       </div>
     `;
+  }
+
+  private _renderEntityRow(
+    item: NodeSeriesDescriptor,
+    ctx: { isSingle: boolean; stackedExcludes: boolean; focusedId: string | undefined }
+  ): TemplateResult {
+    const disabled = ctx.stackedExcludes && item.isPercentage;
+    if (ctx.isSingle) {
+      const isFocused = item.id === ctx.focusedId;
+      return html`
+        <button
+          type="button"
+          class="pp-entity-row pp-entity-row-radio ${isFocused ? "active" : ""}"
+          title=${item.entityId}
+          @click=${() => this._onPickFocusedSeries(item.id)}
+        >
+          <span class="pp-radio-dot ${isFocused ? "checked" : ""}"></span>
+          <span class="pp-entity-swatch" style=${styleMap({ background: item.color })}></span>
+          <span class="pp-entity-label">${item.label}</span>
+          <span class="pp-entity-unit">${item.unit}</span>
+        </button>
+      `;
+    }
+    const checked = this._selectedIds.has(item.id) && !disabled;
+    return html`
+      <label
+        class="pp-entity-row ${disabled ? "disabled" : ""}"
+        title=${item.entityId}
+      >
+        <input
+          type="checkbox"
+          .checked=${checked}
+          ?disabled=${disabled}
+          @change=${() => this._onToggleSeries(item.id)}
+        />
+        <span class="pp-entity-swatch" style=${styleMap({ background: item.color })}></span>
+        <span class="pp-entity-label">${item.label}</span>
+        <span class="pp-entity-unit">${item.unit}</span>
+      </label>
+    `;
+  }
+
+  private _onPickFocusedSeries(id: string): void {
+    this._focusedEntityIdOverride = id;
+    this._selectedIds = new Set([id]);
+    this.dialogTitle = this._titleForFocusedNode();
+    this._openPopover = null;
+    void this._fetchHistory();
   }
 
   private _onDateTriggerClick(): void {
@@ -961,10 +1022,55 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
         max-width: 360px;
       }
       .pp-entity-trigger-wrap { margin-left: auto; }
-      .pp-entity-trigger-count {
-        font-size: 12px;
-        font-variant-numeric: tabular-nums;
+
+      /* ----- Dropdown-style trigger button ----- */
+      .pp-dropdown-btn {
+        font: inherit;
+        font-size: 13px;
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px 6px 12px;
+        max-width: 220px;
+        height: 32px;
+        border-radius: 8px;
+        border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.14));
+        background: var(--card-background-color, var(--secondary-background-color, #fff));
+        color: var(--primary-text-color);
+        cursor: pointer;
+        white-space: nowrap;
+        transition: background 0.15s ease, border-color 0.15s ease;
+      }
+      .pp-dropdown-btn:hover {
+        background: rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.04);
+      }
+      .pp-dropdown-btn.open {
+        border-color: var(--primary-color, #03a9f4);
+        background: rgba(var(--rgb-primary-color, 3, 169, 244), 0.08);
+      }
+      .pp-dropdown-btn ha-icon {
+        --mdc-icon-size: 16px;
+        flex: none;
+      }
+      .pp-dropdown-caret {
         margin-left: 2px;
+        opacity: 0.7;
+        transition: transform 0.15s ease;
+      }
+      .pp-dropdown-btn.open .pp-dropdown-caret {
+        transform: rotate(180deg);
+      }
+      .pp-dropdown-label {
+        font-variant-numeric: tabular-nums;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .pp-dropdown-swatch {
+        width: 10px;
+        height: 10px;
+        border-radius: 3px;
+        flex: none;
       }
       .pp-entity-scroll {
         max-height: min(50vh, 360px);
@@ -1092,6 +1198,13 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
         padding: 4px 6px;
         border-radius: 6px;
         cursor: pointer;
+        font: inherit;
+        font-size: 13px;
+        text-align: left;
+        width: 100%;
+        background: transparent;
+        color: var(--primary-text-color);
+        border: none;
       }
       .pp-entity-row:hover { background: rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.05); }
       .pp-entity-row.disabled {
@@ -1099,6 +1212,27 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
         cursor: not-allowed;
       }
       .pp-entity-row input[type="checkbox"] { accent-color: var(--primary-color); }
+      .pp-entity-row-radio.active {
+        background: rgba(var(--rgb-primary-color, 3, 169, 244), 0.10);
+      }
+      .pp-radio-dot {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        border: 2px solid var(--secondary-text-color, #757575);
+        flex: none;
+        position: relative;
+      }
+      .pp-radio-dot.checked {
+        border-color: var(--primary-color, #03a9f4);
+      }
+      .pp-radio-dot.checked::after {
+        content: "";
+        position: absolute;
+        inset: 2px;
+        border-radius: 50%;
+        background: var(--primary-color, #03a9f4);
+      }
       .pp-entity-swatch {
         width: 12px;
         height: 12px;
