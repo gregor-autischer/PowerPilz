@@ -33,6 +33,53 @@ import {
 export type ChartMode = "single" | "overlay" | "stacked-percent";
 export type ChartAxis = "primary" | "secondary";
 
+/** A series after the renderer has resolved colors and converted units.
+ *  Returned via `ChartContext.rendered` so callers (tooltips) can read
+ *  the same data the renderer drew. */
+export interface RenderedSeries {
+  id: string;
+  label: string;
+  /** Final CSS color string already passed through `resolveCssColor`. */
+  resolvedColor: string;
+  /** Raw entity unit kept for display in tooltips ("kW", "%"). */
+  rawUnit: string;
+  /** Canonical unit ("W"/"Wh"/"%") used by the rendered axis. */
+  canonicalUnit: string;
+  axis: ChartAxis;
+  isPercentage: boolean;
+  /** Points after canonical-unit conversion (raw for secondary axis). */
+  points: HistoryTrendPoint[];
+  /** Original (display-unit) points retained so tooltips can show the
+   *  value in the unit the user actually configured. */
+  rawPoints: HistoryTrendPoint[];
+}
+
+/** Returned by `renderChart()` so the caller can convert canvas pixels
+ *  back to timestamps and look up values for a hover tooltip. */
+export interface ChartContext {
+  innerLeft: number;
+  innerRight: number;
+  innerTop: number;
+  innerBottom: number;
+  innerWidth: number;
+  innerHeight: number;
+  startMs: number;
+  endMs: number;
+  rendered: ReadonlyArray<RenderedSeries>;
+  pixelToTimestamp(canvasX: number): number;
+  timestampToPixel(ts: number): number;
+  /** Values of every rendered series at the given timestamp. Y returns
+   *  the raw (display) value in the same unit as `rawUnit`. */
+  valuesAt(ts: number): Array<{
+    seriesId: string;
+    label: string;
+    resolvedColor: string;
+    value: number;
+    rawUnit: string;
+    isPercentage: boolean;
+  }>;
+}
+
 export interface ChartSeries {
   /** Stable id used for hover-state and de-duplication. */
   id: string;
@@ -81,10 +128,12 @@ const AXIS_TICK_FONT = "11px system-ui, -apple-system, sans-serif";
 const TICK_COLOR_VAR = "var(--secondary-text-color, #757575)";
 const GRID_COLOR = "rgba(127, 127, 127, 0.18)";
 
-/** Renders the chart described by `config` onto `canvas`. */
-export const renderChart = (canvas: HTMLCanvasElement, config: ChartConfig): void => {
+/** Renders the chart described by `config` onto `canvas` and returns a
+ *  context that lets callers (e.g. a hover tooltip) translate canvas
+ *  coordinates back to timestamps and series values. */
+export const renderChart = (canvas: HTMLCanvasElement, config: ChartConfig): ChartContext | null => {
   const prepared = prepareCanvas(canvas);
-  if (!prepared) return;
+  if (!prepared) return null;
   const { ctx, width, height } = prepared;
 
   const host = config.host ?? document.body;
@@ -96,17 +145,22 @@ export const renderChart = (canvas: HTMLCanvasElement, config: ChartConfig): voi
   const innerBottom = height - PADDING_BOTTOM;
   const innerWidth = Math.max(1, innerRight - innerLeft);
   const innerHeight = Math.max(1, innerBottom - innerTop);
+  const baseContext = (rendered: RenderedSeries[]): ChartContext =>
+    buildContext(rendered, {
+      innerLeft, innerRight, innerTop, innerBottom, innerWidth, innerHeight,
+      startMs: config.startMs, endMs: config.endMs
+    });
 
   if (config.series.length === 0) {
     drawEmptyState(ctx, innerLeft, innerTop, innerWidth, innerHeight, tickColor);
-    return;
+    return baseContext([]);
   }
 
   const timeRange = Math.max(1, config.endMs - config.startMs);
   const cache = { ctx: undefined as CanvasRenderingContext2D | null | undefined };
 
   if (config.mode === "stacked-percent") {
-    drawStackedPercent(
+    const rendered = drawStackedPercent(
       ctx,
       config,
       host,
@@ -116,7 +170,7 @@ export const renderChart = (canvas: HTMLCanvasElement, config: ChartConfig): voi
       cache
     );
     drawXAxis(ctx, config, innerLeft, innerBottom, innerWidth, tickColor);
-    return;
+    return baseContext(rendered);
   }
 
   // single + overlay share axis logic.
@@ -170,6 +224,8 @@ export const renderChart = (canvas: HTMLCanvasElement, config: ChartConfig): voi
   // Series.
   const lineWidth = config.lineWidth ?? 1.6;
   const drawnPrimary = primaryConverted.length;
+  const rendered: RenderedSeries[] = [];
+
   for (let index = primaryConverted.length - 1; index >= 0; index -= 1) {
     const series = primaryConverted[index];
     const points = mapSeriesToCanvas(
@@ -182,12 +238,24 @@ export const renderChart = (canvas: HTMLCanvasElement, config: ChartConfig): voi
       innerTop,
       innerHeight
     );
-    if (points.length < 2) continue;
     const resolved = resolveCssColor(host, series.color);
-    if (config.mode === "single" || drawnPrimary === 1) {
-      fillAreaUnderPolyline(ctx, points, resolved, innerBottom, 0.24, 0, cache);
+    if (points.length >= 2) {
+      if (config.mode === "single" || drawnPrimary === 1) {
+        fillAreaUnderPolyline(ctx, points, resolved, innerBottom, 0.24, 0, cache);
+      }
+      strokePolyline(ctx, points, resolved, lineWidth);
     }
-    strokePolyline(ctx, points, resolved, lineWidth);
+    rendered.push({
+      id: series.id,
+      label: series.label,
+      resolvedColor: resolved,
+      rawUnit: series.unit,
+      canonicalUnit: series.canonicalUnit,
+      axis: "primary",
+      isPercentage: series.isPercentage,
+      points: series.points,
+      rawPoints: series.rawPoints
+    });
   }
 
   for (const series of secondarySeries) {
@@ -201,17 +269,82 @@ export const renderChart = (canvas: HTMLCanvasElement, config: ChartConfig): voi
       innerTop,
       innerHeight
     );
-    if (points.length < 2) continue;
     const resolved = resolveCssColor(host, series.color);
-    // Dashed style for the secondary axis to visually distinguish it
-    // from the primary unit family.
-    ctx.save();
-    ctx.setLineDash([4, 3]);
-    strokePolyline(ctx, points, resolved, lineWidth);
-    ctx.restore();
+    if (points.length >= 2) {
+      // Dashed style for the secondary axis to visually distinguish it
+      // from the primary unit family.
+      ctx.save();
+      ctx.setLineDash([4, 3]);
+      strokePolyline(ctx, points, resolved, lineWidth);
+      ctx.restore();
+    }
+    rendered.push({
+      id: series.id,
+      label: series.label,
+      resolvedColor: resolved,
+      rawUnit: series.unit,
+      canonicalUnit: series.unit,
+      axis: "secondary",
+      isPercentage: true,
+      points: series.points,
+      rawPoints: series.points
+    });
   }
 
   drawXAxis(ctx, config, innerLeft, innerBottom, innerWidth, tickColor);
+  return baseContext(rendered);
+};
+
+// ---------------------------------------------------------------------
+// ChartContext factory
+// ---------------------------------------------------------------------
+
+interface ContextRect {
+  innerLeft: number;
+  innerRight: number;
+  innerTop: number;
+  innerBottom: number;
+  innerWidth: number;
+  innerHeight: number;
+  startMs: number;
+  endMs: number;
+}
+
+const buildContext = (rendered: RenderedSeries[], rect: ContextRect): ChartContext => {
+  const range = Math.max(1, rect.endMs - rect.startMs);
+  const pixelToTimestamp = (canvasX: number): number => {
+    const clamped = Math.max(rect.innerLeft, Math.min(rect.innerRight, canvasX));
+    const norm = (clamped - rect.innerLeft) / Math.max(1, rect.innerWidth);
+    return rect.startMs + norm * range;
+  };
+  const timestampToPixel = (ts: number): number => {
+    const norm = Math.max(0, Math.min(1, (ts - rect.startMs) / range));
+    return rect.innerLeft + norm * rect.innerWidth;
+  };
+  const valuesAt: ChartContext["valuesAt"] = (ts) => {
+    return rendered.map((series) => ({
+      seriesId: series.id,
+      label: series.label,
+      resolvedColor: series.resolvedColor,
+      value: interpolateAt(series.rawPoints, ts),
+      rawUnit: series.rawUnit,
+      isPercentage: series.isPercentage
+    }));
+  };
+  return {
+    innerLeft: rect.innerLeft,
+    innerRight: rect.innerRight,
+    innerTop: rect.innerTop,
+    innerBottom: rect.innerBottom,
+    innerWidth: rect.innerWidth,
+    innerHeight: rect.innerHeight,
+    startMs: rect.startMs,
+    endMs: rect.endMs,
+    rendered,
+    pixelToTimestamp,
+    timestampToPixel,
+    valuesAt
+  };
 };
 
 // ---------------------------------------------------------------------
@@ -271,6 +404,8 @@ const mapSeriesToCanvas = (
 
 interface CanonicalSeries extends ChartSeries {
   canonicalUnit: string;
+  /** Original (display-unit) points before canonical conversion. */
+  rawPoints: HistoryTrendPoint[];
 }
 
 const convertSeriesToCanonical = (series: ReadonlyArray<ChartSeries>): CanonicalSeries[] => {
@@ -293,19 +428,19 @@ const convertSeriesToCanonical = (series: ReadonlyArray<ChartSeries>): Canonical
 
   if (!allCompatible) {
     // Fall back to raw values; pick the unit of the first series for the axis label.
-    return series.map((s) => ({ ...s, canonicalUnit: s.unit }));
+    return series.map((s) => ({ ...s, canonicalUnit: s.unit, rawPoints: s.points }));
   }
 
   return parsed.map(({ s, parsed: p }) => {
     if (!p) {
-      return { ...s, canonicalUnit: s.unit };
+      return { ...s, canonicalUnit: s.unit, rawPoints: s.points };
     }
     const factor = p.factor;
     const converted: HistoryTrendPoint[] = s.points.map((pt) => ({
       ts: pt.ts,
       value: pt.value * factor
     }));
-    return { ...s, points: converted, canonicalUnit: p.canonicalUnit };
+    return { ...s, points: converted, canonicalUnit: p.canonicalUnit, rawPoints: s.points };
   });
 };
 
@@ -456,12 +591,12 @@ const drawStackedPercent = (
   timeRange: number,
   tickColor: string,
   cache: { ctx?: CanvasRenderingContext2D | null }
-): void => {
+): RenderedSeries[] => {
   // Filter percentage entities — they can't be sensibly stacked with power/energy.
   const stackable = config.series.filter((s) => !s.isPercentage);
   if (stackable.length === 0) {
     drawEmptyState(ctx, rect.innerLeft, rect.innerTop, rect.innerWidth, rect.innerHeight, tickColor);
-    return;
+    return [];
   }
 
   // Convert all series to canonical unit so absolute magnitudes match.
@@ -473,7 +608,7 @@ const drawStackedPercent = (
   const timestamps = buildSampleTimestamps(canonical, config.startMs, config.endMs, 256);
   if (timestamps.length < 2) {
     drawEmptyState(ctx, rect.innerLeft, rect.innerTop, rect.innerWidth, rect.innerHeight, tickColor);
-    return;
+    return [];
   }
 
   // Interpolate each series at each timestamp. Negative values are
@@ -503,33 +638,54 @@ const drawStackedPercent = (
     tickColor
   );
 
-  // Draw stacked layers in slot order (slot 0 = bottom).
+  // Draw stacked layers in slot order (slot 0 = bottom). Build a parallel
+  // RenderedSeries[] where each series' tooltip-facing points are its
+  // share-of-total (0..100) at each timestamp — that is what the user
+  // actually sees in the stacked-percent chart.
   let lowerCurve: CanvasPoint[] = timestamps.map((ts) => ({
     x: timeToCanvasX(ts, config.startMs, timeRange, rect.innerLeft, rect.innerWidth),
     y: rect.innerBottom
   }));
 
-  // Cumulative shares: each slot's upper curve = sum(0..slot)/total.
+  const rendered: RenderedSeries[] = [];
   const cumulative: number[] = timestamps.map(() => 0);
   for (let slot = 0; slot < canonical.length; slot += 1) {
     const series = canonical[slot];
     const slotValues = interpolated[slot];
-    const upper: CanvasPoint[] = timestamps.map((ts, tIndex) => {
+    const upper: CanvasPoint[] = [];
+    const sharePoints: HistoryTrendPoint[] = [];
+    for (let tIndex = 0; tIndex < timestamps.length; tIndex += 1) {
+      const ts = timestamps[tIndex];
       cumulative[tIndex] += slotValues[tIndex];
       const total = totals[tIndex];
-      const share = total > 0 ? (cumulative[tIndex] / total) * 100 : 0;
-      const yNorm = Math.max(0, Math.min(1, share / 100));
-      return {
+      const cumulativeShare = total > 0 ? (cumulative[tIndex] / total) * 100 : 0;
+      const ownShare = total > 0 ? (slotValues[tIndex] / total) * 100 : 0;
+      const yNorm = Math.max(0, Math.min(1, cumulativeShare / 100));
+      upper.push({
         x: timeToCanvasX(ts, config.startMs, timeRange, rect.innerLeft, rect.innerWidth),
         y: rect.innerTop + (1 - yNorm) * rect.innerHeight
-      };
-    });
+      });
+      sharePoints.push({ ts, value: ownShare });
+    }
 
     const resolvedColor = resolveCssColor(host, series.color);
     fillAreaBetweenPolylines(ctx, upper, lowerCurve, withAlpha(resolvedColor, 0.45, cache));
     strokePolyline(ctx, upper, resolvedColor, config.lineWidth ?? 1.4);
     lowerCurve = upper;
+
+    rendered.push({
+      id: series.id,
+      label: series.label,
+      resolvedColor,
+      rawUnit: "%",
+      canonicalUnit: "%",
+      axis: "primary",
+      isPercentage: true,
+      points: sharePoints,
+      rawPoints: sharePoints
+    });
   }
+  return rendered;
 };
 
 const buildSampleTimestamps = (

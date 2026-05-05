@@ -20,7 +20,12 @@ import {
   type TrendDataSource
 } from "../../utils/history";
 import { resolveColor as resolveColorValue } from "../../utils/color";
-import { renderChart, type ChartMode, type ChartSeries } from "../../utils/chart-renderer";
+import {
+  renderChart,
+  type ChartContext,
+  type ChartMode,
+  type ChartSeries
+} from "../../utils/chart-renderer";
 import { PowerPilzDialogBase } from "./dialog-shell";
 
 const DIALOG_TAG = "power-pilz-energy-node-dialog";
@@ -98,10 +103,15 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
   @state() private _historyByEntity: Map<string, HistoryTrendPoint[]> = new Map();
   @state() private _loading = false;
   @state() private _loadError?: string;
+  @state() private _hover?: { canvasX: number; ts: number };
 
   private _renderRaf?: number;
   private _resizeObserver?: ResizeObserver;
   private _fetchAbort = 0;
+  private _chartContext: ChartContext | null = null;
+  /** Logical canvas size used by the last render, kept for hit-testing
+   *  pointermove events without re-querying the canvas rect each move. */
+  private _canvasLogicalSize: { width: number; height: number } = { width: 0, height: 0 };
 
   // ------------------------------------------------------------
   // Lifecycle
@@ -408,13 +418,25 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
     const window = this._activeWindow();
     const seriesForChart = this._buildChartSeries();
 
-    renderChart(canvas, {
+    this._chartContext = renderChart(canvas, {
       mode: this._mode,
       series: seriesForChart,
       startMs: window.startMs,
       endMs: window.endMs,
       host: this.renderRoot as ParentNode & Element
     });
+    const rect = canvas.getBoundingClientRect();
+    this._canvasLogicalSize = {
+      width: Math.max(1, rect.width),
+      height: Math.max(1, rect.height)
+    };
+
+    // If we already have a hover, snap its timestamp to the new
+    // pixel mapping so the line stays visually consistent.
+    if (this._hover && this._chartContext) {
+      const x = this._chartContext.timestampToPixel(this._hover.ts);
+      this._hover = { canvasX: x, ts: this._hover.ts };
+    }
   }
 
   private _buildChartSeries(): ChartSeries[] {
@@ -492,6 +514,33 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
   }
 
   // ------------------------------------------------------------
+  // Hover tooltip
+  // ------------------------------------------------------------
+
+  private _onChartPointerMove = (event: PointerEvent): void => {
+    if (!this._chartContext) return;
+    const canvas = this.renderRoot.querySelector<HTMLCanvasElement>(".pp-chart-canvas");
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const localX = event.clientX - rect.left;
+    const localY = event.clientY - rect.top;
+    const ctx = this._chartContext;
+    if (
+      localX < ctx.innerLeft || localX > ctx.innerRight
+      || localY < ctx.innerTop || localY > ctx.innerBottom
+    ) {
+      if (this._hover) this._hover = undefined;
+      return;
+    }
+    const ts = ctx.pixelToTimestamp(localX);
+    this._hover = { canvasX: localX, ts };
+  };
+
+  private _onChartPointerLeave = (): void => {
+    if (this._hover) this._hover = undefined;
+  };
+
+  // ------------------------------------------------------------
   // Render
   // ------------------------------------------------------------
 
@@ -501,12 +550,58 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
         ${this._renderModeSwitch()}
         ${this._renderRangeBar()}
       </div>
-      <div class="pp-chart-wrap">
+      <div
+        class="pp-chart-wrap"
+        @pointermove=${this._onChartPointerMove}
+        @pointerleave=${this._onChartPointerLeave}
+      >
         <canvas class="pp-chart-canvas"></canvas>
+        ${this._renderHoverOverlay()}
         ${this._loading ? html`<div class="pp-chart-overlay">Lade…</div>` : nothing}
         ${this._loadError ? html`<div class="pp-chart-overlay error">${this._loadError}</div>` : nothing}
       </div>
       ${this._renderEntityList()}
+    `;
+  }
+
+  private _renderHoverOverlay(): TemplateResult | typeof nothing {
+    if (!this._hover || !this._chartContext) return nothing;
+    const ctx = this._chartContext;
+    const { width, height } = this._canvasLogicalSize;
+    if (width <= 0 || height <= 0) return nothing;
+    const xPct = (this._hover.canvasX / width) * 100;
+
+    const values = ctx.valuesAt(this._hover.ts).filter(
+      (entry) => Number.isFinite(entry.value)
+    );
+
+    // Place tooltip on whichever side keeps it inside the chart area.
+    const showOnRight = xPct < 60;
+
+    return html`
+      <div
+        class="pp-hover-line"
+        style=${styleMap({ left: `${xPct}%` })}
+        aria-hidden="true"
+      ></div>
+      <div
+        class="pp-tooltip ${showOnRight ? "right" : "left"}"
+        style=${styleMap({
+          left: showOnRight ? `${xPct}%` : "auto",
+          right: showOnRight ? "auto" : `${100 - xPct}%`
+        })}
+      >
+        <div class="pp-tooltip-time">${_formatHoverTime(this._hover.ts)}</div>
+        ${values.length === 0
+          ? html`<div class="pp-tooltip-row muted">—</div>`
+          : values.map((entry) => html`
+              <div class="pp-tooltip-row">
+                <span class="pp-tooltip-swatch" style=${styleMap({ background: entry.resolvedColor })}></span>
+                <span class="pp-tooltip-label">${entry.label}</span>
+                <span class="pp-tooltip-value">${_formatHoverValue(entry.value, entry.rawUnit)}</span>
+              </div>
+            `)}
+      </div>
     `;
   }
 
@@ -748,6 +843,62 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
         color: var(--error-color, #c62828);
       }
 
+      .pp-hover-line {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 1px;
+        background: var(--secondary-text-color, #757575);
+        opacity: 0.55;
+        pointer-events: none;
+        transform: translateX(-0.5px);
+      }
+      .pp-tooltip {
+        position: absolute;
+        top: 8px;
+        background: var(--card-background-color, var(--primary-background-color, #fff));
+        color: var(--primary-text-color);
+        border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.12));
+        border-radius: 8px;
+        padding: 8px 10px;
+        font-size: 12px;
+        line-height: 1.45;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+        pointer-events: none;
+        max-width: 240px;
+        min-width: 140px;
+        z-index: 5;
+      }
+      .pp-tooltip.right { transform: translateX(8px); }
+      .pp-tooltip.left { transform: translateX(-8px); }
+      .pp-tooltip-time {
+        font-weight: 600;
+        margin-bottom: 4px;
+        white-space: nowrap;
+      }
+      .pp-tooltip-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+      }
+      .pp-tooltip-row.muted { color: var(--secondary-text-color); }
+      .pp-tooltip-swatch {
+        width: 8px;
+        height: 8px;
+        border-radius: 2px;
+        flex: none;
+      }
+      .pp-tooltip-label {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .pp-tooltip-value {
+        font-variant-numeric: tabular-nums;
+        font-weight: 500;
+      }
+
       .pp-entity-list {
         margin-top: 4px;
         font-size: 13px;
@@ -860,4 +1011,21 @@ const _parseLocalIso = (iso: string): number | null => {
   if (!iso) return null;
   const ms = new Date(iso).getTime();
   return Number.isFinite(ms) ? ms : null;
+};
+
+const _pad2 = (n: number): string => String(n).padStart(2, "0");
+
+const _formatHoverTime = (ts: number): string => {
+  const date = new Date(ts);
+  const datePart = `${_pad2(date.getDate())}.${_pad2(date.getMonth() + 1)}.${date.getFullYear()}`;
+  const timePart = `${_pad2(date.getHours())}:${_pad2(date.getMinutes())}`;
+  return `${datePart} ${timePart}`;
+};
+
+const _formatHoverValue = (value: number, unit: string): string => {
+  if (!Number.isFinite(value)) return "—";
+  const abs = Math.abs(value);
+  const decimals = abs >= 100 ? 0 : abs >= 10 ? 1 : 2;
+  const text = value.toFixed(decimals);
+  return unit ? `${text} ${unit}` : text;
 };
