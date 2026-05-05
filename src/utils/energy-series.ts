@@ -82,10 +82,16 @@ const entityUnit = (hass: HomeAssistant, entityId: string): string | undefined =
  *  to see in any chart of this node) with a fallback to purple — the
  *  same default the small-node trend uses. Sub-blocks always render
  *  black. The HA "state" sentinel is treated as "not set" so it
- *  doesn't poison the cascade. */
+ *  doesn't poison the cascade.
+ *
+ *  `category` is currently informational only; battery SOC entities
+ *  reuse the matching battery node's `*_trend_color` upstream in
+ *  `pushBatteryPercent`, so this resolver never needs to dispatch on
+ *  category itself. The parameter is kept on the signature so future
+ *  per-category defaults can be added without changing every caller. */
 export const resolveSeriesColor = (
   trendColor: unknown,
-  category: SeriesCategory,
+  _category: SeriesCategory,
   isSubBlock: boolean
 ): string => {
   if (isSubBlock) {
@@ -100,11 +106,6 @@ export const resolveSeriesColor = (
       return resolveColor(trimmed, DEFAULT_TREND_COLOR);
     }
   }
-  // Battery SOC entities have no dedicated trend color in the card
-  // config — fall back to the main battery's trend color when category
-  // hints at it. This keeps the SOC line color-aligned with the
-  // battery node's trend.
-  void category;
   return resolveColor(DEFAULT_TREND_COLOR, DEFAULT_TREND_COLOR);
 };
 

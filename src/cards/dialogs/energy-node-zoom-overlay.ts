@@ -525,17 +525,25 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
   }
 
   /** Renders just a small dot at the hovered data point. The value is
-   *  shown via `_displayValueText` in the header (graph-card UX). */
+   *  shown via `_displayValueText` in the header (graph-card UX).
+   *
+   *  The dot is a sibling of the trend canvases inside the shell, all
+   *  filling the shell from corner to corner (`.pp-zoom-trend` uses
+   *  `inset: 0` and the canvas inside has 100% width/height with no
+   *  margin or padding). That means the canvas's content-box origin is
+   *  at the shell's `(0, 0)`, so we can map logical canvas coordinates
+   *  to shell-local pixels with a simple ratio — no offsetParent walk
+   *  needed. */
   private _renderHoverDot(): TemplateResult | typeof nothing {
     if (!this._hover || !this._focused) return nothing;
     const canvas = this.renderRoot.querySelector<HTMLCanvasElement>(".pp-zoom-area");
     if (!canvas) return nothing;
     const { width, height } = this._lastCanvasSize;
     if (width <= 0 || height <= 0) return nothing;
-    const screenW = canvas.offsetWidth || canvas.getBoundingClientRect().width;
-    const screenH = canvas.offsetHeight || canvas.getBoundingClientRect().height;
-    const xPx = canvas.offsetLeft + (this._hover.logicalX / width) * screenW;
-    const yPx = canvas.offsetTop + (this._hover.logicalY / height) * screenH;
+    const layoutW = canvas.offsetWidth || canvas.getBoundingClientRect().width;
+    const layoutH = canvas.offsetHeight || canvas.getBoundingClientRect().height;
+    const xPx = (this._hover.logicalX / width) * layoutW;
+    const yPx = (this._hover.logicalY / height) * layoutH;
     return html`
       <div
         class="pp-zoom-hover-dot"
