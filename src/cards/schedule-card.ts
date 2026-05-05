@@ -441,65 +441,6 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
     });
   };
 
-  private handleTimelineTap = async (event: MouseEvent): Promise<void> => {
-    event.stopPropagation();
-    if (this.isEditorPreview() || !this._scheduleEntityId) return;
-
-    const track = event.currentTarget as HTMLElement;
-    const rect = track.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const pct = x / rect.width;
-
-    const { start, end } = this.resolvedTimeWindow();
-    const range = end - start;
-    const tappedMinute = Math.round(start + pct * range);
-    const snapped = Math.round(tappedMinute / 30) * 30;
-
-    const dayKey = this.dayKey(this._selectedDay);
-    const blocks = [...this.blocksForDay(this._selectedDay)];
-
-    // Hit-test existing block → remove it.
-    const hitIndex = blocks.findIndex((b) => {
-      const from = this.timeToMinutes(b.from);
-      const to = this.timeToMinutes(b.to);
-      return snapped >= from && snapped < to;
-    });
-
-    if (hitIndex >= 0) {
-      blocks.splice(hitIndex, 1);
-    } else {
-      const blockStart = Math.max(0, snapped - 30);
-      const blockEnd = Math.min(1440, snapped + 30);
-      const fromStr = `${String(Math.floor(blockStart / 60)).padStart(2, "0")}:${String(blockStart % 60).padStart(2, "0")}:00`;
-      const toStr = blockEnd >= 1440
-        ? "24:00:00"
-        : `${String(Math.floor(blockEnd / 60)).padStart(2, "0")}:${String(blockEnd % 60).padStart(2, "0")}:00`;
-
-      const conflicts = blocks.some((b) => {
-        const bFrom = this.timeToMinutes(b.from);
-        const bTo = this.timeToMinutes(b.to);
-        return blockStart < bTo && blockEnd > bFrom;
-      });
-      if (!conflicts) {
-        blocks.push({ from: fromStr, to: toStr });
-        blocks.sort((a, b) => this.timeToMinutes(a.from) - this.timeToMinutes(b.from));
-      }
-    }
-
-    // Build full week payload with just the modified day replaced.
-    const fullWeek: WeekBlocks = { ...this._weekBlocks() };
-    fullWeek[dayKey] = blocks;
-
-    try {
-      await this.hass.callService("powerpilz_companion", "set_schedule_blocks", {
-        entity_id: this._scheduleEntityId,
-        blocks: fullWeek
-      });
-    } catch {
-      // Ignore silently — the attributes will refresh on next state change.
-    }
-  };
-
   // --- Render ---
 
   private renderTimeline(): TemplateResult {
@@ -540,7 +481,7 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
               </div>
             `
           : nothing}
-        <div class="timeline-track" @click=${this.handleTimelineTap}>
+        <div class="timeline-track">
           ${blocks.map((block) => {
             const from = this.timeToMinutes(block.from);
             const to = this.timeToMinutes(block.to);
