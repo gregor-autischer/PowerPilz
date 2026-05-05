@@ -93,6 +93,8 @@ interface EnergyCardConfig extends LovelaceCardConfig {
   flow_color?: string | number[];
   unit?: string;
   decimals?: number;
+  node_actions_enabled?: boolean;
+  entity?: string;
 }
 
 type HaFormSchema = Record<string, unknown>;
@@ -173,7 +175,8 @@ const subBlockFields = (prefix: "solar" | "home" | "grid" | "grid_secondary", in
             ]
           }
         ]
-      : [])
+      : []),
+    nodeActionSection(slot)
   ];
 };
 
@@ -311,6 +314,43 @@ const DECIMALS_PREFIXED_HELP =
   "Decimal precision for prefixed units (kW, MW, kWh, MWh) when Auto unit scaling is enabled.";
 const TREND_SOURCE_HELP =
   "Controls where trend data is fetched from. In most setups, keep Auto (recommended), which prefers statistics and falls back to history automatically.";
+const NODE_ACTIONS_ENABLED_HELP =
+  "When enabled, every main node and sub-block of the energy card reacts to its own tap/hold/double-tap. Long-press defaults to opening the node detail dialog.";
+const NODE_INTERACTION_HELP =
+  "Choose what happens when you tap, long-press or double-tap this node. Long-press defaults to opening the PowerPilz node detail dialog with a history graph.";
+
+/** Builds an "Interactions" expandable section for a given node prefix
+ *  (e.g. "solar", "home_sub_3"). Mirrors the Mushroom card's
+ *  tap/hold/double-tap UI exactly. */
+const nodeActionSection = (prefix: string, title = "Interactions"): HaFormSchema => ({
+  type: "expandable",
+  name: "",
+  title,
+  icon: "mdi:gesture-tap",
+  expanded: false,
+  schema: [
+    {
+      type: "grid",
+      name: "",
+      schema: [
+        {
+          name: `${prefix}_tap_action`,
+          selector: { ui_action: {} },
+          helper: NODE_INTERACTION_HELP,
+          description: NODE_INTERACTION_HELP
+        },
+        {
+          name: `${prefix}_hold_action`,
+          selector: { ui_action: {} }
+        },
+        {
+          name: `${prefix}_double_tap_action`,
+          selector: { ui_action: {} }
+        }
+      ]
+    }
+  ]
+});
 
 const SCHEMA: HaFormSchema[] = [
   nodeStyleSection("Center visuals", "mdi:palette-outline", [
@@ -497,7 +537,8 @@ const SCHEMA: HaFormSchema[] = [
           name: "solar_trend_color",
           selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
         }
-      ])
+      ]),
+      nodeActionSection("solar")
     ]
   },
   {
@@ -582,7 +623,8 @@ const SCHEMA: HaFormSchema[] = [
           name: "grid_export_icon_color",
           selector: { ui_color: { include_state: false, include_none: false, default_color: "red" } }
         }
-      ])
+      ]),
+      nodeActionSection("grid")
     ]
   },
   {
@@ -667,7 +709,8 @@ const SCHEMA: HaFormSchema[] = [
           name: "grid_secondary_export_icon_color",
           selector: { ui_color: { include_state: false, include_none: false, default_color: "red" } }
         }
-      ])
+      ]),
+      nodeActionSection("grid_secondary")
     ]
   },
   {
@@ -738,7 +781,8 @@ const SCHEMA: HaFormSchema[] = [
           name: "home_trend_color",
           selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
         }
-      ])
+      ]),
+      nodeActionSection("home")
     ]
   },
   {
@@ -869,7 +913,8 @@ const SCHEMA: HaFormSchema[] = [
             ]
           }
         ]
-      }
+      },
+      nodeActionSection("battery")
     ]
   },
   {
@@ -1010,7 +1055,8 @@ const SCHEMA: HaFormSchema[] = [
             ]
           }
         ]
-      }
+      },
+      nodeActionSection("battery_secondary")
     ]
   },
   subBlockSchemas("solar", "Solar sub blocks", "mdi:solar-power-variant", SOLAR_SUB_BLOCK_COUNT),
@@ -1025,10 +1071,22 @@ const SCHEMA: HaFormSchema[] = [
     expanded: false,
     schema: [
       {
+        type: "grid",
+        name: "",
+        schema: [
+          {
+            name: "node_actions_enabled",
+            selector: { boolean: {} },
+            helper: NODE_ACTIONS_ENABLED_HELP,
+            description: NODE_ACTIONS_ENABLED_HELP
+          }
+        ]
+      },
+      {
         name: "entity",
         selector: { entity: {} },
-        helper: "Default entity used by more-info actions. Required when tap/hold/double-tap is set to 'More info'.",
-        description: "Default entity used by more-info actions. Required when tap/hold/double-tap is set to 'More info'."
+        helper: "Default entity used by card-level more-info actions. Each main node and sub-block can override its own entity via its Interactions section.",
+        description: "Default entity used by card-level more-info actions. Each main node and sub-block can override its own entity via its Interactions section."
       },
       { name: "tap_action", selector: { ui_action: {} } },
       { name: "hold_action", selector: { ui_action: {} } },
@@ -1127,7 +1185,26 @@ const LABELS: Record<string, string> = {
   entity: "Action entity",
   tap_action: "Tap behavior",
   hold_action: "Hold behavior",
-  double_tap_action: "Double tap behavior"
+  double_tap_action: "Double tap behavior",
+  node_actions_enabled: "Enable per-node interactions",
+  solar_tap_action: "Tap behavior",
+  solar_hold_action: "Hold behavior",
+  solar_double_tap_action: "Double tap behavior",
+  grid_tap_action: "Tap behavior",
+  grid_hold_action: "Hold behavior",
+  grid_double_tap_action: "Double tap behavior",
+  grid_secondary_tap_action: "Tap behavior",
+  grid_secondary_hold_action: "Hold behavior",
+  grid_secondary_double_tap_action: "Double tap behavior",
+  home_tap_action: "Tap behavior",
+  home_hold_action: "Hold behavior",
+  home_double_tap_action: "Double tap behavior",
+  battery_tap_action: "Tap behavior",
+  battery_hold_action: "Hold behavior",
+  battery_double_tap_action: "Double tap behavior",
+  battery_secondary_tap_action: "Tap behavior",
+  battery_secondary_hold_action: "Hold behavior",
+  battery_secondary_double_tap_action: "Double tap behavior"
 };
 
 @customElement("power-pilz-energy-card-editor")
@@ -1171,6 +1248,7 @@ export class PowerPilzEnergyCardEditor extends LitElement implements LovelaceCar
       auto_scale_units: config.auto_scale_units ?? false,
       decimals_base_unit: config.decimals_base_unit ?? config.decimals ?? 1,
       decimals_prefixed_unit: config.decimals_prefixed_unit ?? config.decimals ?? 1,
+      node_actions_enabled: config.node_actions_enabled ?? true,
       type: "custom:power-pilz-energy-card"
     };
   }
@@ -1202,7 +1280,7 @@ export class PowerPilzEnergyCardEditor extends LitElement implements LovelaceCar
   private computeLabel = (schema: { name?: string }): string => {
     const name = schema.name ?? "";
     const subMatch = name.match(
-      /^(solar|home|grid|grid_secondary)_sub_(\d+)_(enabled|entity|label|icon|icon_color|state_mode)$/
+      /^(solar|home|grid|grid_secondary)_sub_(\d+)_(enabled|entity|label|icon|icon_color|state_mode|tap_action|hold_action|double_tap_action)$/
     );
     if (subMatch) {
       const [, , , field] = subMatch;
@@ -1212,7 +1290,10 @@ export class PowerPilzEnergyCardEditor extends LitElement implements LovelaceCar
         label: "Label",
         icon: "Icon",
         icon_color: "Color",
-        state_mode: "State mode"
+        state_mode: "State mode",
+        tap_action: "Tap behavior",
+        hold_action: "Hold behavior",
+        double_tap_action: "Double tap behavior"
       };
       return fieldLabels[field] ?? field;
     }

@@ -25,6 +25,7 @@ import {
   resolveComparableUnitContext
 } from "../utils/unit-scaling";
 import { bindActionHandler, type ActionHandlerCleanup } from "../utils/action-handler";
+import { openEnergyNodeDialog } from "./dialogs/energy-node-dialog";
 import "./editors/energy-card-editor";
 
 type FlowDirection = "none" | "forward" | "backward";
@@ -58,6 +59,14 @@ interface ActionConfig {
   action?: string;
   [key: string]: unknown;
 }
+
+/** Custom action marker that opens the energy node-detail dialog. */
+const ACTION_ENERGY_NODE_DETAIL = "powerpilz-energy-node-detail";
+
+/** Logical node identifiers used as `data-pp-node-key` and as the prefix
+ *  for per-node action config keys. Sub-block keys are
+ *  `${prefix}_sub_${index}` (1-based). */
+type NodeActionKey = NodeKey | `${"solar" | "home" | "grid" | "grid_secondary"}_sub_${number}`;
 
 interface TrendPoint {
   ts: number;
@@ -239,6 +248,45 @@ interface PowerPilzEnergyCardConfig extends LovelaceCardConfig {
   tap_action?: ActionConfig;
   hold_action?: ActionConfig;
   double_tap_action?: ActionConfig;
+  // ----- Per-node interactions (mushroom-style) ----------------------
+  // When `node_actions_enabled` is true (default), each main node and
+  // sub-block can react to tap / long-press / double-tap with its own
+  // ActionConfig. Defaults: tap = none, hold = open node-detail dialog,
+  // double-tap = none. Setting `<key>_<action>_action` to {action:"none"}
+  // disables the default for that gesture.
+  node_actions_enabled?: boolean;
+  solar_tap_action?: ActionConfig;
+  solar_hold_action?: ActionConfig;
+  solar_double_tap_action?: ActionConfig;
+  grid_tap_action?: ActionConfig;
+  grid_hold_action?: ActionConfig;
+  grid_double_tap_action?: ActionConfig;
+  grid_secondary_tap_action?: ActionConfig;
+  grid_secondary_hold_action?: ActionConfig;
+  grid_secondary_double_tap_action?: ActionConfig;
+  home_tap_action?: ActionConfig;
+  home_hold_action?: ActionConfig;
+  home_double_tap_action?: ActionConfig;
+  battery_tap_action?: ActionConfig;
+  battery_hold_action?: ActionConfig;
+  battery_double_tap_action?: ActionConfig;
+  battery_secondary_tap_action?: ActionConfig;
+  battery_secondary_hold_action?: ActionConfig;
+  battery_secondary_double_tap_action?: ActionConfig;
+  // Sub-block per-action config is read dynamically — see
+  // `nodeActionConfig()`. Up to 4 solar, 2 grid, 2 grid_secondary, 8 home.
+  [k: `solar_sub_${number}_tap_action`]: ActionConfig | undefined;
+  [k2: `solar_sub_${number}_hold_action`]: ActionConfig | undefined;
+  [k3: `solar_sub_${number}_double_tap_action`]: ActionConfig | undefined;
+  [k4: `home_sub_${number}_tap_action`]: ActionConfig | undefined;
+  [k5: `home_sub_${number}_hold_action`]: ActionConfig | undefined;
+  [k6: `home_sub_${number}_double_tap_action`]: ActionConfig | undefined;
+  [k7: `grid_sub_${number}_tap_action`]: ActionConfig | undefined;
+  [k8: `grid_sub_${number}_hold_action`]: ActionConfig | undefined;
+  [k9: `grid_sub_${number}_double_tap_action`]: ActionConfig | undefined;
+  [k10: `grid_secondary_sub_${number}_tap_action`]: ActionConfig | undefined;
+  [k11: `grid_secondary_sub_${number}_hold_action`]: ActionConfig | undefined;
+  [k12: `grid_secondary_sub_${number}_double_tap_action`]: ActionConfig | undefined;
 }
 
 @customElement("power-pilz-energy-card")
@@ -318,6 +366,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
   private _subNodeConnectorSegments: SubNodeConnectorSegment[] = [];
 
   private _actionHandler?: ActionHandlerCleanup;
+  private _nodeActionHandlers: Map<string, ActionHandlerCleanup> = new Map();
   private _trendRefreshTimer?: number;
   private _trendRefreshInFlight = false;
   private _lastTrendRefresh = 0;
@@ -811,6 +860,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
               ? html`
                   <div
                     class="energy-value solar ${solar === null ? "missing" : ""}"
+                    data-pp-node-key="solar"
                     style=${styleMap(this.gridPlacementStyle(solarPlacement))}
                   >
                     ${this.renderTrend("solar", solar, solarUnit, Boolean(config.solar_trend), solarTrendColor, null, "")}
@@ -831,6 +881,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
               ? html`
                   <div
                     class="energy-value grid ${grid === null ? "missing" : ""}"
+                    data-pp-node-key="grid"
                     style=${styleMap(this.gridPlacementStyle(gridPlacement))}
                   >
                     ${this.renderTrend(
@@ -859,6 +910,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
               ? html`
                   <div
                     class="energy-value grid-secondary ${gridSecondary === null ? "missing" : ""}"
+                    data-pp-node-key="grid_secondary"
                     style=${styleMap(this.gridPlacementStyle(gridSecondaryPlacement))}
                   >
                     ${this.renderTrend(
@@ -887,6 +939,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
               ? html`
                   <div
                     class="energy-value home ${home === null ? "missing" : ""}"
+                    data-pp-node-key="home"
                     style=${styleMap(this.gridPlacementStyle(homePlacement))}
                   >
                     ${this.renderTrend("home", home, homeUnit, Boolean(config.home_trend), homeTrendColor, null, "")}
@@ -920,6 +973,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
               ? html`
                   <div
                     class="energy-value battery ${battery === null ? "missing" : ""}"
+                    data-pp-node-key="battery"
                     style=${styleMap(this.gridPlacementStyle(batteryPlacement))}
                   >
                     ${this.renderTrend(
@@ -956,6 +1010,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
               ? html`
                   <div
                     class="energy-value battery-secondary ${batterySecondary === null ? "missing" : ""}"
+                    data-pp-node-key="battery_secondary"
                     style=${styleMap(this.gridPlacementStyle(batterySecondaryPlacement))}
                   >
                     ${this.renderTrend(
@@ -1485,6 +1540,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
             <div
               class="energy-sub-value ${node}-sub sub-col-${position.col} ${this._compactSubBlocks ? "compact" : ""} ${missing ? "missing" : ""}"
               data-key=${entry.key}
+              data-pp-node-key="${node}_sub_${entry.index}"
               style=${styleMap(blockStyle)}
             >
               <div class="energy-sub-content">
@@ -2572,6 +2628,7 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     this.teardownVisibilityObserver();
     this.stopLiveRuntime();
     this.destroyActionHandler();
+    this.destroyNodeActionHandlers();
     super.disconnectedCallback();
   }
 
@@ -2580,6 +2637,11 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       this._actionHandler.destroy();
       this._actionHandler = undefined;
     }
+  }
+
+  private destroyNodeActionHandlers(): void {
+    this._nodeActionHandlers.forEach((cleanup) => cleanup.destroy());
+    this._nodeActionHandlers.clear();
   }
 
   private setupActionHandler(): void {
@@ -2604,10 +2666,125 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     );
   }
 
+  /**
+   * Binds tap/hold/double-tap handlers to every DOM element marked with
+   * `data-pp-node-key`. Per-node actions stop event propagation so they
+   * never double-fire the card-level action.
+   *
+   * Default behaviour (mushroom-parity, but per-node):
+   *   - tap         → none (configurable via `<key>_tap_action`)
+   *   - hold        → open node-detail dialog (configurable)
+   *   - double-tap  → none (configurable)
+   */
+  private setupNodeActionHandlers(): void {
+    this.destroyNodeActionHandlers();
+    if (!this._config || this.isEditorPreview()) return;
+    if (this._config.node_actions_enabled === false) return;
+
+    const nodes = this.renderRoot.querySelectorAll<HTMLElement>("[data-pp-node-key]");
+    nodes.forEach((node) => {
+      const key = node.dataset.ppNodeKey;
+      if (!key) return;
+      // Hold defaults to "open node detail" unless explicitly disabled or overridden.
+      const hasExplicitHold = this.hasNodeAction(key, "hold");
+      const holdDisabled = this.nodeActionConfig(key, "hold")?.action === "none";
+      const hasHold = hasExplicitHold || !holdDisabled;
+      const hasDoubleTap = this.hasNodeAction(key, "double_tap");
+
+      const cleanup = bindActionHandler(
+        node,
+        {
+          onTap: () => this.fireNodeAction(key, "tap"),
+          onHold: () => this.fireNodeAction(key, "hold"),
+          onDoubleTap: () => this.fireNodeAction(key, "double_tap")
+        },
+        { hasHold, hasDoubleTap, stopPropagation: true }
+      );
+      this._nodeActionHandlers.set(key, cleanup);
+    });
+  }
+
+  private nodeActionConfig(nodeKey: string, action: "tap" | "hold" | "double_tap"): ActionConfig | undefined {
+    const config = this._config as unknown as Record<string, ActionConfig | undefined> | undefined;
+    if (!config) return undefined;
+    return config[`${nodeKey}_${action}_action`];
+  }
+
+  private hasNodeAction(nodeKey: string, action: "tap" | "hold" | "double_tap"): boolean {
+    const cfg = this.nodeActionConfig(nodeKey, action);
+    return Boolean(cfg && cfg.action && cfg.action !== "none");
+  }
+
+  private fireNodeAction(nodeKey: string, action: "tap" | "hold" | "double_tap"): void {
+    if (this.isEditorPreview() || !this._config) return;
+
+    let actionConfig = this.nodeActionConfig(nodeKey, action);
+
+    // Default hold: open node-detail dialog.
+    if (action === "hold" && (!actionConfig || !actionConfig.action)) {
+      actionConfig = { action: ACTION_ENERGY_NODE_DETAIL };
+    }
+
+    if (!actionConfig || !actionConfig.action || actionConfig.action === "none") {
+      return;
+    }
+
+    if (actionConfig.action === ACTION_ENERGY_NODE_DETAIL) {
+      this.openNodeDetailDialog(nodeKey);
+      return;
+    }
+
+    // Synthesize a minimal config that hass-action understands. The
+    // per-node action_config is hoisted to the standard tap/hold/double_tap
+    // keys so the standard handler resolves entity/service correctly.
+    const synthetic: PowerPilzEnergyCardConfig = {
+      ...this._config,
+      tap_action: action === "tap" ? actionConfig : this._config.tap_action,
+      hold_action: action === "hold" ? actionConfig : this._config.hold_action,
+      double_tap_action: action === "double_tap" ? actionConfig : this._config.double_tap_action,
+      // Use the node's primary entity for more-info if no explicit entity in actionConfig.
+      entity: (actionConfig.entity as string | undefined) ?? this.nodeEntityId(nodeKey) ?? this._config.entity
+    };
+
+    this.dispatchEvent(
+      new CustomEvent("hass-action", {
+        detail: { config: synthetic, action },
+        bubbles: true,
+        composed: true
+      })
+    );
+  }
+
+  /** Resolves a node key (e.g. "solar", "home_sub_2") to its primary
+   *  entity id by reading the corresponding config field. */
+  private nodeEntityId(nodeKey: string): string | undefined {
+    const config = this._config as unknown as Record<string, unknown> | undefined;
+    if (!config) return undefined;
+    const direct = config[`${nodeKey}_entity`];
+    if (typeof direct === "string" && direct.trim().length > 0) return direct.trim();
+    return undefined;
+  }
+
+  /** Stub — wired up to the energy-node-dialog module in a separate
+   *  phase. Kept here so per-node hold callbacks resolve cleanly. */
+  private openNodeDetailDialog(nodeKey: string): void {
+    if (!this._config || !this.hass) return;
+    void openEnergyNodeDialog({
+      hass: this.hass,
+      config: this._config,
+      focusedNodeKey: nodeKey
+    });
+  }
+
   protected updated(changedProps: Map<string, unknown>): void {
     if (changedProps.has("_config")) {
       this.setupActionHandler();
     }
+    // Per-node handlers must be re-bound whenever the rendered DOM
+    // changes — i.e. on _config, _showSubBlocks, or layout-affecting
+    // hass changes. We rebind unconditionally on every update; the
+    // cleanup is cheap and binding is idempotent.
+    void this.updateComplete.then(() => this.setupNodeActionHandlers());
 
     const previousConfig = changedProps.get("_config") as PowerPilzEnergyCardConfig | undefined;
     const shouldRefreshOnConfigChange =

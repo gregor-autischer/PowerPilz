@@ -20,6 +20,10 @@ const HELD_SAFETY_RESET_MS = 1000;
 export interface ActionHandlerOptions {
   hasHold: boolean;
   hasDoubleTap: boolean;
+  /** When true, click and pointerdown events are stopped from bubbling
+   *  past the bound element. Used by per-node handlers on the energy
+   *  card so card-level actions don't double-fire on node clicks. */
+  stopPropagation?: boolean;
 }
 
 export interface ActionHandlerCallbacks {
@@ -65,6 +69,9 @@ export const bindActionHandler = (
 
   const handlePointerDown = (event: PointerEvent): void => {
     if (event.button !== 0) return;
+    if (options.stopPropagation) {
+      event.stopPropagation();
+    }
     isHeld = false;
     clearHeldReset();
     if (!options.hasHold) return;
@@ -100,6 +107,9 @@ export const bindActionHandler = (
   // --- Tap and double-tap detection via click ---
 
   const handleClick = (event: Event): void => {
+    if (options.stopPropagation) {
+      event.stopPropagation();
+    }
     // Suppress click after hold
     if (isHeld) {
       isHeld = false;

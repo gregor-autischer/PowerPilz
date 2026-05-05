@@ -1,0 +1,863 @@
+/**
+ * Energy node-detail dialog.
+ *
+ * Opened via long-press (or any explicit `powerpilz-energy-node-detail`
+ * action) on a node of the PowerPilz Energy Flow Card. Shows the
+ * historical trend of the focused node, plus optional overlay of any
+ * other entity rendered on that card and a stacked-100% comparison view.
+ *
+ * Reuses `PowerPilzDialogBase` for the modal shell and
+ * `chart-renderer.ts` for the canvas drawing.
+ */
+
+import { css, html, nothing, type CSSResultGroup, type TemplateResult } from "lit";
+import { property, state } from "lit/decorators.js";
+import { styleMap } from "lit/directives/style-map.js";
+import type { HomeAssistant, LovelaceCardConfig } from "../../types";
+import {
+  fetchHistoryTrendPointsBatch,
+  type HistoryTrendPoint,
+  type TrendDataSource
+} from "../../utils/history";
+import { resolveColor as resolveColorValue } from "../../utils/color";
+import { renderChart, type ChartMode, type ChartSeries } from "../../utils/chart-renderer";
+import { PowerPilzDialogBase } from "./dialog-shell";
+
+const DIALOG_TAG = "power-pilz-energy-node-dialog";
+
+/** Time-range presets exposed in the dialog header. */
+interface RangePreset {
+  id: string;
+  label: string;
+  hours: number;
+}
+
+const RANGE_PRESETS: RangePreset[] = [
+  { id: "48h", label: "48 h", hours: 48 },
+  { id: "7d", label: "7 d", hours: 24 * 7 },
+  { id: "30d", label: "30 d", hours: 24 * 30 },
+  { id: "90d", label: "90 d", hours: 24 * 90 },
+  { id: "6m", label: "6 M", hours: 24 * 30 * 6 },
+  { id: "1y", label: "1 J", hours: 24 * 365 }
+];
+
+const DEFAULT_PRESET_ID = "7d";
+
+/** A single entity available for charting in the dialog. */
+interface NodeSeriesDescriptor {
+  /** Stable id (the entity_id when present, otherwise the synthesised key). */
+  id: string;
+  /** Logical node key (e.g. "solar", "home_sub_2", "battery_percentage"). */
+  nodeKey: string;
+  entityId: string;
+  label: string;
+  color: string;
+  unit: string;
+  isPercentage: boolean;
+  /** True when this came from a sub-block — used purely for grouping in
+   *  the entity selector UI. */
+  isSubBlock: boolean;
+  /** Display category for grouping (Solar / Grid / Home / Battery). */
+  category: "solar" | "grid" | "grid_secondary" | "home" | "battery" | "battery_secondary" | "other";
+}
+
+export interface EnergyNodeDialogOptions {
+  hass: HomeAssistant;
+  config: LovelaceCardConfig;
+  /** The node the user clicked — defaults the focused series and the
+   *  dialog title. */
+  focusedNodeKey: string;
+}
+
+/** Public API used by the energy card to open the dialog. */
+export const openEnergyNodeDialog = (opts: EnergyNodeDialogOptions): void => {
+  const dlg = document.createElement(DIALOG_TAG) as PowerPilzEnergyNodeDialog;
+  dlg.hass = opts.hass;
+  dlg.energyConfig = opts.config;
+  dlg.focusedNodeKey = opts.focusedNodeKey;
+  document.body.appendChild(dlg);
+};
+
+class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
+  @property({ attribute: false })
+  public hass!: HomeAssistant;
+
+  @property({ attribute: false })
+  public energyConfig!: LovelaceCardConfig;
+
+  @property({ type: String })
+  public focusedNodeKey = "";
+
+  @state() private _allSeries: NodeSeriesDescriptor[] = [];
+  @state() private _selectedIds: Set<string> = new Set();
+  @state() private _mode: ChartMode = "single";
+  @state() private _presetId: string = DEFAULT_PRESET_ID;
+  @state() private _useCustomRange = false;
+  @state() private _customStartIso = "";
+  @state() private _customEndIso = "";
+  @state() private _historyByEntity: Map<string, HistoryTrendPoint[]> = new Map();
+  @state() private _loading = false;
+  @state() private _loadError?: string;
+
+  private _renderRaf?: number;
+  private _resizeObserver?: ResizeObserver;
+  private _fetchAbort = 0;
+
+  // ------------------------------------------------------------
+  // Lifecycle
+  // ------------------------------------------------------------
+
+  connectedCallback(): void {
+    super.connectedCallback();
+    this._allSeries = this._collectSeries();
+    if (!this._customStartIso || !this._customEndIso) {
+      const now = new Date();
+      const start = new Date(now.getTime() - 7 * 24 * 3600 * 1000);
+      this._customEndIso = _toLocalIsoMinute(now);
+      this._customStartIso = _toLocalIsoMinute(start);
+    }
+    this._selectedIds = new Set(this._defaultSelection().map((s) => s.id));
+    this.dialogTitle = this._titleForFocusedNode();
+    void this._fetchHistory();
+  }
+
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this._resizeObserver?.disconnect();
+    this._resizeObserver = undefined;
+    if (this._renderRaf !== undefined) {
+      cancelAnimationFrame(this._renderRaf);
+      this._renderRaf = undefined;
+    }
+  }
+
+  protected firstUpdated(): void {
+    const canvas = this.renderRoot.querySelector<HTMLCanvasElement>(".pp-chart-canvas");
+    if (canvas) {
+      this._resizeObserver = new ResizeObserver(() => this._scheduleRender());
+      this._resizeObserver.observe(canvas);
+      this._scheduleRender();
+    }
+  }
+
+  protected updated(): void {
+    this._scheduleRender();
+  }
+
+  // ------------------------------------------------------------
+  // Series collection from energy-card config
+  // ------------------------------------------------------------
+
+  private _readConfigString(value: unknown): string | undefined {
+    if (typeof value !== "string") return undefined;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  private _collectSeries(): NodeSeriesDescriptor[] {
+    const config = this.energyConfig as Record<string, unknown>;
+    const out: NodeSeriesDescriptor[] = [];
+    const states = this.hass.states;
+
+    const push = (
+      nodeKey: string,
+      category: NodeSeriesDescriptor["category"],
+      entityKey: string,
+      labelKey: string | undefined,
+      colorKey: string | undefined,
+      isPercentage: boolean,
+      isSubBlock: boolean
+    ): void => {
+      const entityId = this._readConfigString(config[entityKey]);
+      if (!entityId) return;
+      const label = this._readConfigString(labelKey ? config[labelKey] : undefined)
+        ?? this._friendlyName(entityId)
+        ?? entityId;
+      const colorRaw = colorKey ? config[colorKey] : undefined;
+      const color = this._resolveTrendColor(colorRaw, category);
+      const unit = isPercentage
+        ? "%"
+        : (this._unit(entityId) ?? "");
+      out.push({
+        id: entityId,
+        nodeKey,
+        entityId,
+        label,
+        color,
+        unit,
+        isPercentage: isPercentage || unit === "%",
+        isSubBlock,
+        category
+      });
+    };
+
+    if (config.solar_visible !== false) {
+      push("solar", "solar", "solar_entity", "solar_label", "solar_trend_color", false, false);
+    }
+    if (config.grid_visible !== false) {
+      push("grid", "grid", "grid_entity", "grid_label", "grid_trend_color", false, false);
+      if (config.grid_secondary_visible === true) {
+        push("grid_secondary", "grid_secondary", "grid_secondary_entity", "grid_secondary_label", "grid_secondary_trend_color", false, false);
+      }
+    }
+    if (config.home_visible !== false) {
+      push("home", "home", "home_entity", "home_label", "home_trend_color", false, false);
+    }
+    if (config.battery_visible !== false) {
+      push("battery", "battery", "battery_entity", "battery_label", "battery_trend_color", false, false);
+      const batteryPctEntity = this._readConfigString(config.battery_percentage_entity);
+      if (batteryPctEntity) {
+        out.push({
+          id: batteryPctEntity,
+          nodeKey: "battery_percentage",
+          entityId: batteryPctEntity,
+          label: `${this._readConfigString(config.battery_label) ?? "Battery"} %`,
+          color: this._resolveTrendColor(undefined, "battery"),
+          unit: "%",
+          isPercentage: true,
+          isSubBlock: false,
+          category: "battery"
+        });
+      }
+      if (config.battery_secondary_visible === true) {
+        push("battery_secondary", "battery_secondary", "battery_secondary_entity", "battery_secondary_label", "battery_secondary_trend_color", false, false);
+        const battery2PctEntity = this._readConfigString(config.battery_secondary_percentage_entity);
+        if (battery2PctEntity) {
+          out.push({
+            id: battery2PctEntity,
+            nodeKey: "battery_secondary_percentage",
+            entityId: battery2PctEntity,
+            label: `${this._readConfigString(config.battery_secondary_label) ?? "Battery 2"} %`,
+            color: this._resolveTrendColor(undefined, "battery_secondary"),
+            unit: "%",
+            isPercentage: true,
+            isSubBlock: false,
+            category: "battery_secondary"
+          });
+        }
+      }
+    }
+
+    // Sub-blocks: solar 1..4, grid 1..2, grid_secondary 1..2, home 1..8.
+    const subSpecs: Array<{ prefix: NodeSeriesDescriptor["category"]; count: number; nodePrefix: string }> = [
+      { prefix: "solar", count: 4, nodePrefix: "solar" },
+      { prefix: "grid", count: 2, nodePrefix: "grid" },
+      { prefix: "grid_secondary", count: 2, nodePrefix: "grid_secondary" },
+      { prefix: "home", count: 8, nodePrefix: "home" }
+    ];
+    for (const spec of subSpecs) {
+      for (let index = 1; index <= spec.count; index += 1) {
+        const slot = `${spec.nodePrefix}_sub_${index}`;
+        const enabled = config[`${slot}_enabled`] === true;
+        if (!enabled) continue;
+        push(
+          slot,
+          spec.prefix,
+          `${slot}_entity`,
+          `${slot}_label`,
+          `${slot}_icon_color`,
+          false,
+          true
+        );
+      }
+    }
+
+    // De-duplicate by entityId — the same entity can appear under several
+    // logical node keys (e.g. battery + battery_percentage), but for the
+    // chart we want one series per entity.
+    const seen = new Set<string>();
+    return out.filter((descriptor) => {
+      if (seen.has(descriptor.entityId)) return false;
+      seen.add(descriptor.entityId);
+      return true;
+    });
+  }
+
+  private _friendlyName(entityId: string): string | undefined {
+    const friendly = this.hass.states[entityId]?.attributes?.friendly_name;
+    return typeof friendly === "string" && friendly.length > 0 ? friendly : undefined;
+  }
+
+  private _unit(entityId: string): string | undefined {
+    const unit = this.hass.states[entityId]?.attributes?.unit_of_measurement;
+    return typeof unit === "string" ? unit : undefined;
+  }
+
+  private _resolveTrendColor(value: unknown, category: NodeSeriesDescriptor["category"]): string {
+    const fallbackByCategory: Record<NodeSeriesDescriptor["category"], string> = {
+      solar: "amber",
+      grid: "blue",
+      grid_secondary: "indigo",
+      home: "green",
+      battery: "purple",
+      battery_secondary: "deep-purple",
+      other: "grey"
+    };
+    if (typeof value === "string" && value.trim().length > 0) {
+      return resolveColorValue(value, fallbackByCategory[category]);
+    }
+    if (Array.isArray(value)) {
+      return resolveColorValue(value as number[], fallbackByCategory[category]);
+    }
+    return resolveColorValue(fallbackByCategory[category], fallbackByCategory[category]);
+  }
+
+  private _titleForFocusedNode(): string {
+    const focused = this._allSeries.find((s) => s.nodeKey === this.focusedNodeKey);
+    if (focused) return focused.label;
+    // Friendly fallback for a node key that has no entity (rare, but possible).
+    const config = this.energyConfig as Record<string, unknown>;
+    const labelKey = `${this.focusedNodeKey}_label`;
+    const label = this._readConfigString(config[labelKey]);
+    return label ?? this.focusedNodeKey;
+  }
+
+  private _defaultSelection(): NodeSeriesDescriptor[] {
+    const focused = this._allSeries.find((s) => s.nodeKey === this.focusedNodeKey);
+    return focused ? [focused] : this._allSeries.slice(0, 1);
+  }
+
+  // ------------------------------------------------------------
+  // Range handling
+  // ------------------------------------------------------------
+
+  private _activeWindow(): { startMs: number; endMs: number } {
+    if (this._useCustomRange) {
+      const startMs = _parseLocalIso(this._customStartIso);
+      const endMs = _parseLocalIso(this._customEndIso);
+      if (startMs !== null && endMs !== null && endMs > startMs) {
+        return { startMs, endMs };
+      }
+    }
+    const preset = RANGE_PRESETS.find((p) => p.id === this._presetId) ?? RANGE_PRESETS[1];
+    const endMs = Date.now();
+    const startMs = endMs - preset.hours * 3600 * 1000;
+    return { startMs, endMs };
+  }
+
+  // ------------------------------------------------------------
+  // History fetching
+  // ------------------------------------------------------------
+
+  private async _fetchHistory(): Promise<void> {
+    const myFetch = ++this._fetchAbort;
+    this._loading = true;
+    this._loadError = undefined;
+    const window = this._activeWindow();
+    const windowMs = window.endMs - window.startMs;
+
+    // Prefer statistics for ranges > 48h to keep the request small.
+    const dataSource: TrendDataSource = windowMs > 48 * 3600 * 1000 ? "statistics" : "hybrid";
+
+    const targetIds = this._activeEntityIds();
+    if (targetIds.length === 0) {
+      this._loading = false;
+      this._historyByEntity = new Map();
+      return;
+    }
+
+    try {
+      const result = await fetchHistoryTrendPointsBatch(
+        this.hass,
+        targetIds,
+        windowMs,
+        { startMs: window.startMs, dataSource }
+      );
+      if (myFetch !== this._fetchAbort) return; // superseded
+      const next = new Map<string, HistoryTrendPoint[]>();
+      for (const id of targetIds) {
+        next.set(id, result[id] ?? []);
+      }
+      this._historyByEntity = next;
+    } catch (err) {
+      if (myFetch !== this._fetchAbort) return;
+      this._loadError = String((err as Error)?.message || err);
+    } finally {
+      if (myFetch === this._fetchAbort) {
+        this._loading = false;
+      }
+    }
+  }
+
+  /** Entity ids that need fetching for the current selection + mode. */
+  private _activeEntityIds(): string[] {
+    const ids = new Set<string>();
+    for (const id of this._selectedIds) ids.add(id);
+    // Always include the focused series so the canvas keeps something
+    // to draw even after the user un-checks it.
+    const focused = this._allSeries.find((s) => s.nodeKey === this.focusedNodeKey);
+    if (focused) ids.add(focused.entityId);
+    return Array.from(ids);
+  }
+
+  // ------------------------------------------------------------
+  // Chart rendering
+  // ------------------------------------------------------------
+
+  private _scheduleRender(): void {
+    if (this._renderRaf !== undefined) return;
+    this._renderRaf = requestAnimationFrame(() => {
+      this._renderRaf = undefined;
+      this._renderChart();
+    });
+  }
+
+  private _renderChart(): void {
+    const canvas = this.renderRoot.querySelector<HTMLCanvasElement>(".pp-chart-canvas");
+    if (!canvas) return;
+    const window = this._activeWindow();
+    const seriesForChart = this._buildChartSeries();
+
+    renderChart(canvas, {
+      mode: this._mode,
+      series: seriesForChart,
+      startMs: window.startMs,
+      endMs: window.endMs,
+      host: this.renderRoot as ParentNode & Element
+    });
+  }
+
+  private _buildChartSeries(): ChartSeries[] {
+    const selectedDescriptors = this._allSeries.filter((s) => this._selectedIds.has(s.id));
+    // Single mode: only the focused descriptor (or first selected).
+    if (this._mode === "single") {
+      const focused = this._allSeries.find((s) => s.nodeKey === this.focusedNodeKey)
+        ?? selectedDescriptors[0];
+      if (!focused) return [];
+      return [this._descriptorToChartSeries(focused)];
+    }
+    return selectedDescriptors.map((d) => this._descriptorToChartSeries(d));
+  }
+
+  private _descriptorToChartSeries(d: NodeSeriesDescriptor): ChartSeries {
+    return {
+      id: d.id,
+      label: d.label,
+      color: d.color,
+      unit: d.unit,
+      isPercentage: d.isPercentage,
+      points: this._historyByEntity.get(d.entityId) ?? []
+    };
+  }
+
+  // ------------------------------------------------------------
+  // UI handlers
+  // ------------------------------------------------------------
+
+  private _onPresetClick(presetId: string): void {
+    this._presetId = presetId;
+    this._useCustomRange = false;
+    void this._fetchHistory();
+  }
+
+  private _onCustomRangeToggle = (): void => {
+    this._useCustomRange = !this._useCustomRange;
+    if (this._useCustomRange) void this._fetchHistory();
+  };
+
+  private _onCustomStartChange = (e: Event): void => {
+    this._customStartIso = (e.target as HTMLInputElement).value;
+    if (this._useCustomRange) void this._fetchHistory();
+  };
+
+  private _onCustomEndChange = (e: Event): void => {
+    this._customEndIso = (e.target as HTMLInputElement).value;
+    if (this._useCustomRange) void this._fetchHistory();
+  };
+
+  private _onModeChange(mode: ChartMode): void {
+    this._mode = mode;
+  }
+
+  private _onToggleSeries(id: string): void {
+    const next = new Set(this._selectedIds);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    this._selectedIds = next;
+    void this._fetchHistory();
+  }
+
+  private _onSelectAll(): void {
+    this._selectedIds = new Set(this._allSeries.map((s) => s.id));
+    void this._fetchHistory();
+  }
+
+  private _onSelectFocused(): void {
+    const focused = this._allSeries.find((s) => s.nodeKey === this.focusedNodeKey);
+    this._selectedIds = focused ? new Set([focused.id]) : new Set();
+    void this._fetchHistory();
+  }
+
+  // ------------------------------------------------------------
+  // Render
+  // ------------------------------------------------------------
+
+  protected renderBody(): TemplateResult {
+    return html`
+      <div class="pp-toolbar">
+        ${this._renderModeSwitch()}
+        ${this._renderRangeBar()}
+      </div>
+      <div class="pp-chart-wrap">
+        <canvas class="pp-chart-canvas"></canvas>
+        ${this._loading ? html`<div class="pp-chart-overlay">Lade…</div>` : nothing}
+        ${this._loadError ? html`<div class="pp-chart-overlay error">${this._loadError}</div>` : nothing}
+      </div>
+      ${this._renderEntityList()}
+    `;
+  }
+
+  private _renderModeSwitch(): TemplateResult {
+    const modes: Array<{ id: ChartMode; label: string }> = [
+      { id: "single", label: "Einzeln" },
+      { id: "overlay", label: "Überlagert" },
+      { id: "stacked-percent", label: "Gestapelt %" }
+    ];
+    return html`
+      <div class="pp-segmented">
+        ${modes.map((m) => html`
+          <button
+            class="pp-seg-btn ${this._mode === m.id ? "active" : ""}"
+            @click=${() => this._onModeChange(m.id)}
+          >${m.label}</button>
+        `)}
+      </div>
+    `;
+  }
+
+  private _renderRangeBar(): TemplateResult {
+    return html`
+      <div class="pp-range-bar">
+        ${RANGE_PRESETS.map((p) => html`
+          <button
+            class="pp-range-btn ${(!this._useCustomRange && this._presetId === p.id) ? "active" : ""}"
+            @click=${() => this._onPresetClick(p.id)}
+          >${p.label}</button>
+        `)}
+        <button
+          class="pp-range-btn ${this._useCustomRange ? "active" : ""}"
+          @click=${this._onCustomRangeToggle}
+          title="Eigener Zeitraum"
+        >
+          <ha-icon icon="mdi:calendar-range"></ha-icon>
+        </button>
+        ${this._useCustomRange
+          ? html`
+              <div class="pp-custom-range">
+                <input
+                  type="datetime-local"
+                  .value=${this._customStartIso}
+                  @change=${this._onCustomStartChange}
+                />
+                <span>–</span>
+                <input
+                  type="datetime-local"
+                  .value=${this._customEndIso}
+                  @change=${this._onCustomEndChange}
+                />
+              </div>
+            `
+          : nothing}
+      </div>
+    `;
+  }
+
+  private _renderEntityList(): TemplateResult {
+    if (this._mode === "single") {
+      return html`
+        <div class="pp-entity-hint">
+          Im Einzel-Modus wird nur der angeklickte Node (<strong>${this.dialogTitle}</strong>) angezeigt.
+        </div>
+      `;
+    }
+
+    const grouped = this._groupSeriesByCategory();
+    const stackedExcludes = this._mode === "stacked-percent";
+
+    return html`
+      <div class="pp-entity-list">
+        <div class="pp-entity-list-header">
+          <strong>Entitäten</strong>
+          <div class="pp-entity-quick">
+            <button class="pp-link" @click=${() => this._onSelectFocused()}>Nur fokussiert</button>
+            <button class="pp-link" @click=${() => this._onSelectAll()}>Alle</button>
+          </div>
+        </div>
+        ${stackedExcludes
+          ? html`<div class="pp-entity-note">Hinweis: Prozent-Entitäten sind in der Stacked-Ansicht ausgeschlossen.</div>`
+          : nothing}
+        ${grouped.map((group) => html`
+          <div class="pp-entity-group">
+            <div class="pp-entity-group-title">${group.title}</div>
+            ${group.items.map((item) => {
+              const disabled = stackedExcludes && item.isPercentage;
+              const checked = this._selectedIds.has(item.id) && !disabled;
+              return html`
+                <label
+                  class="pp-entity-row ${disabled ? "disabled" : ""}"
+                  title=${item.entityId}
+                >
+                  <input
+                    type="checkbox"
+                    .checked=${checked}
+                    ?disabled=${disabled}
+                    @change=${() => this._onToggleSeries(item.id)}
+                  />
+                  <span class="pp-entity-swatch" style=${styleMap({ background: item.color })}></span>
+                  <span class="pp-entity-label">${item.label}</span>
+                  <span class="pp-entity-unit">${item.unit}</span>
+                </label>
+              `;
+            })}
+          </div>
+        `)}
+      </div>
+    `;
+  }
+
+  private _groupSeriesByCategory(): Array<{ title: string; items: NodeSeriesDescriptor[] }> {
+    const titles: Record<NodeSeriesDescriptor["category"], string> = {
+      solar: "Solar",
+      grid: "Grid",
+      grid_secondary: "Grid 2",
+      home: "Home",
+      battery: "Batterie",
+      battery_secondary: "Batterie 2",
+      other: "Andere"
+    };
+    const order: Array<NodeSeriesDescriptor["category"]> = [
+      "solar", "grid", "grid_secondary", "home", "battery", "battery_secondary", "other"
+    ];
+    const buckets: Map<NodeSeriesDescriptor["category"], NodeSeriesDescriptor[]> = new Map();
+    for (const series of this._allSeries) {
+      const bucket = buckets.get(series.category) ?? [];
+      bucket.push(series);
+      buckets.set(series.category, bucket);
+    }
+    return order
+      .filter((cat) => buckets.has(cat))
+      .map((cat) => ({ title: titles[cat], items: buckets.get(cat) ?? [] }));
+  }
+
+  // ------------------------------------------------------------
+  // Styles
+  // ------------------------------------------------------------
+
+  static styles: CSSResultGroup = [
+    PowerPilzDialogBase.styles,
+    css`
+      :host { --ppd-max-width: 980px; }
+
+      .pp-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 12px;
+      }
+
+      .pp-segmented,
+      .pp-range-bar {
+        display: inline-flex;
+        gap: 4px;
+        flex-wrap: wrap;
+        align-items: center;
+        padding: 3px;
+        border-radius: 10px;
+        background: rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.06);
+      }
+
+      .pp-seg-btn,
+      .pp-range-btn {
+        font: inherit;
+        font-size: 13px;
+        font-weight: 500;
+        border: none;
+        background: transparent;
+        color: var(--secondary-text-color);
+        padding: 6px 12px;
+        border-radius: 7px;
+        cursor: pointer;
+        line-height: 1;
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .pp-seg-btn.active,
+      .pp-range-btn.active {
+        background: var(--card-background-color, #fff);
+        color: var(--primary-text-color);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+      }
+      .pp-seg-btn:hover:not(.active),
+      .pp-range-btn:hover:not(.active) {
+        color: var(--primary-text-color);
+      }
+      .pp-range-btn ha-icon { --mdc-icon-size: 16px; }
+
+      .pp-custom-range {
+        display: inline-flex;
+        gap: 4px;
+        align-items: center;
+        margin-left: 8px;
+        font-size: 12px;
+        color: var(--primary-text-color);
+      }
+      .pp-custom-range input {
+        font: inherit;
+        font-size: 12px;
+        padding: 4px 6px;
+        border-radius: 6px;
+        border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.12));
+        background: var(--secondary-background-color, #fafafa);
+        color: var(--primary-text-color);
+      }
+
+      .pp-chart-wrap {
+        position: relative;
+        width: 100%;
+        min-height: 320px;
+        height: clamp(280px, 40vh, 420px);
+        background: rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.04);
+        border-radius: 12px;
+        overflow: hidden;
+        margin-bottom: 14px;
+      }
+      .pp-chart-canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      .pp-chart-overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        color: var(--secondary-text-color);
+        background: rgba(var(--rgb-card-background-color, 255, 255, 255), 0.55);
+        backdrop-filter: blur(1px);
+        pointer-events: none;
+      }
+      .pp-chart-overlay.error {
+        color: var(--error-color, #c62828);
+      }
+
+      .pp-entity-list {
+        margin-top: 4px;
+        font-size: 13px;
+      }
+      .pp-entity-list-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 8px;
+      }
+      .pp-entity-list-header strong { font-size: 14px; flex: 1; }
+      .pp-entity-quick { display: inline-flex; gap: 6px; }
+      .pp-link {
+        font: inherit;
+        font-size: 12px;
+        background: transparent;
+        border: none;
+        color: var(--primary-color, #03a9f4);
+        cursor: pointer;
+        padding: 2px 4px;
+      }
+      .pp-link:hover { text-decoration: underline; }
+
+      .pp-entity-note {
+        margin-bottom: 8px;
+        font-size: 11px;
+        color: var(--secondary-text-color);
+      }
+
+      .pp-entity-group {
+        margin-bottom: 10px;
+      }
+      .pp-entity-group-title {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        color: var(--secondary-text-color);
+        padding: 4px 0;
+      }
+      .pp-entity-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 6px;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      .pp-entity-row:hover { background: rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.05); }
+      .pp-entity-row.disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .pp-entity-row input[type="checkbox"] { accent-color: var(--primary-color); }
+      .pp-entity-swatch {
+        width: 12px;
+        height: 12px;
+        border-radius: 3px;
+        flex: none;
+      }
+      .pp-entity-label {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .pp-entity-unit {
+        color: var(--secondary-text-color);
+        font-size: 12px;
+        flex: none;
+      }
+
+      .pp-entity-hint {
+        font-size: 12px;
+        color: var(--secondary-text-color);
+        padding: 8px 4px;
+      }
+
+      @media (max-width: 700px) {
+        .pp-toolbar { gap: 8px; }
+        .pp-chart-wrap { min-height: 240px; height: 36vh; }
+      }
+    `
+  ];
+}
+
+if (!customElements.get(DIALOG_TAG)) {
+  customElements.define(DIALOG_TAG, PowerPilzEnergyNodeDialog);
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    [DIALOG_TAG]: PowerPilzEnergyNodeDialog;
+  }
+}
+
+// ---------- Helpers ----------
+
+const _toLocalIsoMinute = (date: Date): string => {
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  const y = date.getFullYear();
+  const m = pad(date.getMonth() + 1);
+  const d = pad(date.getDate());
+  const hh = pad(date.getHours());
+  const mm = pad(date.getMinutes());
+  return `${y}-${m}-${d}T${hh}:${mm}`;
+};
+
+const _parseLocalIso = (iso: string): number | null => {
+  if (!iso) return null;
+  const ms = new Date(iso).getTime();
+  return Number.isFinite(ms) ? ms : null;
+};
