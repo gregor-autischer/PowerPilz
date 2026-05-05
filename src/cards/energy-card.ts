@@ -2712,12 +2712,16 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     const target = nodeElement
       ?? this.renderRoot.querySelector<HTMLElement>(`[data-pp-node-key="${nodeKey}"]`);
     if (!target) return;
-    const rect = target.getBoundingClientRect();
+    // The zoom overlay must stay within the energy card's own visible
+    // rect so the popover can never overflow the dashboard tile.
+    const card = this.renderRoot.querySelector<HTMLElement>("ha-card");
+    const cardRect = card?.getBoundingClientRect();
     openEnergyNodeZoomOverlay({
       hass: this.hass,
       config: this._config,
       focusedNodeKey: nodeKey,
-      originRect: rect
+      originRect: target.getBoundingClientRect(),
+      cardRect: cardRect
     });
   }
 

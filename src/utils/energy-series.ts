@@ -46,15 +46,13 @@ export interface NodeSeriesDescriptor {
   computed?: ComputedSeriesSpec;
 }
 
-const FALLBACK_BY_CATEGORY: Record<SeriesCategory, string> = {
-  solar: "amber",
-  grid: "blue",
-  grid_secondary: "indigo",
-  home: "green",
-  battery: "purple",
-  battery_secondary: "deep-purple",
-  other: "grey"
-};
+/** Default chart color when neither the user nor a category override
+ *  provides one — matches the energy card's small-node trend default. */
+const DEFAULT_TREND_COLOR = "purple";
+/** Sub-block trends always render black, regardless of any per-slot
+ *  icon color, so they read as clearly auxiliary against the main
+ *  nodes' colored curves. */
+const SUB_BLOCK_TREND_COLOR = "black";
 
 /** Battery nodes prefer their SOC entity for the focused view — the
  *  visual of a battery node represents charge level, not power. */
@@ -79,26 +77,35 @@ const entityUnit = (hass: HomeAssistant, entityId: string): string | undefined =
   return typeof unit === "string" ? unit : undefined;
 };
 
-/** Picks the chart color for a series. Prefers the node's icon color
- *  (the dominant visible color on the card), falls back to its trend
- *  color, then a category default. The HA "state" sentinel is treated
- *  as "not set" so it doesn't poison the cascade. */
+/** Picks the chart color for a series. Main nodes resolve from their
+ *  configured trend color (the "main graphic color" the user expects
+ *  to see in any chart of this node) with a fallback to purple — the
+ *  same default the small-node trend uses. Sub-blocks always render
+ *  black. The HA "state" sentinel is treated as "not set" so it
+ *  doesn't poison the cascade. */
 export const resolveSeriesColor = (
-  iconColor: unknown,
   trendColor: unknown,
-  category: SeriesCategory
+  category: SeriesCategory,
+  isSubBlock: boolean
 ): string => {
-  const fallback = FALLBACK_BY_CATEGORY[category];
-  for (const value of [iconColor, trendColor]) {
-    if (Array.isArray(value)) return resolveColor(value as number[], fallback);
-    if (typeof value === "string") {
-      const trimmed = value.trim();
-      if (trimmed.length > 0 && trimmed !== "state") {
-        return resolveColor(trimmed, fallback);
-      }
+  if (isSubBlock) {
+    return resolveColor(SUB_BLOCK_TREND_COLOR, SUB_BLOCK_TREND_COLOR);
+  }
+  if (Array.isArray(trendColor)) {
+    return resolveColor(trendColor as number[], DEFAULT_TREND_COLOR);
+  }
+  if (typeof trendColor === "string") {
+    const trimmed = trendColor.trim();
+    if (trimmed.length > 0 && trimmed !== "state") {
+      return resolveColor(trimmed, DEFAULT_TREND_COLOR);
     }
   }
-  return resolveColor(fallback, fallback);
+  // Battery SOC entities have no dedicated trend color in the card
+  // config — fall back to the main battery's trend color when category
+  // hints at it. This keeps the SOC line color-aligned with the
+  // battery node's trend.
+  void category;
+  return resolveColor(DEFAULT_TREND_COLOR, DEFAULT_TREND_COLOR);
 };
 
 interface MainNodeSpec {
@@ -170,7 +177,7 @@ export const collectEnergySeries = (
     const label = readString(config[spec.labelKey])
       ?? friendlyName(hass, entityId)
       ?? entityId;
-    const color = resolveSeriesColor(config[spec.iconColorKey], config[spec.trendColorKey], spec.category);
+    const color = resolveSeriesColor(config[spec.trendColorKey], spec.category, false);
     const unit = entityUnit(hass, entityId) ?? "";
     const descriptor: NodeSeriesDescriptor = {
       id: entityId,
@@ -198,7 +205,7 @@ export const collectEnergySeries = (
   const pushBatteryPercent = (
     pctEntityKey: string,
     labelEntityKey: string,
-    iconColorKey: string,
+    trendColorKey: string,
     nodeKey: string,
     category: SeriesCategory,
     fallbackLabel: string
@@ -210,7 +217,7 @@ export const collectEnergySeries = (
       nodeKey,
       entityId: id,
       label: `${readString(config[labelEntityKey]) ?? fallbackLabel} %`,
-      color: resolveSeriesColor(config[iconColorKey], undefined, category),
+      color: resolveSeriesColor(config[trendColorKey], category, false),
       unit: "%",
       isPercentage: true,
       isSubBlock: false,
@@ -218,12 +225,12 @@ export const collectEnergySeries = (
     });
   };
   if (isNodeVisible(config, MAIN_NODE_SPECS[4])) {
-    pushBatteryPercent("battery_percentage_entity", "battery_label", "battery_icon_color",
+    pushBatteryPercent("battery_percentage_entity", "battery_label", "battery_trend_color",
       "battery_percentage", "battery", "Battery");
   }
   if (isNodeVisible(config, MAIN_NODE_SPECS[5])) {
     pushBatteryPercent("battery_secondary_percentage_entity", "battery_secondary_label",
-      "battery_secondary_icon_color", "battery_secondary_percentage", "battery_secondary", "Battery 2");
+      "battery_secondary_trend_color", "battery_secondary_percentage", "battery_secondary", "Battery 2");
   }
 
   // Sub-blocks.
@@ -237,7 +244,7 @@ export const collectEnergySeries = (
       const label = readString(config[`${slot}_label`])
         ?? friendlyName(hass, entityId)
         ?? entityId;
-      const color = resolveSeriesColor(config[`${slot}_icon_color`], undefined, sub.category);
+      const color = resolveSeriesColor(undefined, sub.category, true);
       const unit = entityUnit(hass, entityId) ?? "";
       const descriptor: NodeSeriesDescriptor = {
         id: entityId,

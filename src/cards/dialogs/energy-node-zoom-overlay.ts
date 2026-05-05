@@ -24,7 +24,6 @@ import {
 import {
   collectEnergySeries,
   entityIdsForSeries,
-  resolveFocusedSeries,
   seriesPointsFor,
   type NodeSeriesDescriptor
 } from "../../utils/energy-series";
@@ -46,13 +45,24 @@ const CLOSE_ANIMATION_MS = 200;
 const TREND_WINDOW_MS = 24 * 60 * 60 * 1000;
 const LINE_WIDTH = 1.8;
 
+interface BoundingRectLike {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
 export interface EnergyNodeZoomOptions {
   hass: HomeAssistant;
   config: LovelaceCardConfig;
   focusedNodeKey: string;
   /** Bounding rect of the node element the user tapped — used as the
    *  start frame of the FLIP animation. */
-  originRect: DOMRect | { left: number; top: number; width: number; height: number };
+  originRect: DOMRect | BoundingRectLike;
+  /** Bounding rect of the parent energy card. The zoom popover never
+   *  expands outside this rect so it cannot overflow the dashboard
+   *  tile. Falls back to the viewport if omitted. */
+  cardRect?: DOMRect | BoundingRectLike;
 }
 
 /** Public API used by the energy card. */
@@ -62,6 +72,7 @@ export const openEnergyNodeZoomOverlay = (opts: EnergyNodeZoomOptions): void => 
   overlay.energyConfig = opts.config;
   overlay.focusedNodeKey = opts.focusedNodeKey;
   overlay.originRect = opts.originRect;
+  overlay.cardRect = opts.cardRect;
   document.body.appendChild(overlay);
 };
 
@@ -76,7 +87,10 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
   public focusedNodeKey = "";
 
   @property({ attribute: false })
-  public originRect!: DOMRect | { left: number; top: number; width: number; height: number };
+  public originRect!: DOMRect | BoundingRectLike;
+
+  @property({ attribute: false })
+  public cardRect?: DOMRect | BoundingRectLike;
 
   @state() private _phase: "opening" | "open" | "closing" = "opening";
   @state() private _historyByEntity: Map<string, HistoryTrendPoint[]> = new Map();
@@ -102,7 +116,11 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
   connectedCallback(): void {
     super.connectedCallback();
     this._series = collectEnergySeries(this.hass, this.energyConfig);
-    this._focused = resolveFocusedSeries(this._series, this.focusedNodeKey);
+    // Zoom view always plots exactly the entity behind the clicked
+    // node — no SOC redirect, no override. That keeps the displayed
+    // value (e.g. "1158 W") and the trend curve consistent and matches
+    // what the small node shows for that node key.
+    this._focused = this._series.find((s) => s.nodeKey === this.focusedNodeKey);
     document.addEventListener("keydown", this._onKeyDown);
     void this._fetchHistory();
     // Refresh the live value text every 30s.
@@ -328,22 +346,25 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
       return html`<div class="pp-zoom-catcher" @click=${this._onBackdropClick}></div>`;
     }
 
-    // Popover sizing: ~2x the original node, capped to a sensible
-    // maximum and to the viewport. Anchored on the original node's
-    // center so it expands in-place rather than jumping to the screen
-    // middle.
-    const VIEWPORT_PADDING = 8;
-    const SCALE_FACTOR = 2.2;
+    // Popover sizing & placement: the popover stays inside the parent
+    // energy card's bounding rect (so it never escapes the dashboard
+    // tile), is sized at ~2x the original node up to the available
+    // space, and is centered on the original node — then clamped so
+    // the entire popover fits inside the card. If a node sits at the
+    // bottom of the card, the popover therefore shifts upward.
+    const card = this._effectiveContainerRect();
+    const PAD = 6;
+    const SCALE = 2;
     const originCenterX = this.originRect.left + this.originRect.width / 2;
     const originCenterY = this.originRect.top + this.originRect.height / 2;
-    const desiredW = Math.min(this.originRect.width * SCALE_FACTOR, 460);
-    const desiredH = Math.min(this.originRect.height * SCALE_FACTOR, 320);
-    const targetWidth = Math.min(window.innerWidth - VIEWPORT_PADDING * 2, desiredW);
-    const targetHeight = Math.min(window.innerHeight - VIEWPORT_PADDING * 2, desiredH);
+    const maxW = Math.max(this.originRect.width, card.width - PAD * 2);
+    const maxH = Math.max(this.originRect.height, card.height - PAD * 2);
+    const targetWidth = Math.min(maxW, this.originRect.width * SCALE);
+    const targetHeight = Math.min(maxH, this.originRect.height * SCALE);
     let targetLeft = originCenterX - targetWidth / 2;
     let targetTop = originCenterY - targetHeight / 2;
-    targetLeft = Math.max(VIEWPORT_PADDING, Math.min(window.innerWidth - targetWidth - VIEWPORT_PADDING, targetLeft));
-    targetTop = Math.max(VIEWPORT_PADDING, Math.min(window.innerHeight - targetHeight - VIEWPORT_PADDING, targetTop));
+    targetLeft = Math.max(card.left + PAD, Math.min(card.left + card.width - targetWidth - PAD, targetLeft));
+    targetTop = Math.max(card.top + PAD, Math.min(card.top + card.height - targetHeight - PAD, targetTop));
 
     const opening = this._phase !== "open";
     const closing = this._phase === "closing";
@@ -391,9 +412,11 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
             <canvas class="pp-zoom-line"></canvas>
           </div>
           <div class="pp-zoom-content">
-            <div class="pp-zoom-icon-shape" style=${styleMap(iconStyle)}>
-              <ha-icon class="pp-zoom-icon" .icon=${iconName}></ha-icon>
-            </div>
+            <ha-icon
+              class="pp-zoom-icon"
+              .icon=${iconName}
+              style=${styleMap(iconStyle)}
+            ></ha-icon>
             <div class="pp-zoom-value">${liveValue}</div>
             <div class="pp-zoom-label">${focused.label}</div>
           </div>
@@ -435,6 +458,20 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
   private _areaCanvasRect(): DOMRect {
     const c = this.renderRoot.querySelector<HTMLCanvasElement>(".pp-zoom-area");
     return c?.getBoundingClientRect() ?? new DOMRect(0, 0, 1, 1);
+  }
+
+  /** The container the popover must stay inside. Falls back to the
+   *  viewport when no card rect was provided (e.g. unit tests). */
+  private _effectiveContainerRect(): { left: number; top: number; width: number; height: number } {
+    if (this.cardRect) {
+      return {
+        left: this.cardRect.left,
+        top: this.cardRect.top,
+        width: this.cardRect.width,
+        height: this.cardRect.height
+      };
+    }
+    return { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
   }
 
   // ------------------------------------------------------------
@@ -480,6 +517,18 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
       inset: 0;
       z-index: 10000;
       font-family: var(--paper-font-body1_-_font-family, inherit);
+      /* Mirror the energy-card's :host vars so the inner content has
+         the exact same typography, icon size and shape colors as the
+         small node. */
+      --card-primary-font-size: var(--mush-card-primary-font-size, 14px);
+      --card-secondary-font-size: var(--mush-card-secondary-font-size, 12px);
+      --card-primary-font-weight: var(--mush-card-primary-font-weight, 500);
+      --card-secondary-font-weight: var(--mush-card-secondary-font-weight, 400);
+      --card-primary-line-height: var(--mush-card-primary-line-height, 20px);
+      --card-secondary-line-height: var(--mush-card-secondary-line-height, 16px);
+      --icon-size: var(--mush-icon-size, 36px);
+      --icon-symbol-size: var(--mush-icon-symbol-size, 0.667em);
+      --icon-color: var(--primary-text-color);
     }
 
     /* Transparent click-catcher so taps outside the shell close the
@@ -523,48 +572,52 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
       display: block;
     }
 
-    /* Top-row content: icon left, value next to it, label right. */
+    /* Mirror the energy-card's .energy-content stack: icon, value,
+       label centered both axes. Sizes are pulled from the same vars
+       the small node uses, so a zoomed view's content matches the
+       small node pixel-for-pixel. */
     .pp-zoom-content {
       position: relative;
       z-index: 1;
       display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 12px 14px;
-    }
-    .pp-zoom-icon-shape {
-      width: 36px;
-      height: 36px;
-      border-radius: 50%;
-      display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
-      background: var(--shape-color, rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.05));
-      flex: none;
+      width: 100%;
+      height: 100%;
+      padding: 8px 10px;
+      box-sizing: border-box;
+      text-align: center;
+      pointer-events: none; /* let pointermove pass to the shell */
     }
     .pp-zoom-icon {
-      --mdc-icon-size: 22px;
-      color: var(--icon-color, var(--primary-text-color));
+      --mdc-icon-size: calc(var(--icon-size) * 0.667);
+      margin-bottom: 4px;
+      color: var(--icon-color);
+      flex: 0 0 auto;
       display: flex;
       line-height: 0;
     }
     .pp-zoom-value {
-      font-size: 20px;
-      font-weight: 600;
-      line-height: 1.1;
-      font-variant-numeric: tabular-nums;
+      font-size: var(--card-primary-font-size);
+      line-height: var(--card-primary-line-height);
+      font-weight: var(--card-primary-font-weight);
       color: var(--primary-text-color);
+      letter-spacing: 0.1px;
       white-space: nowrap;
+      font-variant-numeric: tabular-nums;
     }
     .pp-zoom-label {
-      margin-left: auto;
-      font-size: 13px;
-      font-weight: 500;
+      margin-top: 2px;
+      font-size: var(--card-secondary-font-size);
+      line-height: var(--card-secondary-line-height);
+      font-weight: var(--card-secondary-font-weight);
       color: var(--secondary-text-color);
+      letter-spacing: 0.4px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      padding-left: 8px;
+      max-width: 100%;
     }
 
     /* Hover overlay: vertical guide + floating tooltip. */
