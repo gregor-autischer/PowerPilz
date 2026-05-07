@@ -54,8 +54,10 @@ import {
 import { readNumber, readUnit } from "../../utils/entity";
 
 const TAG = "power-pilz-energy-node-zoom-overlay";
-const OPEN_ANIMATION_MS = 280;
-const CLOSE_ANIMATION_MS = 200;
+/** Total wait before the shell is removed from the DOM after the
+ *  user dismisses the popover. Must be ≥ the longest closing CSS
+ *  transition (transform 220ms + a small safety margin). */
+const CLOSE_ANIMATION_MS = 240;
 /** History window — matches the small-node trend so the zoomed view
  *  shows literally the same curve, just bigger. */
 const TREND_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -485,8 +487,7 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
       transform: collapse
         ? `translate(${tx}px, ${ty}px) scale(${scaleX}, ${scaleY})`
         : "translate(0, 0) scale(1, 1)",
-      transformOrigin: "0 0",
-      opacity: closing ? "0" : "1"
+      transformOrigin: "0 0"
     };
 
     const view = this._buildView();
@@ -497,7 +498,7 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
         @click=${this._onBackdropClick}
       >
         <div
-          class="pp-zoom-shell ${this._focused.category}"
+          class="pp-zoom-shell ${this._focused.category} ${this._phase === "open" ? "is-open" : ""} ${closing ? "is-closing" : ""}"
           style=${styleMap(shellStyle)}
           @click=${(e: MouseEvent) => e.stopPropagation()}
           @pointermove=${this._onPointerMove}
@@ -830,31 +831,64 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
     }
 
     /* The shell mirrors .energy-value styling from the card, scaled up,
-       and floats like a dropdown anchored on the clicked node. */
+       and floats like a dropdown anchored on the clicked node.
+       The animation goes through three states (driven from JS via the
+       is-open / is-closing classes):
+         - opening (no class): shell is at the origin frame, content is
+           hidden, shadow is small.
+         - is-open: shell at target frame, content visible, shadow full.
+         - is-closing: shell collapsing back to origin, content fades
+           out fast for a snappy dismiss.
+       The transform uses a smooth out-quart bezier for opening (no
+       overshoot, very natural arrival) and a snappier in-curve for
+       closing. Shadow grows with the card so depth is communicated. */
     .pp-zoom-shell {
       position: fixed;
       box-sizing: border-box;
       border-radius: 16px;
       background: var(--ha-card-background, var(--card-background-color, #fff));
       border: 1px solid rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.1);
-      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.10);
       overflow: hidden;
+      opacity: 0.85;
       transition:
-        transform ${OPEN_ANIMATION_MS}ms cubic-bezier(0.2, 0.85, 0.3, 1),
-        opacity ${OPEN_ANIMATION_MS}ms ease;
-      will-change: transform, opacity;
+        transform 340ms cubic-bezier(0.16, 1, 0.3, 1),
+        box-shadow 340ms cubic-bezier(0.16, 1, 0.3, 1),
+        opacity 200ms ease;
+      will-change: transform, opacity, box-shadow;
+    }
+    .pp-zoom-shell.is-open {
+      box-shadow: 0 18px 60px rgba(0, 0, 0, 0.26),
+                  0 4px 14px rgba(0, 0, 0, 0.10);
+      opacity: 1;
+    }
+    .pp-zoom-shell.is-closing {
+      opacity: 0;
+      transition:
+        transform 200ms cubic-bezier(0.4, 0, 1, 1),
+        box-shadow 180ms ease,
+        opacity 180ms ease;
     }
 
     /* Trend canvases fill the entire shell behind the content — same z-order
-       as in the small node. */
+       as in the small node. They fade in slightly behind the shell so the
+       card appears to "expand first, then content reveals". */
     .pp-zoom-trend,
     .pp-zoom-line-layer {
       position: absolute;
       inset: 0;
       pointer-events: none;
       z-index: 0;
+      opacity: 0;
+      transition: opacity 220ms cubic-bezier(0.16, 1, 0.3, 1) 80ms;
     }
-    .pp-zoom-line-layer { opacity: 0.96; }
+    .pp-zoom-shell.is-open .pp-zoom-trend { opacity: 1; }
+    .pp-zoom-shell.is-open .pp-zoom-line-layer { opacity: 0.96; }
+    .pp-zoom-shell.is-closing .pp-zoom-trend,
+    .pp-zoom-shell.is-closing .pp-zoom-line-layer {
+      transition: opacity 120ms ease 0ms;
+      opacity: 0;
+    }
     .pp-zoom-area,
     .pp-zoom-line {
       width: 100%;
@@ -876,6 +910,22 @@ class PowerPilzEnergyNodeZoomOverlay extends LitElement {
       padding: 10px 14px;
       box-sizing: border-box;
       pointer-events: none; /* clicks fall through to backdrop catcher */
+      opacity: 0;
+      transform: translateY(-2px);
+      transition:
+        opacity 200ms cubic-bezier(0.16, 1, 0.3, 1) 100ms,
+        transform 220ms cubic-bezier(0.16, 1, 0.3, 1) 100ms;
+    }
+    .pp-zoom-shell.is-open .pp-zoom-content {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .pp-zoom-shell.is-closing .pp-zoom-content {
+      transition:
+        opacity 120ms ease 0ms,
+        transform 120ms ease 0ms;
+      opacity: 0;
+      transform: translateY(-2px);
     }
     .pp-zoom-icon {
       --mdc-icon-size: calc(var(--icon-size) * 0.667);
