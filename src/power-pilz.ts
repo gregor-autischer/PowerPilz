@@ -5,6 +5,7 @@ import "./cards/wallbox-card";
 import "./cards/switch-card";
 import "./cards/schedule-card";
 import "./cards/timer-card";
+import "./cards/heating-curve-card";
 import { POWER_PILZ_VERSION } from "./version";
 
 declare global {
@@ -61,6 +62,12 @@ const cards = [
     type: "power-pilz-timer-card",
     name: "PowerPilz Timer Card",
     description: "Schedule a one-time future on/off action for any device within the next 7 days.",
+    preview: true
+  },
+  {
+    type: "power-pilz-heating-curve-card",
+    name: "PowerPilz Heating Curve Card",
+    description: "Visual heating curve card with weekly setpoint shape, smooth interpolation and override modes.",
     preview: true
   }
 ];

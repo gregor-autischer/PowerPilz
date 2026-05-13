@@ -263,7 +263,39 @@ const EN: Dict = {
   "graph.editor.entity": "Action entity",
   "graph.editor.tap_action": "Tap behavior",
   "graph.editor.hold_action": "Hold behavior",
-  "graph.editor.double_tap_action": "Double tap behavior"
+  "graph.editor.double_tap_action": "Double tap behavior",
+
+  // --- Heating curve card ---
+  "heating_curve.default_name": "Heating Curve",
+  "heating_curve.placeholder": "Pick a PowerPilz Smart Curve entity in the card settings to configure this card.",
+  "heating_curve.edit_dialog.default_title": "Edit weekly heating curve",
+  "heating_curve.edit_dialog.error_not_found": "Curve entity {entity} not found.",
+  "heating_curve.edit_dialog.same_for_all": "Same curve every day",
+  "heating_curve.edit_dialog.range_label": "Range",
+  "heating_curve.edit_dialog.all_days": "All days",
+  "heating_curve.edit_dialog.copy": "Copy day",
+  "heating_curve.edit_dialog.paste": "Paste here",
+  "heating_curve.edit_dialog.hint": "Tap an empty area to add a point. Drag a point to move it (15-minute snap on time). Double-click a point to delete it (each day must keep at least one).",
+  "heating_curve.editor.section_entities": "Entities",
+  "heating_curve.editor.section_identity": "Identity",
+  "heating_curve.editor.section_appearance": "Appearance",
+  "heating_curve.editor.section_display": "Display options",
+  "heating_curve.editor.section_actions": "Tap behavior",
+  "heating_curve.editor.entity": "PowerPilz Smart Curve entity",
+  "heating_curve.editor.entity_help": "A PowerPilz Smart Curve helper (select.* entity from the Companion integration).",
+  "heating_curve.editor.name": "Name",
+  "heating_curve.editor.subtitle": "Subtitle",
+  "heating_curve.editor.icon": "Icon",
+  "heating_curve.editor.icon_color": "Icon color",
+  "heating_curve.editor.active_color": "Curve color",
+  "heating_curve.editor.show_day_selector": "Show day selector",
+  "heating_curve.editor.show_mode_control": "Show mode button",
+  "heating_curve.editor.show_now_indicator": "Show now indicator",
+  "heating_curve.editor.show_value_labels": "Show value labels",
+  "heating_curve.editor.long_press_opens_editor": "Long-press opens curve editor",
+  "heating_curve.editor.tap_action": "Tap action",
+  "heating_curve.editor.hold_action": "Hold action",
+  "heating_curve.editor.double_tap_action": "Double-tap action"
 };
 
 const DE: Dict = {
@@ -503,7 +535,39 @@ const DE: Dict = {
   "graph.editor.entity": "Aktions-Entität",
   "graph.editor.tap_action": "Verhalten bei Tap",
   "graph.editor.hold_action": "Verhalten bei Halten",
-  "graph.editor.double_tap_action": "Verhalten bei Doppeltap"
+  "graph.editor.double_tap_action": "Verhalten bei Doppeltap",
+
+  // --- Heating curve card ---
+  "heating_curve.default_name": "Heizkurve",
+  "heating_curve.placeholder": "Wähle in den Karten-Einstellungen eine PowerPilz Smart-Curve-Entität.",
+  "heating_curve.edit_dialog.default_title": "Wochen-Heizkurve bearbeiten",
+  "heating_curve.edit_dialog.error_not_found": "Heizkurven-Entität {entity} nicht gefunden.",
+  "heating_curve.edit_dialog.same_for_all": "Gleiche Kurve für jeden Tag",
+  "heating_curve.edit_dialog.range_label": "Bereich",
+  "heating_curve.edit_dialog.all_days": "Alle Tage",
+  "heating_curve.edit_dialog.copy": "Tag kopieren",
+  "heating_curve.edit_dialog.paste": "Hier einfügen",
+  "heating_curve.edit_dialog.hint": "Auf eine leere Stelle tippen, um einen Punkt hinzuzufügen. Punkt ziehen, um ihn zu verschieben (15-Minuten-Raster auf der Zeit). Doppelklick zum Löschen (mindestens ein Punkt pro Tag bleibt erhalten).",
+  "heating_curve.editor.section_entities": "Entitäten",
+  "heating_curve.editor.section_identity": "Identität",
+  "heating_curve.editor.section_appearance": "Erscheinungsbild",
+  "heating_curve.editor.section_display": "Anzeige-Optionen",
+  "heating_curve.editor.section_actions": "Tap-Verhalten",
+  "heating_curve.editor.entity": "PowerPilz Smart-Curve-Entität",
+  "heating_curve.editor.entity_help": "Eine PowerPilz Smart-Curve-Hilfsentität (select.* aus der Companion-Integration).",
+  "heating_curve.editor.name": "Name",
+  "heating_curve.editor.subtitle": "Untertitel",
+  "heating_curve.editor.icon": "Symbol",
+  "heating_curve.editor.icon_color": "Symbolfarbe",
+  "heating_curve.editor.active_color": "Kurvenfarbe",
+  "heating_curve.editor.show_day_selector": "Tagesauswahl anzeigen",
+  "heating_curve.editor.show_mode_control": "Modus-Button anzeigen",
+  "heating_curve.editor.show_now_indicator": "Jetzt-Marker anzeigen",
+  "heating_curve.editor.show_value_labels": "Wert-Labels anzeigen",
+  "heating_curve.editor.long_press_opens_editor": "Langer Druck öffnet Editor",
+  "heating_curve.editor.tap_action": "Tap-Aktion",
+  "heating_curve.editor.hold_action": "Halten-Aktion",
+  "heating_curve.editor.double_tap_action": "Doppeltap-Aktion"
 };
 
 const TRANSLATIONS: Record<Lang, Dict> = { en: EN, de: DE };
