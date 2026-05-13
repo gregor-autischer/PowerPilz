@@ -28,6 +28,11 @@ interface ScheduleBlock {
   data?: Record<string, unknown>;
 }
 
+interface ScheduleEvent {
+  time: string; // "HH:MM:SS"
+  data?: Record<string, unknown>;
+}
+
 type WeekBlocks = {
   monday: ScheduleBlock[];
   tuesday: ScheduleBlock[];
@@ -37,6 +42,18 @@ type WeekBlocks = {
   saturday: ScheduleBlock[];
   sunday: ScheduleBlock[];
 };
+
+type WeekEvents = {
+  monday: ScheduleEvent[];
+  tuesday: ScheduleEvent[];
+  wednesday: ScheduleEvent[];
+  thursday: ScheduleEvent[];
+  friday: ScheduleEvent[];
+  saturday: ScheduleEvent[];
+  sunday: ScheduleEvent[];
+};
+
+type ScheduleKind = "blocks" | "events";
 
 const DIALOG_TAG = "power-pilz-schedule-edit-dialog";
 
@@ -65,11 +82,30 @@ interface DragState {
   endMin: number;
 }
 
+interface EventDragState {
+  day: DayKey;
+  index: number;
+  trackEl: HTMLElement;
+  pointerId: number;
+  startMin: number;       // initial position when drag started
+  currentMin: number;     // current position
+  moved: boolean;         // whether the pointer actually moved
+}
+
 interface EditingState {
   day: DayKey;
   index: number;
   from: string; // "HH:MM:SS"
   to: string;   // "HH:MM:SS"
+  dataText: string;
+  dataError?: string;
+  error?: string;
+}
+
+interface EditingEventState {
+  day: DayKey;
+  index: number;
+  time: string; // "HH:MM:SS"
   dataText: string;
   dataError?: string;
   error?: string;
@@ -96,6 +132,18 @@ function _emptyWeek(): WeekBlocks {
   };
 }
 
+function _emptyWeekEvents(): WeekEvents {
+  return {
+    monday: [],
+    tuesday: [],
+    wednesday: [],
+    thursday: [],
+    friday: [],
+    saturday: [],
+    sunday: [],
+  };
+}
+
 class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
   @property({ attribute: false })
   public hass!: HomeAssistant;
@@ -104,13 +152,17 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
   public scheduleEntityId = "";
 
   @state() private _blocks: WeekBlocks = _emptyWeek();
+  @state() private _events: WeekEvents = _emptyWeekEvents();
+  @state() private _kind: ScheduleKind = "blocks";
   @state() private _loading = true;
   @state() private _loadError?: string;
   @state() private _saving = false;
   @state() private _dirty = false;
 
   @state() private _drag?: DragState;
+  @state() private _eventDrag?: EventDragState;
   @state() private _editing?: EditingState;
+  @state() private _editingEvent?: EditingEventState;
 
   connectedCallback(): void {
     super.connectedCallback();
@@ -119,7 +171,9 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
 
   protected _handleEscape(_event: KeyboardEvent): void {
     if (this._saving) return;
-    if (this._editing) {
+    if (this._editingEvent) {
+      this._cancelEventEdit();
+    } else if (this._editing) {
       this._cancelBlockEdit();
     } else {
       this.close();
@@ -140,11 +194,14 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
         });
         return;
       }
-      const raw = state.attributes?.week_blocks;
+      this._kind = state.attributes?.schedule_kind === "events" ? "events" : "blocks";
+
+      // Blocks
+      const rawBlocks = state.attributes?.week_blocks;
       const loaded = _emptyWeek();
-      if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      if (rawBlocks && typeof rawBlocks === "object" && !Array.isArray(rawBlocks)) {
         for (const day of Object.keys(loaded) as (keyof WeekBlocks)[]) {
-          const list = (raw as Record<string, unknown>)[day];
+          const list = (rawBlocks as Record<string, unknown>)[day];
           if (Array.isArray(list)) {
             loaded[day] = list
               .filter((b) => b && typeof b === "object")
@@ -163,6 +220,30 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
         }
       }
       this._blocks = loaded;
+
+      // Events
+      const rawEvents = state.attributes?.week_events;
+      const loadedEvents = _emptyWeekEvents();
+      if (rawEvents && typeof rawEvents === "object" && !Array.isArray(rawEvents)) {
+        for (const day of Object.keys(loadedEvents) as (keyof WeekEvents)[]) {
+          const list = (rawEvents as Record<string, unknown>)[day];
+          if (Array.isArray(list)) {
+            loadedEvents[day] = list
+              .filter((e) => e && typeof e === "object")
+              .map((e) => {
+                const ev = e as Record<string, unknown>;
+                const out: ScheduleEvent = {
+                  time: String(ev.time ?? "00:00:00"),
+                };
+                if (ev.data && typeof ev.data === "object" && !Array.isArray(ev.data)) {
+                  out.data = ev.data as Record<string, unknown>;
+                }
+                return out;
+              });
+          }
+        }
+      }
+      this._events = loadedEvents;
     } catch (err) {
       this._loadError = String((err as Error)?.message || err);
     } finally {
@@ -170,19 +251,30 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
     }
   }
 
-  private async _handleSave(): Promise<void> {
+  private _handleSave = async (): Promise<void> => {
     if (this._saving || !this.hass) return;
     this._saving = true;
     this.lockClose = true;
     try {
-      await this.hass.callService(
-        "powerpilz_companion",
-        "set_schedule_blocks",
-        {
-          entity_id: this.scheduleEntityId,
-          blocks: this._blocks,
-        },
-      );
+      if (this._kind === "events") {
+        await this.hass.callService(
+          "powerpilz_companion",
+          "set_schedule_events",
+          {
+            entity_id: this.scheduleEntityId,
+            events: this._events,
+          },
+        );
+      } else {
+        await this.hass.callService(
+          "powerpilz_companion",
+          "set_schedule_blocks",
+          {
+            entity_id: this.scheduleEntityId,
+            blocks: this._blocks,
+          },
+        );
+      }
       this._dirty = false;
       this.close();
     } catch (err) {
@@ -190,7 +282,7 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
       this.lockClose = false;
       this._loadError = String((err as Error)?.message || err);
     }
-  }
+  };
 
   // ------------------------------------------------------------
   // Block list helpers
@@ -204,6 +296,17 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
   private _setBlocksForDay(key: DayKey, blocks: ScheduleBlock[]): void {
     const cleaned = _sortAndMerge(blocks);
     this._blocks = { ...this._blocks, [key]: cleaned };
+    this._dirty = true;
+  }
+
+  private _eventsForDay(key: DayKey): ScheduleEvent[] {
+    const events = this._events[key];
+    return Array.isArray(events) ? [...events] : [];
+  }
+
+  private _setEventsForDay(key: DayKey, events: ScheduleEvent[]): void {
+    const cleaned = _sortEvents(events);
+    this._events = { ...this._events, [key]: cleaned };
     this._dirty = true;
   }
 
@@ -221,7 +324,7 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
   private _handleTrackPointerDown = (event: PointerEvent): void => {
     if (event.button !== 0) return;
     if (this._loading || this._loadError) return;
-    if ((event.target as HTMLElement).closest(".pp-block")) return;
+    if ((event.target as HTMLElement).closest(".pp-block, .pp-pin")) return;
 
     const trackEl = event.currentTarget as HTMLElement;
     const day = trackEl.dataset.day as DayKey | undefined;
@@ -257,6 +360,17 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
 
     try { drag.trackEl.releasePointerCapture(drag.pointerId); } catch { /* ignore */ }
 
+    if (this._kind === "events") {
+      // Tap-to-insert: only fire if pointer didn't move beyond one snap step.
+      if (Math.abs(drag.endMin - drag.startMin) > SNAP_MINUTES) return;
+      const at = drag.startMin;
+      const existing = this._eventsForDay(drag.day);
+      if (existing.some((ev) => _toMin(ev.time) === at)) return;
+      existing.push({ time: _minToHms(at) });
+      this._setEventsForDay(drag.day, existing);
+      return;
+    }
+
     const a = Math.min(drag.startMin, drag.endMin);
     const b = Math.max(drag.startMin, drag.endMin);
     if (b - a < MIN_BLOCK_MINUTES) return;
@@ -276,6 +390,88 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
     if (event.pointerId !== this._drag.pointerId) return;
     try { this._drag.trackEl.releasePointerCapture(this._drag.pointerId); } catch { /* ignore */ }
     this._drag = undefined;
+  };
+
+  // -------- Event-pin drag handlers (events mode) --------
+
+  private _handlePinPointerDown = (event: PointerEvent): void => {
+    if (event.button !== 0) return;
+    if (this._loading || this._loadError) return;
+    const el = event.currentTarget as HTMLElement;
+    const day = el.dataset.day as DayKey | undefined;
+    const idx = parseInt(el.dataset.index ?? "-1", 10);
+    if (!day || idx < 0) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    const trackEl = el.parentElement as HTMLElement | null;
+    if (!trackEl) return;
+    try { trackEl.setPointerCapture(event.pointerId); } catch { /* ignore */ }
+
+    const events = this._eventsForDay(day);
+    const ev = events[idx];
+    if (!ev) return;
+    const startMin = _toMin(ev.time);
+    this._eventDrag = {
+      day,
+      index: idx,
+      trackEl,
+      pointerId: event.pointerId,
+      startMin,
+      currentMin: startMin,
+      moved: false,
+    };
+  };
+
+  private _handlePinPointerMove = (event: PointerEvent): void => {
+    if (!this._eventDrag) return;
+    if (event.pointerId !== this._eventDrag.pointerId) return;
+    const min = this._pxToMin(this._eventDrag.trackEl, event.clientX);
+    if (min !== this._eventDrag.currentMin) {
+      this._eventDrag = { ...this._eventDrag, currentMin: min, moved: true };
+    }
+  };
+
+  private _handlePinPointerUp = (event: PointerEvent): void => {
+    if (!this._eventDrag) return;
+    if (event.pointerId !== this._eventDrag.pointerId) return;
+    const drag = this._eventDrag;
+    this._eventDrag = undefined;
+    try { drag.trackEl.releasePointerCapture(drag.pointerId); } catch { /* ignore */ }
+
+    if (!drag.moved) {
+      // Treat as click → open edit modal.
+      const events = this._eventsForDay(drag.day);
+      const ev = events[drag.index];
+      if (!ev) return;
+      this._editingEvent = {
+        day: drag.day,
+        index: drag.index,
+        time: _normaliseHms(ev.time),
+        dataText: ev.data ? JSON.stringify(ev.data, null, 2) : "",
+      };
+      return;
+    }
+
+    // Persist the moved pin (with merge-by-time collision check).
+    const events = this._eventsForDay(drag.day);
+    const collision = events.some(
+      (ev, i) => i !== drag.index && _toMin(ev.time) === drag.currentMin
+    );
+    if (collision) return;
+    const moved = { ...events[drag.index], time: _minToHms(drag.currentMin) };
+    events[drag.index] = moved;
+    this._setEventsForDay(drag.day, events);
+  };
+
+  private _handlePinDoubleClick = (event: MouseEvent): void => {
+    event.stopPropagation();
+    const el = event.currentTarget as HTMLElement;
+    const day = el.dataset.day as DayKey | undefined;
+    const idx = parseInt(el.dataset.index ?? "-1", 10);
+    if (!day || idx < 0) return;
+    const events = this._eventsForDay(day).filter((_, i) => i !== idx);
+    this._setEventsForDay(day, events);
   };
 
   // ------------------------------------------------------------
@@ -385,6 +581,77 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
     this._editing = undefined;
   }
 
+  // -------- Event-edit modal (events mode) --------
+
+  private _updateEditingEventField(field: "time" | "dataText", value: string): void {
+    if (!this._editingEvent) return;
+    this._editingEvent = {
+      ...this._editingEvent,
+      [field]: value,
+      error: undefined,
+      dataError: undefined,
+    };
+  }
+
+  private _handleEditEventTimeChange = (e: Event): void => {
+    this._updateEditingEventField("time", _withSeconds((e.target as HTMLInputElement).value));
+  };
+
+  private _handleEditEventDataChange = (e: Event): void => {
+    this._updateEditingEventField("dataText", (e.target as HTMLTextAreaElement).value);
+  };
+
+  private _saveEventEdit(): void {
+    if (!this._editingEvent) return;
+    const lang = haLang(this.hass);
+    const { day, index, time, dataText } = this._editingEvent;
+    const t = _toMin(time);
+    if (isNaN(t)) {
+      this._editingEvent = { ...this._editingEvent, error: tr(lang, "schedule.edit_dialog.err_time") };
+      return;
+    }
+    let data: Record<string, unknown> | undefined;
+    const trimmed = dataText.trim();
+    if (trimmed) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+          throw new Error("not an object");
+        }
+        data = parsed as Record<string, unknown>;
+      } catch {
+        this._editingEvent = {
+          ...this._editingEvent,
+          dataError: tr(lang, "schedule.edit_dialog.err_data"),
+        };
+        return;
+      }
+    }
+    const events = this._eventsForDay(day);
+    const collision = events.some((ev, i) => i !== index && _toMin(ev.time) === t);
+    if (collision) {
+      this._editingEvent = { ...this._editingEvent, error: tr(lang, "schedule.edit_dialog.err_overlap") };
+      return;
+    }
+    const updated: ScheduleEvent = { time: _minToHms(t, time) };
+    if (data) updated.data = data;
+    events[index] = updated;
+    this._setEventsForDay(day, events);
+    this._editingEvent = undefined;
+  }
+
+  private _deleteEditingEvent(): void {
+    if (!this._editingEvent) return;
+    const { day, index } = this._editingEvent;
+    const events = this._eventsForDay(day).filter((_, i) => i !== index);
+    this._setEventsForDay(day, events);
+    this._editingEvent = undefined;
+  }
+
+  private _cancelEventEdit(): void {
+    this._editingEvent = undefined;
+  }
+
   // ------------------------------------------------------------
   // Title resolution
   // ------------------------------------------------------------
@@ -454,6 +721,7 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
   }
 
   protected renderInner(): TemplateResult | typeof nothing {
+    if (this._editingEvent) return this._renderEventInner();
     if (!this._editing) return nothing;
     const lang = haLang(this.hass);
     const edit = this._editing;
@@ -526,11 +794,71 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
     `;
   }
 
+  private _renderEventInner(): TemplateResult {
+    const lang = haLang(this.hass);
+    const edit = this._editingEvent!;
+    const dayLabel = weekdayShort(
+      lang,
+      WEEK.find((w) => w.key === edit.day)?.dayIndex ?? 0
+    );
+    return html`
+      <div class="inner-backdrop" @click=${this._cancelEventEdit}>
+        <div class="inner-dialog" @click=${(e: MouseEvent) => e.stopPropagation()}>
+          <header>
+            <h3>
+              ${tr(lang, "schedule.edit_dialog.event_title", { day: dayLabel })}
+            </h3>
+            <button class="close-x" @click=${this._cancelEventEdit} aria-label="Close">
+              <ha-icon icon="mdi:close"></ha-icon>
+            </button>
+          </header>
+          <div class="inner-body">
+            <label class="field">
+              <span>${tr(lang, "schedule.edit_dialog.event_time")}</span>
+              <input
+                type="time"
+                step="1"
+                .value=${edit.time.slice(0, 8)}
+                @change=${this._handleEditEventTimeChange}
+              />
+            </label>
+            <label class="field">
+              <span>
+                ${tr(lang, "schedule.edit_dialog.data")}
+                <small>${tr(lang, "schedule.edit_dialog.data_help")}</small>
+              </span>
+              <textarea
+                rows="4"
+                spellcheck="false"
+                .value=${edit.dataText}
+                @input=${this._handleEditEventDataChange}
+              ></textarea>
+              ${edit.dataError ? html`<span class="err">${edit.dataError}</span>` : nothing}
+            </label>
+            ${edit.error ? html`<div class="err">${edit.error}</div>` : nothing}
+          </div>
+          <footer>
+            <button class="ppd-btn danger" @click=${() => this._deleteEditingEvent()}>
+              ${tr(lang, "schedule.edit_dialog.delete")}
+            </button>
+            <div class="spacer"></div>
+            <button class="ppd-btn flat" @click=${this._cancelEventEdit}>
+              ${tr(lang, "common.cancel")}
+            </button>
+            <button class="ppd-btn primary" @click=${() => this._saveEventEdit()}>
+              ${tr(lang, "common.save")}
+            </button>
+          </footer>
+        </div>
+      </div>
+    `;
+  }
+
   private _renderDayRow(key: DayKey, dayIndex: number, lang: "en" | "de"): TemplateResult {
-    const blocks = this._blocksForDay(key);
+    const isEvents = this._kind === "events";
 
     let ghost: TemplateResult | typeof nothing = nothing;
-    if (this._drag?.day === key) {
+    if (!isEvents && this._drag?.day === key) {
       const a = Math.min(this._drag.startMin, this._drag.endMin);
       const b = Math.max(this._drag.startMin, this._drag.endMin);
       if (b > a) {
@@ -549,35 +877,63 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
       }
     }
 
+    const markers = isEvents
+      ? this._eventsForDay(key).map((ev, idx) => {
+          let effectiveMin = _toMin(ev.time);
+          if (this._eventDrag?.day === key && this._eventDrag.index === idx) {
+            effectiveMin = this._eventDrag.currentMin;
+          }
+          const left = (effectiveMin / DAY_MINUTES) * 100;
+          return html`
+            <div
+              class="pp-pin"
+              data-day=${key}
+              data-index=${idx}
+              style=${styleMap({ left: `${left}%` })}
+              title="${_minToHm(effectiveMin)}"
+              @pointerdown=${this._handlePinPointerDown}
+              @pointermove=${this._handlePinPointerMove}
+              @pointerup=${this._handlePinPointerUp}
+              @pointercancel=${(e: PointerEvent) => { void e; this._eventDrag = undefined; }}
+              @dblclick=${this._handlePinDoubleClick}
+            >
+              <div class="pp-pin-stem"></div>
+              <div class="pp-pin-head"></div>
+              <span class="pp-pin-label">${_minToHm(effectiveMin)}</span>
+            </div>
+          `;
+        })
+      : this._blocksForDay(key).map((b, idx) => {
+          const start = _toMin(b.from);
+          const end = _toMin(b.to);
+          const left = (start / DAY_MINUTES) * 100;
+          const width = ((end - start) / DAY_MINUTES) * 100;
+          return html`
+            <div
+              class="pp-block"
+              data-day=${key}
+              data-index=${idx}
+              style=${styleMap({ left: `${left}%`, width: `${width}%` })}
+              @click=${this._handleBlockClick}
+              title="${b.from.slice(0, 5)}–${b.to.slice(0, 5)}"
+            >
+              <span class="pp-block-label">${b.from.slice(0, 5)}–${b.to.slice(0, 5)}</span>
+            </div>
+          `;
+        });
+
     return html`
       <div class="day-row">
         <div class="day-col">${weekdayShort(lang, dayIndex)}</div>
         <div
-          class="day-track"
+          class="day-track ${isEvents ? "events" : "blocks"}"
           data-day=${key}
           @pointerdown=${this._handleTrackPointerDown}
           @pointermove=${this._handleTrackPointerMove}
           @pointerup=${this._handleTrackPointerUp}
           @pointercancel=${this._handleTrackPointerCancel}
         >
-          ${blocks.map((b, idx) => {
-            const start = _toMin(b.from);
-            const end = _toMin(b.to);
-            const left = (start / DAY_MINUTES) * 100;
-            const width = ((end - start) / DAY_MINUTES) * 100;
-            return html`
-              <div
-                class="pp-block"
-                data-day=${key}
-                data-index=${idx}
-                style=${styleMap({ left: `${left}%`, width: `${width}%` })}
-                @click=${this._handleBlockClick}
-                title="${b.from.slice(0, 5)}–${b.to.slice(0, 5)}"
-              >
-                <span class="pp-block-label">${b.from.slice(0, 5)}–${b.to.slice(0, 5)}</span>
-              </div>
-            `;
-          })}
+          ${markers}
           ${ghost}
         </div>
       </div>
@@ -675,6 +1031,51 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
         color: var(--primary-text-color);
         white-space: nowrap;
         padding: 0 6px;
+        pointer-events: none;
+      }
+
+      /* ----- Event-mode pin marker ----- */
+      .day-track.events {
+        overflow: visible;
+        cursor: copy;
+      }
+      .pp-pin {
+        position: absolute;
+        top: -30%;
+        bottom: 0;
+        width: 18px;
+        transform: translateX(-50%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        cursor: grab;
+        touch-action: none;
+      }
+      .pp-pin:active { cursor: grabbing; }
+      .pp-pin-stem {
+        width: 2px;
+        flex: 1;
+        background-color: var(--primary-color, #03a9f4);
+        border-radius: 1px;
+        pointer-events: none;
+      }
+      .pp-pin-head {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background-color: var(--primary-color, #03a9f4);
+        box-shadow: 0 0 0 2px var(--card-background-color, #fff);
+        margin-top: -2px;
+        flex: none;
+        pointer-events: none;
+      }
+      .pp-pin-label {
+        position: absolute;
+        top: -16px;
+        font-size: 10px;
+        font-weight: 500;
+        color: var(--primary-text-color);
+        white-space: nowrap;
         pointer-events: none;
       }
       .hint {
@@ -837,6 +1238,13 @@ function _withSeconds(value: string): string {
 
 function _rangesOverlap(a1: number, a2: number, b1: number, b2: number): boolean {
   return a1 < b2 && b1 < a2;
+}
+
+function _sortEvents(events: ScheduleEvent[]): ScheduleEvent[] {
+  return events
+    .filter((e) => typeof e?.time === "string")
+    .slice()
+    .sort((a, b) => _toMin(a.time) - _toMin(b.time));
 }
 
 function _sortAndMerge(blocks: ScheduleBlock[]): ScheduleBlock[] {

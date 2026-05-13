@@ -43,7 +43,15 @@ interface ScheduleBlock {
   data?: Record<string, unknown>;
 }
 
+interface ScheduleEvent {
+  time: string; // "HH:MM:SS"
+  data?: Record<string, unknown>;
+}
+
 type WeekBlocks = Record<string, ScheduleBlock[]>;
+type WeekEvents = Record<string, ScheduleEvent[]>;
+
+type ScheduleKind = "blocks" | "events";
 
 // Map JS Date.getDay() (0 = Sunday) to the canonical weekday keys the
 // Smart Schedule helper emits in its `week_blocks` attribute (Python's
@@ -322,6 +330,29 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
     return Array.isArray(blocks) ? (blocks as ScheduleBlock[]) : [];
   }
 
+  private _weekEvents(): WeekEvents {
+    const id = this._scheduleEntityId;
+    if (!id) return {};
+    const attrs = this.hass?.states?.[id]?.attributes as Record<string, unknown> | undefined;
+    const we = attrs?.week_events;
+    if (we && typeof we === "object" && !Array.isArray(we)) {
+      return we as WeekEvents;
+    }
+    return {};
+  }
+
+  private eventsForDay(dayIndex: number): ScheduleEvent[] {
+    const we = this._weekEvents();
+    const events = we[this.dayKey(dayIndex)];
+    return Array.isArray(events) ? (events as ScheduleEvent[]) : [];
+  }
+
+  private scheduleKind(): ScheduleKind {
+    const id = this._scheduleEntityId;
+    const attrs = id ? this.hass?.states?.[id]?.attributes : undefined;
+    return attrs?.schedule_kind === "events" ? "events" : "blocks";
+  }
+
   private timeToMinutes(timeStr: string): number {
     const parts = (timeStr || "").split(":");
     const h = parseInt(parts[0] ?? "0", 10);
@@ -362,13 +393,15 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
     if (mode === "off") return false;
 
     // Auto mode: read the helper's own schedule_active attribute if
-    // present (authoritative), else compute from today's blocks as a
-    // fallback.
+    // present (authoritative). In events mode this reflects a running
+    // pulse; in blocks mode the current schedule window.
     const id = this._scheduleEntityId;
     const attrs = id ? this.hass?.states?.[id]?.attributes : undefined;
     if (typeof attrs?.schedule_active === "boolean") {
       return attrs.schedule_active as boolean;
     }
+
+    if (this.scheduleKind() === "events") return false;
 
     const todayIdx = new Date().getDay();
     const todaysBlocks = this.blocksForDay(todayIdx);
@@ -441,13 +474,22 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
     });
   };
 
+  private handleTriggerNow = async (event: Event): Promise<void> => {
+    event.stopPropagation();
+    const id = this._scheduleEntityId;
+    if (this.isEditorPreview() || !id) return;
+    await this.hass.callService("powerpilz_companion", "trigger_event_now", {
+      entity_id: id
+    });
+  };
+
   // --- Render ---
 
   private renderTimeline(): TemplateResult {
     const config = this._config!;
     const { start, end } = this.resolvedTimeWindow();
     const range = end - start;
-    const blocks = this.blocksForDay(this._selectedDay);
+    const kind = this.scheduleKind();
     const activeColor = this.resolvedActiveColor();
     const activeAlpha = this.resolvedActiveColorAlpha(0.3);
     // Reference _tick so we re-render when the minute changes.
@@ -470,8 +512,46 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
       }
     }
 
+    const markers: TemplateResult[] = kind === "events"
+      ? this.eventsForDay(this._selectedDay).flatMap((ev) => {
+          const min = this.timeToMinutes(ev.time);
+          if (min < start || min > end) return [];
+          const leftPct = ((min - start) / range) * 100;
+          return [html`
+            <div
+              class="timeline-pin"
+              style=${styleMap({
+                left: `${leftPct}%`,
+                "--pin-color": activeColor
+              })}
+            >
+              <div class="pin-stem"></div>
+              <div class="pin-head"></div>
+            </div>
+          `];
+        })
+      : this.blocksForDay(this._selectedDay).flatMap((block) => {
+          const from = this.timeToMinutes(block.from);
+          const to = this.timeToMinutes(block.to);
+          const clampedFrom = Math.max(from, start);
+          const clampedTo = Math.min(to, end);
+          if (clampedTo <= clampedFrom) return [];
+          const leftPct = ((clampedFrom - start) / range) * 100;
+          const widthPct = ((clampedTo - clampedFrom) / range) * 100;
+          return [html`
+            <div
+              class="timeline-block"
+              style=${styleMap({
+                left: `${leftPct}%`,
+                width: `${widthPct}%`,
+                "background-color": activeAlpha
+              })}
+            ></div>
+          `];
+        });
+
     return html`
-      <div class="timeline-container">
+      <div class="timeline-container ${kind === "events" ? "events" : "blocks"}">
         ${showLabels
           ? html`
               <div class="time-labels">
@@ -482,25 +562,7 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
             `
           : nothing}
         <div class="timeline-track">
-          ${blocks.map((block) => {
-            const from = this.timeToMinutes(block.from);
-            const to = this.timeToMinutes(block.to);
-            const clampedFrom = Math.max(from, start);
-            const clampedTo = Math.min(to, end);
-            if (clampedTo <= clampedFrom) return nothing;
-            const leftPct = ((clampedFrom - start) / range) * 100;
-            const widthPct = ((clampedTo - clampedFrom) / range) * 100;
-            return html`
-              <div
-                class="timeline-block"
-                style=${styleMap({
-                  left: `${leftPct}%`,
-                  width: `${widthPct}%`,
-                  "background-color": activeAlpha
-                })}
-              ></div>
-            `;
-          })}
+          ${markers}
           ${showNow
             ? html`
                 <div
@@ -549,6 +611,19 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
     `;
   }
 
+  private renderTriggerNowButton(): TemplateResult {
+    return html`
+      <button
+        type="button"
+        class="trigger-now-btn"
+        @click=${this.handleTriggerNow}
+        title="Trigger event now"
+      >
+        <ha-icon icon="mdi:play"></ha-icon>
+      </button>
+    `;
+  }
+
   protected render(): TemplateResult {
     if (!this._config) return html`<ha-card>${tr(haLang(this.hass), "common.invalid_config")}</ha-card>`;
     if (!this.hass) return html``;
@@ -578,6 +653,7 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
       ? this.iconStyle(config.icon_color)
       : this.iconStyle("disabled");
 
+    const isEvents = this.scheduleKind() === "events";
     const headerContent = html`
       <div class="state-item">
         <div class="icon-wrap">
@@ -589,6 +665,7 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
           <div class="primary">${config.name || friendlyName || tr(haLang(this.hass), "schedule.default_name")}</div>
           <div class="secondary">${subtitle}</div>
         </div>
+        ${isEvents ? this.renderTriggerNowButton() : nothing}
         ${showMode ? this.renderModeButton() : nothing}
       </div>
     `;
@@ -807,6 +884,42 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
       pointer-events: none;
     }
 
+    /* Events-mode pin marker — vertical stem + circular head, sticks
+     * up ~30% above the block track so events are visually distinct. */
+    .timeline-container.events .timeline-track {
+      overflow: visible;
+    }
+
+    .timeline-pin {
+      position: absolute;
+      top: -30%;
+      bottom: 0;
+      width: 0;
+      transform: translateX(-50%);
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .timeline-pin .pin-stem {
+      width: 2px;
+      flex: 1;
+      background-color: var(--pin-color, var(--primary-color, #03a9f4));
+      border-radius: 1px;
+      opacity: 0.85;
+    }
+
+    .timeline-pin .pin-head {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background-color: var(--pin-color, var(--primary-color, #03a9f4));
+      box-shadow: 0 0 0 2px var(--card-background-color, #fff);
+      margin-top: -2px;
+      flex: none;
+    }
+
     .now-indicator {
       position: absolute;
       top: 2px;
@@ -852,6 +965,36 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
     .mode-label {
       min-width: 28px;
       text-align: center;
+    }
+
+    .trigger-now-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      background: rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.05);
+      border-radius: calc(var(--control-border-radius) - 2px);
+      height: var(--icon-size);
+      width: var(--icon-size);
+      min-width: var(--icon-size);
+      padding: 0;
+      margin: 0 6px 0 auto;
+      box-sizing: border-box;
+      cursor: pointer;
+      color: var(--primary-text-color);
+      transition: background-color 0.2s;
+      -webkit-tap-highlight-color: transparent;
+      flex: none;
+    }
+
+    .trigger-now-btn + .mode-btn {
+      margin-left: 0;
+    }
+
+    .trigger-now-btn ha-icon {
+      --mdc-icon-size: 18px;
+      display: flex;
+      line-height: 0;
     }
   `;
 }
