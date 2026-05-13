@@ -1,6 +1,6 @@
 # 🍄‍🟫 PowerPilz
 
-[![hacs](https://img.shields.io/badge/hacs-custom-orange.svg?style=flat-square)](https://github.com/hacs/integration) [![version](https://img.shields.io/github/v/release/gregor-autischer/PowerPilz?sort=semver&style=flat-square&label=version)](https://github.com/gregor-autischer/PowerPilz/releases) [![downloads](https://img.shields.io/github/downloads/gregor-autischer/PowerPilz/total?style=flat-square&label=downloads&color=orange)](https://github.com/gregor-autischer/PowerPilz/releases)
+[![hacs](https://img.shields.io/badge/hacs-custom-4f46e5?style=flat-square)](https://github.com/hacs/integration) [![version](https://img.shields.io/github/v/release/gregor-autischer/PowerPilz?sort=semver&style=flat-square&label=version&color=9a48d3)](https://github.com/gregor-autischer/PowerPilz/releases) [![downloads](https://img.shields.io/github/downloads/gregor-autischer/PowerPilz/total?color=ec4899&label=downloads&style=flat-square&cacheSeconds=3600)](https://github.com/gregor-autischer/PowerPilz/releases)
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/gregor-autischer/PowerPilz/main/images/PowerPilz_main.png" alt="PowerPilz cards overview" width="100%">
