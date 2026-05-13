@@ -82,16 +82,6 @@ interface DragState {
   endMin: number;
 }
 
-interface EventDragState {
-  day: DayKey;
-  index: number;
-  trackEl: HTMLElement;
-  pointerId: number;
-  startMin: number;       // initial position when drag started
-  currentMin: number;     // current position
-  moved: boolean;         // whether the pointer actually moved
-}
-
 interface EditingState {
   day: DayKey;
   index: number;
@@ -160,7 +150,6 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
   @state() private _dirty = false;
 
   @state() private _drag?: DragState;
-  @state() private _eventDrag?: EventDragState;
   @state() private _editing?: EditingState;
   @state() private _editingEvent?: EditingEventState;
 
@@ -324,7 +313,10 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
   private _handleTrackPointerDown = (event: PointerEvent): void => {
     if (event.button !== 0) return;
     if (this._loading || this._loadError) return;
-    if ((event.target as HTMLElement).closest(".pp-block, .pp-pin")) return;
+    // Events mode uses simple click handlers — pointer/drag logic is
+    // for the block-paint flow only.
+    if (this._kind === "events") return;
+    if ((event.target as HTMLElement).closest(".pp-block")) return;
 
     const trackEl = event.currentTarget as HTMLElement;
     const day = trackEl.dataset.day as DayKey | undefined;
@@ -360,17 +352,6 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
 
     try { drag.trackEl.releasePointerCapture(drag.pointerId); } catch { /* ignore */ }
 
-    if (this._kind === "events") {
-      // Tap-to-insert: only fire if pointer didn't move beyond one snap step.
-      if (Math.abs(drag.endMin - drag.startMin) > SNAP_MINUTES) return;
-      const at = drag.startMin;
-      const existing = this._eventsForDay(drag.day);
-      if (existing.some((ev) => _toMin(ev.time) === at)) return;
-      existing.push({ time: _minToHms(at) });
-      this._setEventsForDay(drag.day, existing);
-      return;
-    }
-
     const a = Math.min(drag.startMin, drag.endMin);
     const b = Math.max(drag.startMin, drag.endMin);
     if (b - a < MIN_BLOCK_MINUTES) return;
@@ -392,86 +373,36 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
     this._drag = undefined;
   };
 
-  // -------- Event-pin drag handlers (events mode) --------
+  // -------- Events-mode click handlers --------
 
-  private _handlePinPointerDown = (event: PointerEvent): void => {
-    if (event.button !== 0) return;
+  private _handleEventsTrackClick = (event: MouseEvent): void => {
     if (this._loading || this._loadError) return;
+    if ((event.target as HTMLElement).closest(".pp-pin")) return;
+    const trackEl = event.currentTarget as HTMLElement;
+    const day = trackEl.dataset.day as DayKey | undefined;
+    if (!day) return;
+    const at = this._pxToMin(trackEl, event.clientX);
+    const existing = this._eventsForDay(day);
+    if (existing.some((ev) => _toMin(ev.time) === at)) return;
+    existing.push({ time: _minToHms(at) });
+    this._setEventsForDay(day, existing);
+  };
+
+  private _handlePinClick = (event: MouseEvent): void => {
+    event.stopPropagation();
     const el = event.currentTarget as HTMLElement;
     const day = el.dataset.day as DayKey | undefined;
     const idx = parseInt(el.dataset.index ?? "-1", 10);
     if (!day || idx < 0) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-    const trackEl = el.parentElement as HTMLElement | null;
-    if (!trackEl) return;
-    try { trackEl.setPointerCapture(event.pointerId); } catch { /* ignore */ }
-
     const events = this._eventsForDay(day);
     const ev = events[idx];
     if (!ev) return;
-    const startMin = _toMin(ev.time);
-    this._eventDrag = {
+    this._editingEvent = {
       day,
       index: idx,
-      trackEl,
-      pointerId: event.pointerId,
-      startMin,
-      currentMin: startMin,
-      moved: false,
+      time: _normaliseHms(ev.time),
+      dataText: ev.data ? JSON.stringify(ev.data, null, 2) : "",
     };
-  };
-
-  private _handlePinPointerMove = (event: PointerEvent): void => {
-    if (!this._eventDrag) return;
-    if (event.pointerId !== this._eventDrag.pointerId) return;
-    const min = this._pxToMin(this._eventDrag.trackEl, event.clientX);
-    if (min !== this._eventDrag.currentMin) {
-      this._eventDrag = { ...this._eventDrag, currentMin: min, moved: true };
-    }
-  };
-
-  private _handlePinPointerUp = (event: PointerEvent): void => {
-    if (!this._eventDrag) return;
-    if (event.pointerId !== this._eventDrag.pointerId) return;
-    const drag = this._eventDrag;
-    this._eventDrag = undefined;
-    try { drag.trackEl.releasePointerCapture(drag.pointerId); } catch { /* ignore */ }
-
-    if (!drag.moved) {
-      // Treat as click → open edit modal.
-      const events = this._eventsForDay(drag.day);
-      const ev = events[drag.index];
-      if (!ev) return;
-      this._editingEvent = {
-        day: drag.day,
-        index: drag.index,
-        time: _normaliseHms(ev.time),
-        dataText: ev.data ? JSON.stringify(ev.data, null, 2) : "",
-      };
-      return;
-    }
-
-    // Persist the moved pin (with merge-by-time collision check).
-    const events = this._eventsForDay(drag.day);
-    const collision = events.some(
-      (ev, i) => i !== drag.index && _toMin(ev.time) === drag.currentMin
-    );
-    if (collision) return;
-    const moved = { ...events[drag.index], time: _minToHms(drag.currentMin) };
-    events[drag.index] = moved;
-    this._setEventsForDay(drag.day, events);
-  };
-
-  private _handlePinDoubleClick = (event: MouseEvent): void => {
-    event.stopPropagation();
-    const el = event.currentTarget as HTMLElement;
-    const day = el.dataset.day as DayKey | undefined;
-    const idx = parseInt(el.dataset.index ?? "-1", 10);
-    if (!day || idx < 0) return;
-    const events = this._eventsForDay(day).filter((_, i) => i !== idx);
-    this._setEventsForDay(day, events);
   };
 
   // ------------------------------------------------------------
@@ -879,28 +810,17 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
 
     const markers = isEvents
       ? this._eventsForDay(key).map((ev, idx) => {
-          let effectiveMin = _toMin(ev.time);
-          if (this._eventDrag?.day === key && this._eventDrag.index === idx) {
-            effectiveMin = this._eventDrag.currentMin;
-          }
-          const left = (effectiveMin / DAY_MINUTES) * 100;
+          const min = _toMin(ev.time);
+          const left = (min / DAY_MINUTES) * 100;
           return html`
             <div
               class="pp-pin"
               data-day=${key}
               data-index=${idx}
               style=${styleMap({ left: `${left}%` })}
-              title="${_minToHm(effectiveMin)}"
-              @pointerdown=${this._handlePinPointerDown}
-              @pointermove=${this._handlePinPointerMove}
-              @pointerup=${this._handlePinPointerUp}
-              @pointercancel=${(e: PointerEvent) => { void e; this._eventDrag = undefined; }}
-              @dblclick=${this._handlePinDoubleClick}
-            >
-              <div class="pp-pin-stem"></div>
-              <div class="pp-pin-head"></div>
-              <span class="pp-pin-label">${_minToHm(effectiveMin)}</span>
-            </div>
+              title="${_minToHm(min)}"
+              @click=${this._handlePinClick}
+            ></div>
           `;
         })
       : this._blocksForDay(key).map((b, idx) => {
@@ -932,6 +852,7 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
           @pointermove=${this._handleTrackPointerMove}
           @pointerup=${this._handleTrackPointerUp}
           @pointercancel=${this._handleTrackPointerCancel}
+          @click=${isEvents ? this._handleEventsTrackClick : undefined}
         >
           ${markers}
           ${ghost}
@@ -1036,47 +957,22 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
 
       /* ----- Event-mode pin marker ----- */
       .day-track.events {
-        overflow: visible;
         cursor: copy;
       }
       .pp-pin {
         position: absolute;
-        top: -30%;
-        bottom: 0;
-        width: 18px;
-        transform: translateX(-50%);
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        cursor: grab;
-        touch-action: none;
-      }
-      .pp-pin:active { cursor: grabbing; }
-      .pp-pin-stem {
-        width: 2px;
-        flex: 1;
-        background-color: var(--primary-color, #03a9f4);
-        border-radius: 1px;
-        pointer-events: none;
-      }
-      .pp-pin-head {
-        width: 12px;
-        height: 12px;
+        top: 50%;
+        width: 14px;
+        height: 14px;
         border-radius: 50%;
         background-color: var(--primary-color, #03a9f4);
         box-shadow: 0 0 0 2px var(--card-background-color, #fff);
-        margin-top: -2px;
-        flex: none;
-        pointer-events: none;
+        transform: translate(-50%, -50%);
+        cursor: pointer;
+        transition: transform 0.12s ease;
       }
-      .pp-pin-label {
-        position: absolute;
-        top: -16px;
-        font-size: 10px;
-        font-weight: 500;
-        color: var(--primary-text-color);
-        white-space: nowrap;
-        pointer-events: none;
+      .pp-pin:hover {
+        transform: translate(-50%, -50%) scale(1.15);
       }
       .hint {
         margin-top: 10px;

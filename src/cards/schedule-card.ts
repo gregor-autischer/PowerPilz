@@ -478,6 +478,13 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
     event.stopPropagation();
     const id = this._scheduleEntityId;
     if (this.isEditorPreview() || !id) return;
+    const attrs = this.hass?.states?.[id]?.attributes;
+    if (attrs?.pulse_running === true) return;
+    const blockedUntilRaw = attrs?.pulse_blocked_until;
+    if (typeof blockedUntilRaw === "string") {
+      const blockedUntilMs = Date.parse(blockedUntilRaw);
+      if (Number.isFinite(blockedUntilMs) && blockedUntilMs > Date.now()) return;
+    }
     await this.hass.callService("powerpilz_companion", "trigger_event_now", {
       entity_id: id
     });
@@ -522,12 +529,9 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
               class="timeline-pin"
               style=${styleMap({
                 left: `${leftPct}%`,
-                "--pin-color": activeColor
+                "background-color": activeColor
               })}
-            >
-              <div class="pin-stem"></div>
-              <div class="pin-head"></div>
-            </div>
+            ></div>
           `];
         })
       : this.blocksForDay(this._selectedDay).flatMap((block) => {
@@ -612,12 +616,37 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
   }
 
   private renderTriggerNowButton(): TemplateResult {
+    const id = this._scheduleEntityId;
+    const attrs = id ? this.hass?.states?.[id]?.attributes : undefined;
+    const pulseRunning = attrs?.pulse_running === true;
+    const blockedUntilRaw = attrs?.pulse_blocked_until;
+    const blockedUntilMs = typeof blockedUntilRaw === "string"
+      ? Date.parse(blockedUntilRaw)
+      : NaN;
+    const inCoolDown = Number.isFinite(blockedUntilMs) && blockedUntilMs > Date.now();
+    const disabled = pulseRunning || inCoolDown;
+
+    const lang = haLang(this.hass);
+    let title = tr(lang, "schedule.trigger_now");
+    if (pulseRunning) {
+      title = tr(lang, "schedule.trigger_now_blocked_running");
+    } else if (inCoolDown) {
+      const until = new Date(blockedUntilMs);
+      const hh = String(until.getHours()).padStart(2, "0");
+      const mm = String(until.getMinutes()).padStart(2, "0");
+      const ss = String(until.getSeconds()).padStart(2, "0");
+      title = tr(lang, "schedule.trigger_now_blocked_cooldown", {
+        time: `${hh}:${mm}:${ss}`,
+      });
+    }
+
     return html`
       <button
         type="button"
         class="trigger-now-btn"
+        ?disabled=${disabled}
         @click=${this.handleTriggerNow}
-        title="Trigger event now"
+        title=${title}
       >
         <ha-icon icon="mdi:play"></ha-icon>
       </button>
@@ -884,40 +913,17 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
       pointer-events: none;
     }
 
-    /* Events-mode pin marker — vertical stem + circular head, sticks
-     * up ~30% above the block track so events are visually distinct. */
-    .timeline-container.events .timeline-track {
-      overflow: visible;
-    }
-
+    /* Events-mode pin marker — small circle vertically centered in the
+     * track, matches the block-rectangle vertical alignment. */
     .timeline-pin {
       position: absolute;
-      top: -30%;
-      bottom: 0;
-      width: 0;
-      transform: translateX(-50%);
-      pointer-events: none;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-
-    .timeline-pin .pin-stem {
-      width: 2px;
-      flex: 1;
-      background-color: var(--pin-color, var(--primary-color, #03a9f4));
-      border-radius: 1px;
-      opacity: 0.85;
-    }
-
-    .timeline-pin .pin-head {
+      top: 50%;
       width: 10px;
       height: 10px;
       border-radius: 50%;
-      background-color: var(--pin-color, var(--primary-color, #03a9f4));
+      transform: translate(-50%, -50%);
+      pointer-events: none;
       box-shadow: 0 0 0 2px var(--card-background-color, #fff);
-      margin-top: -2px;
-      flex: none;
     }
 
     .now-indicator {
@@ -982,9 +988,14 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
       box-sizing: border-box;
       cursor: pointer;
       color: var(--primary-text-color);
-      transition: background-color 0.2s;
+      transition: background-color 0.2s, opacity 0.2s;
       -webkit-tap-highlight-color: transparent;
       flex: none;
+    }
+
+    .trigger-now-btn[disabled] {
+      opacity: 0.4;
+      cursor: not-allowed;
     }
 
     .trigger-now-btn + .mode-btn {
