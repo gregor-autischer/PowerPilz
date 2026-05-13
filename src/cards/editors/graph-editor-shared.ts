@@ -212,14 +212,14 @@ export const createGraphSchema = (
               select: {
                 mode: "dropdown",
                 options: [
-                  { label: "6 hours", value: "6" },
-                  { label: "12 hours", value: "12" },
-                  { label: "24 hours", value: "24" },
-                  { label: "48 hours", value: "48" },
-                  { label: "3 days", value: "72" },
-                  { label: "7 days", value: "168" },
-                  { label: "14 days", value: "336" },
-                  { label: "30 days", value: "720" }
+                  { label: "6 hours", value: 6 },
+                  { label: "12 hours", value: 12 },
+                  { label: "24 hours", value: 24 },
+                  { label: "48 hours", value: 48 },
+                  { label: "3 days", value: 72 },
+                  { label: "7 days", value: 168 },
+                  { label: "14 days", value: 336 },
+                  { label: "30 days", value: 720 }
                 ]
               }
             },

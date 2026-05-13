@@ -33,6 +33,8 @@ import {
   type ChartSeries
 } from "../../utils/chart-renderer";
 import { PowerPilzDialogBase } from "./dialog-shell";
+import { downloadCsv, seriesToCsv, slugify } from "../../utils/csv-export";
+import { haLang, tr } from "../../utils/i18n";
 
 const DIALOG_TAG = "power-pilz-energy-node-dialog";
 
@@ -419,6 +421,7 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
       <div class="pp-toolbar">
         ${this._renderModeSwitch()}
         ${this._renderRangeBar()}
+        ${this._renderDownloadButton()}
         ${this._renderEntityTrigger()}
       </div>
       <div
@@ -472,6 +475,50 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
               </div>
             `)}
       </div>
+    `;
+  }
+
+  private _windowLabel(): string {
+    if (this._useCustomRange) return "Custom";
+    return RANGE_PRESETS.find((p) => p.id === this._presetId)?.label ?? this._presetId;
+  }
+
+  private _handleDownloadCsv = (): void => {
+    if (this._loading || this._historyByEntity.size === 0) return;
+    const selected = this._allSeries.filter((s) => this._selectedIds.has(s.id));
+    if (selected.length === 0) return;
+
+    const window = this._activeWindow();
+    const csv = seriesToCsv(
+      selected.map((s) => ({
+        label: s.label,
+        entityId: s.entityId,
+        unit: s.unit,
+        points: this._historyByEntity.get(s.entityId) ?? [],
+      }))
+    );
+
+    const titlePart = slugify(this.dialogTitle || "energy");
+    const datePart = new Date(window.endMs).toISOString().slice(0, 10);
+    const filename = `powerpilz-${titlePart}-${slugify(this._windowLabel())}-${datePart}.csv`;
+    downloadCsv(filename, csv);
+  };
+
+  private _renderDownloadButton(): TemplateResult {
+    const disabled = this._loading
+      || this._historyByEntity.size === 0
+      || this._selectedIds.size === 0;
+    const label = tr(haLang(this.hass), "energy.download_csv");
+    return html`
+      <button
+        class="pp-icon-btn"
+        ?disabled=${disabled}
+        @click=${this._handleDownloadCsv}
+        title=${label}
+        aria-label=${label}
+      >
+        <ha-icon icon="mdi:download"></ha-icon>
+      </button>
     `;
   }
 
@@ -766,6 +813,31 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
       .pp-range-btn.invalid {
         color: var(--error-color, #c62828);
       }
+
+      .pp-icon-btn {
+        font: inherit;
+        border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.12));
+        background: var(--card-background-color, #fff);
+        color: var(--secondary-text-color);
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: none;
+        transition: color 0.15s, background 0.15s;
+      }
+      .pp-icon-btn:hover:not([disabled]) {
+        color: var(--primary-text-color);
+        background: var(--secondary-background-color, #fafafa);
+      }
+      .pp-icon-btn[disabled] {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      .pp-icon-btn ha-icon { --mdc-icon-size: 18px; }
 
       /* ----- Popovers (entity list, date picker) ----- */
       .pp-popover-anchor {
