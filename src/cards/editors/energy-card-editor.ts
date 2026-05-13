@@ -315,7 +315,7 @@ const DECIMALS_PREFIXED_HELP =
 const TREND_SOURCE_HELP =
   "Controls where trend data is fetched from. In most setups, keep Auto (recommended), which prefers statistics and falls back to history automatically.";
 const NODE_ACTIONS_ENABLED_HELP =
-  "When enabled, every main node and sub-block of the energy card reacts to its own tap/hold/double-tap. Long-press defaults to opening the node detail dialog.";
+  "When on, each node has its own tap/hold/double-tap, configured inside that node's own Interactions section. Tap defaults to the zoom view, long-press to the node detail dialog. The card-level Tap/Hold/Double-tap fields below are then no longer applied to node clicks.";
 const NODE_INTERACTION_HELP =
   "Choose what happens when you tap, long-press or double-tap this node. Long-press defaults to opening the PowerPilz node detail dialog with a history graph.";
 
