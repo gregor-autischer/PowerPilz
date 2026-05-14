@@ -548,11 +548,121 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
     `;
   }
 
+  /** Demo card for the dashboard card-picker preview (preview=true,
+   *  no entity yet). Renders the regular layout with hardcoded mock
+   *  blocks so users see what the card actually looks like. */
+  private _renderDemo(): TemplateResult {
+    const config = this._config!;
+    const { start, end } = this.resolvedTimeWindow();
+    const range = end - start;
+    const activeColor = this.resolvedActiveColor();
+    const activeAlpha = this.resolvedActiveColorAlpha(0.3);
+    const nowMin = this.nowMinutes();
+    const showNow = config.show_now_indicator !== false && nowMin >= start && nowMin <= end;
+    const showLabels = config.show_time_labels !== false;
+    const showDays = config.show_day_selector !== false;
+    const isVertical = config.card_layout === "vertical";
+
+    // Plausible demo: morning + evening heating window.
+    const demoBlocks = [
+      { startMin: 6 * 60, endMin: 8 * 60 + 30 },
+      { startMin: 17 * 60, endMin: 22 * 60 },
+    ];
+
+    const hourLabels: { hour: number; pct: number }[] = [];
+    if (showLabels) {
+      const firstHour = Math.ceil(start / 60);
+      const lastHour = Math.floor(end / 60);
+      const step = range > 720 ? 6 : range > 360 ? 3 : 2;
+      for (let h = firstHour; h <= lastHour; h += step) {
+        const min = h * 60;
+        if (min >= start && min <= end) {
+          hourLabels.push({ hour: h >= 24 ? 0 : h, pct: ((min - start) / range) * 100 });
+        }
+      }
+    }
+
+    const today = new Date().getDay();
+    const lang = haLang(this.hass);
+
+    return html`
+      <ha-card>
+        <div class="container ${isVertical ? "vertical" : "horizontal"}">
+          <div class="row row-header">
+            <div class="state-item">
+              <div class="icon-wrap">
+                <div class="icon-shape" style=${styleMap(this.iconStyle(config.icon_color))}>
+                  <ha-icon .icon=${config.icon ?? "mdi:clock-outline"}></ha-icon>
+                </div>
+              </div>
+              <div class="info">
+                <div class="primary">${config.name || tr(lang, "schedule.default_name")}</div>
+                <div class="secondary">${config.subtitle || "Auto"}</div>
+              </div>
+              <button type="button" class="mode-btn" disabled>
+                <ha-icon icon="mdi:clock-outline"></ha-icon>
+                <span class="mode-label">Auto</span>
+              </button>
+            </div>
+          </div>
+          ${showDays
+            ? html`
+                <div class="row row-days">
+                  <div class="day-selector">
+                    ${WEEKDAY_KEYS_BY_DAY_INDEX.map((_, idx) => html`
+                      <button type="button" class="day-btn ${idx === today ? "active today" : ""}" disabled>
+                        ${weekdayShort(lang, idx)}
+                      </button>
+                    `)}
+                  </div>
+                </div>
+              `
+            : nothing}
+          <div class="row row-timeline">
+            <div class="timeline-container">
+              ${showLabels
+                ? html`
+                    <div class="time-labels">
+                      ${hourLabels.map(
+                        (l) => html`<span class="time-label" style=${styleMap({ left: `${l.pct}%` })}>${String(l.hour).padStart(2, "0")}</span>`
+                      )}
+                    </div>
+                  `
+                : nothing}
+              <div class="timeline-track">
+                ${demoBlocks.map((b) => {
+                  const leftPct = ((b.startMin - start) / range) * 100;
+                  const widthPct = ((b.endMin - b.startMin) / range) * 100;
+                  return html`
+                    <div class="timeline-block" style=${styleMap({
+                      left: `${leftPct}%`,
+                      width: `${widthPct}%`,
+                      "background-color": activeAlpha
+                    })}></div>
+                  `;
+                })}
+                ${showNow
+                  ? html`
+                      <div class="now-indicator" style=${styleMap({
+                        left: `${((nowMin - start) / range) * 100}%`,
+                        "background-color": activeColor
+                      })}></div>
+                    `
+                  : nothing}
+              </div>
+            </div>
+          </div>
+        </div>
+      </ha-card>
+    `;
+  }
+
   protected render(): TemplateResult {
     if (!this._config) return html`<ha-card>${tr(haLang(this.hass), "common.invalid_config")}</ha-card>`;
     if (!this.hass) return html``;
 
     if (!this._scheduleEntityId) {
+      if (this.preview) return this._renderDemo();
       const lang = haLang(this.hass);
       return html`
         <ha-card>
@@ -855,18 +965,12 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
   `;
 }
 
-export class PowerPilzScheduleCardV2 extends PowerPilzScheduleCard {}
-
 if (!customElements.get("power-pilz-schedule-card")) {
   customElements.define("power-pilz-schedule-card", PowerPilzScheduleCard);
-}
-if (!customElements.get("power-pilz-schedule-card-v2")) {
-  customElements.define("power-pilz-schedule-card-v2", PowerPilzScheduleCardV2);
 }
 
 declare global {
   interface HTMLElementTagNameMap {
     "power-pilz-schedule-card": PowerPilzScheduleCard;
-    "power-pilz-schedule-card-v2": PowerPilzScheduleCardV2;
   }
 }
