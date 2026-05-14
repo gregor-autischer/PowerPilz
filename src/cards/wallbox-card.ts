@@ -164,12 +164,19 @@ export class PowerPilzWallboxCard extends LitElement implements LovelaceCard {
     }
 
     const config = this._config;
-    const power = readNumber(this.hass, config.power_entity);
+    const realPower = readNumber(this.hass, config.power_entity);
+    // Mock 7.2 kW in card-picker preview when no real value resolves —
+    // so users see a charging-looking card instead of "-- kW".
+    const power = realPower !== null ? realPower : (this.preview ? 7.2 : null);
     const powerUnit = readUnit(this.hass, config.power_entity) ?? "kW";
-    const status = readState(this.hass, config.status_entity);
+    const realStatus = readState(this.hass, config.status_entity);
+    const status = realStatus || (this.preview ? "charging" : realStatus);
     const modeEntity = getEntity(this.hass, config.mode_entity);
-    const modeValue = modeEntity?.state ?? "";
-    const modeOptions = this.getModeOptions(modeEntity);
+    const modeValue = modeEntity?.state ?? (this.preview ? "Eco" : "");
+    const realModeOptions = this.getModeOptions(modeEntity);
+    const modeOptions = realModeOptions.length > 0
+      ? realModeOptions
+      : (this.preview ? ["Eco", "Fast", "Solar"] : realModeOptions);
     const isCharging = this.isCharging(status, power, config.command_entity);
     const command = this.resolveActionCommand(isCharging);
     const actionLabel = isCharging ? tr(lang, "wallbox.stop") : tr(lang, "wallbox.start");

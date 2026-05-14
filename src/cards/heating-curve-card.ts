@@ -464,11 +464,112 @@ export class PowerPilzHeatingCurveCard extends LitElement implements LovelaceCar
     `;
   }
 
+  /** Demo card for the dashboard card-picker preview (preview=true,
+   *  no entity yet). Renders a typical day-curve so users see what
+   *  the card actually does. */
+  private _renderDemo(): TemplateResult {
+    const config = this._config!;
+    const lang = haLang(this.hass);
+    const activeColor = this._resolvedActiveColor();
+    const showDays = config.show_day_selector !== false;
+    const showMode = config.show_mode_control !== false;
+    const today = new Date().getDay();
+
+    // Demo curve: night low → morning peak → noon dip → evening peak.
+    const demoPoints: CurvePoint[] = [
+      { x: 0, y: 17 },
+      { x: 6 * 60, y: 19 },
+      { x: 8 * 60, y: 21.5 },
+      { x: 12 * 60, y: 20 },
+      { x: 17 * 60, y: 21 },
+      { x: 22 * 60, y: 18.5 },
+      { x: 1440, y: 17 },
+    ];
+
+    const W = 1000;
+    const H = 80;
+    const vMin = 15;
+    const vMax = 23;
+    const range = vMax - vMin;
+    const toScreen = (p: CurvePoint) => ({
+      x: (p.x / 1440) * W,
+      y: (1 - (p.y - vMin) / range) * H,
+    });
+    const pathD = buildSmoothPath(demoPoints, toScreen);
+    const fillD = `${pathD} L ${W} ${H} L 0 ${H} Z`;
+    const nowMin = this._nowMin();
+    const showNow = config.show_now_indicator !== false;
+
+    return html`
+      <ha-card>
+        <div class="container">
+          <div class="row row-header">
+            <div class="state-item">
+              <div class="icon-wrap">
+                <div class="icon-shape" style=${styleMap(this.iconStyle(config.icon_color))}>
+                  <ha-icon .icon=${config.icon ?? "mdi:chart-bell-curve-cumulative"}></ha-icon>
+                </div>
+              </div>
+              <div class="info">
+                <div class="primary">${config.name || tr(lang, "heating_curve.default_name")}</div>
+                <div class="secondary">${config.subtitle || "21.0 °C · Auto"}</div>
+              </div>
+              ${showMode ? html`
+                <button type="button" class="mode-btn" disabled>
+                  <ha-icon icon="mdi:clock-outline"></ha-icon>
+                  <span class="mode-label">Auto</span>
+                </button>
+              ` : nothing}
+            </div>
+          </div>
+          ${showDays ? html`
+            <div class="row row-days">
+              <div class="day-selector">
+                ${[0, 1, 2, 3, 4, 5, 6].map((idx) => html`
+                  <button type="button" class="day-btn ${idx === today ? "active today" : ""}" disabled>
+                    ${weekdayShort(lang, idx)}
+                  </button>
+                `)}
+              </div>
+            </div>
+          ` : nothing}
+          <div class="row row-curve">
+            <div class="curve-container">
+              <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="curve-svg">
+                <path d=${fillD} fill=${activeColor} fill-opacity="0.18" />
+                <path d=${pathD}
+                  fill="none"
+                  stroke=${activeColor}
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  vector-effect="non-scaling-stroke"
+                />
+                ${showNow ? svg`
+                  <line
+                    x1=${(nowMin / 1440) * W}
+                    x2=${(nowMin / 1440) * W}
+                    y1="0" y2=${H}
+                    stroke=${activeColor}
+                    stroke-width="1.5"
+                    stroke-dasharray="3 3"
+                    vector-effect="non-scaling-stroke"
+                  />
+                ` : nothing}
+              </svg>
+            </div>
+          </div>
+        </div>
+      </ha-card>
+    `;
+  }
+
   protected render(): TemplateResult {
     if (!this._config) return html`<ha-card>${tr(haLang(this.hass), "common.invalid_config")}</ha-card>`;
     if (!this.hass) return html``;
 
     if (!this._entityId) {
+      if (this.preview) return this._renderDemo();
       const lang = haLang(this.hass);
       return html`
         <ha-card>

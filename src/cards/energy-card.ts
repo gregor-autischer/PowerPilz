@@ -510,14 +510,34 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     const gridSecondarySubBlocks = gridSecondaryVisible ? this.collectSubBlocks("grid_secondary", config) : [];
     const homeSubBlocks = homeVisible ? this.collectSubBlocks("home", config) : [];
 
-    const homeEntityValue = readNumber(this.hass, config.home_entity);
-    const solarEntityValue = solarVisible ? readNumber(this.hass, config.solar_entity) : null;
-    const grid = gridVisible ? readNumber(this.hass, config.grid_entity) : null;
-    const gridSecondary = gridSecondaryVisible ? readNumber(this.hass, config.grid_secondary_entity) : null;
-    const battery = batteryVisible ? readNumber(this.hass, config.battery_entity) : null;
-    const batteryPercentage = readNumber(this.hass, config.battery_percentage_entity);
-    const batterySecondary = batterySecondaryVisible ? readNumber(this.hass, config.battery_secondary_entity) : null;
-    const batterySecondaryPercentage = readNumber(this.hass, config.battery_secondary_percentage_entity);
+    // In card-picker preview, substitute plausible mock numbers when
+    // the entity isn't resolvable. Keeps the preview readable on an HA
+    // install that doesn't have power sensors yet. Real dashboards
+    // (preview=false) keep the existing null → "--" behaviour.
+    const _mock = (real: number | null, mock: number): number | null =>
+      real !== null ? real : (this.preview ? mock : null);
+
+    const homeEntityValue = _mock(readNumber(this.hass, config.home_entity), 3.2);
+    const solarEntityValue = solarVisible
+      ? _mock(readNumber(this.hass, config.solar_entity), 4.1)
+      : null;
+    const grid = gridVisible
+      ? _mock(readNumber(this.hass, config.grid_entity), -1.3)
+      : null;
+    const gridSecondary = gridSecondaryVisible
+      ? _mock(readNumber(this.hass, config.grid_secondary_entity), 0.2)
+      : null;
+    const battery = batteryVisible
+      ? _mock(readNumber(this.hass, config.battery_entity), 1.5)
+      : null;
+    const batteryPercentage = _mock(readNumber(this.hass, config.battery_percentage_entity), 72);
+    const batterySecondary = batterySecondaryVisible
+      ? _mock(readNumber(this.hass, config.battery_secondary_entity), 0.0)
+      : null;
+    const batterySecondaryPercentage = _mock(
+      readNumber(this.hass, config.battery_secondary_percentage_entity),
+      85,
+    );
 
     const fallbackUnit = config.unit ?? "kW";
     const solarEntityUnit = readUnit(this.hass, config.solar_entity) ?? fallbackUnit;
