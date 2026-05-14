@@ -4,6 +4,7 @@ import "./cards/graph-stack-card";
 import "./cards/wallbox-card";
 import "./cards/switch-card";
 import "./cards/schedule-card";
+import "./cards/event-schedule-card";
 import "./cards/timer-card";
 import "./cards/heating-curve-card";
 import { POWER_PILZ_VERSION } from "./version";
@@ -56,6 +57,12 @@ const cards = [
     type: "power-pilz-schedule-card",
     name: "PowerPilz Schedule Card",
     description: "Visual time schedule card with 24h timeline, day selector and override controls.",
+    preview: true
+  },
+  {
+    type: "power-pilz-event-schedule-card",
+    name: "PowerPilz Event Schedule Card",
+    description: "Weekly point-in-time triggers with pin-marker timeline, trigger-now button and cool-down state.",
     preview: true
   },
   {
