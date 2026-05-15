@@ -78,12 +78,11 @@ interface PowerPilzScheduleCardConfig extends LovelaceCardConfig {
   show_now_indicator?: boolean;
   show_time_labels?: boolean;
   tap_action?: ActionConfig;
+  /** Default behaviour (when undefined): opens the inline schedule
+   *  editor. Set `hold_action.action` to `"none"` to disable, or to any
+   *  HA `ui_action` (`more-info`, `navigate`, ...) for a custom action. */
   hold_action?: ActionConfig;
   double_tap_action?: ActionConfig;
-  /** When true (default) a long-press on the card opens the PowerPilz
-   *  schedule edit dialog — unless `hold_action` is explicitly set to
-   *  something else. */
-  long_press_opens_editor?: boolean;
 }
 
 export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
@@ -211,8 +210,7 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
     this._actionCleanup?.destroy();
     const explicitHold = !!this._config?.hold_action?.action
       && this._config.hold_action.action !== "none";
-    const defaultHold = this._config?.long_press_opens_editor !== false
-      && !this._config?.hold_action?.action;
+    const defaultHold = !this._config?.hold_action?.action;
     const hasHold = explicitHold || defaultHold;
     const hasDoubleTap = !!this._config?.double_tap_action
       && this._config.double_tap_action.action !== undefined
@@ -244,9 +242,7 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
 
     // Default for hold: open the edit dialog.
     if (kind === "hold" && (!actionConfig || !actionConfig.action)) {
-      if (this._config.long_press_opens_editor !== false) {
-        actionConfig = { action: ACTION_SCHEDULE_EDIT };
-      }
+      actionConfig = { action: ACTION_SCHEDULE_EDIT };
     }
 
     if (!actionConfig || !actionConfig.action || actionConfig.action === "none") {
@@ -681,7 +677,9 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
     const subtitle = config.subtitle || this.modeLabel(mode);
     const showDays = config.show_day_selector !== false;
     const showMode = config.show_mode_control !== false && Boolean(this._modeEntityId);
+    const showTimeLabels = config.show_time_labels !== false;
     const isVertical = config.card_layout === "vertical";
+    const compactInline = !isVertical && !showDays && !showMode && !showTimeLabels;
 
     const isDeviceOn = this.isDeviceOn();
     const iconStyle = isDeviceOn
@@ -705,7 +703,7 @@ export class PowerPilzScheduleCard extends LitElement implements LovelaceCard {
 
     return html`
       <ha-card>
-        <div class="container ${isVertical ? "vertical" : "horizontal"}">
+        <div class="container ${isVertical ? "vertical" : "horizontal"}${compactInline ? " compact-inline" : ""}">
           <div class="row row-header">${headerContent}</div>
           ${showDays
             ? html`<div class="row row-days">${this.renderDaySelector()}</div>`

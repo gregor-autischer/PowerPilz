@@ -26,7 +26,7 @@ export const scheduleSharedStyles: CSSResultGroup = css`
 
   :host {
     display: block;
-    container-type: inline-size;
+    container-type: size;
     height: 100%;
     box-sizing: border-box;
     --spacing: var(--mush-spacing, 10px);
@@ -79,6 +79,33 @@ export const scheduleSharedStyles: CSSResultGroup = css`
   .container > .row-timeline {
     padding-left: var(--control-spacing);
     padding-right: var(--control-spacing);
+  }
+
+  /* Compact-inline: when day-picker, mode button, trigger button and
+   * time labels are all off AND the card is rendered at single-row
+   * height, the timeline collapses into the header row so the whole
+   * card fits into a single mushroom-height line. The actual layout
+   * switch is gated by a height container query so a multi-row card
+   * keeps the stacked layout even with the class set. */
+  @container (max-height: 80px) {
+    .container.compact-inline {
+      flex-direction: row;
+      align-items: center;
+    }
+    .container.compact-inline > .row { flex: 0 0 auto; }
+    .container.compact-inline > .row-header {
+      flex: 0 1 auto;
+      min-width: 0;
+    }
+    .container.compact-inline > .row-header .info { flex: 0 1 auto; min-width: 0; }
+    .container.compact-inline > .row-header .state-item { padding-right: 0; }
+    .container.compact-inline > .row-timeline,
+    .container.compact-inline > .row-curve {
+      flex: 1 1 auto;
+      max-width: 60%;
+      min-width: 0;
+      padding-left: var(--spacing);
+    }
   }
 
   .state-item {
