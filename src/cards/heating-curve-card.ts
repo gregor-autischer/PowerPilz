@@ -238,10 +238,6 @@ export class PowerPilzHeatingCurveCard extends LitElement implements LovelaceCar
     return {};
   }
 
-  private _sameForAll(): boolean {
-    return this._entityAttrs()?.same_for_all_days === true;
-  }
-
   private _valueRange(): { min: number; max: number } {
     const attrs = this._entityAttrs();
     const min = Number(attrs?.value_min);
@@ -258,7 +254,6 @@ export class PowerPilzHeatingCurveCard extends LitElement implements LovelaceCar
   }
 
   private _dayKey(idx: number): string {
-    if (this._sameForAll()) return "monday";
     return WEEKDAY_KEYS_BY_DAY_INDEX[idx] ?? "monday";
   }
 
@@ -365,10 +360,10 @@ export class PowerPilzHeatingCurveCard extends LitElement implements LovelaceCar
   private renderCurvePreview(): TemplateResult {
     const config = this._config!;
     void this._tick;
-    const rawPoints = this._pointsForDay(this._sameForAll() ? 1 : this._selectedDay);
+    const rawPoints = this._pointsForDay(this._selectedDay);
     const { min: vMin, max: vMax } = this._valueRange();
     const activeColor = this._resolvedActiveColor();
-    const isToday = this._sameForAll() || this._selectedDay === new Date().getDay();
+    const isToday = this._selectedDay === new Date().getDay();
     const showNow = config.show_now_indicator !== false && isToday;
     const nowMin = this._nowMin();
 
@@ -444,8 +439,7 @@ export class PowerPilzHeatingCurveCard extends LitElement implements LovelaceCar
     `;
   }
 
-  private renderDaySelector(): TemplateResult | typeof nothing {
-    if (this._sameForAll()) return nothing;
+  private renderDaySelector(): TemplateResult {
     const today = new Date().getDay();
     return html`
       <div class="day-selector">
