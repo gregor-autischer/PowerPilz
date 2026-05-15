@@ -2600,7 +2600,10 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
 
     if (!this.hasConfiguredAction(this._config) || this.isEditorPreview()) return;
 
-    const hasHold = Boolean(this._config.hold_action?.action && this._config.hold_action.action !== "none");
+    const explicitHold = Boolean(
+      this._config.hold_action?.action && this._config.hold_action.action !== "none"
+    );
+    const hasHold = explicitHold || this.holdDefaultEnabled();
     const hasDoubleTap = Boolean(this._config.double_tap_action?.action && this._config.double_tap_action.action !== "none");
 
     this._actionHandler = bindActionHandler(
@@ -2753,6 +2756,16 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
       hass: this.hass,
       config: this._config,
       focusedNodeKey: nodeKey
+    });
+  }
+
+  private openOverviewDialog(): void {
+    if (!this._config || !this.hass) return;
+    void openEnergyNodeDialog({
+      hass: this.hass,
+      config: this._config,
+      focusedNodeKey: "",
+      overview: true
     });
   }
 
@@ -3500,9 +3513,20 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     if (config.details_navigation_path) {
       return true;
     }
-    return [config.tap_action, config.hold_action, config.double_tap_action].some(
+    const explicit = [config.tap_action, config.hold_action, config.double_tap_action].some(
       (action) => action && action.action && action.action !== "none"
     );
+    if (explicit) return true;
+    // Default hold opens the overview dialog unless the user explicitly
+    // disabled hold with `hold_action: { action: "none" }`.
+    const holdExplicit = config.hold_action?.action;
+    return holdExplicit !== "none";
+  }
+
+  private holdDefaultEnabled(): boolean {
+    if (!this._config) return false;
+    const explicit = this._config.hold_action?.action;
+    return !explicit; // undefined → default fires; "none" or any value → no default
   }
 
   private fireAction(action: "tap" | "hold" | "double_tap"): void {
@@ -3518,6 +3542,14 @@ export class PowerPilzEnergyCard extends LitElement implements LovelaceCard {
     if (!actionConfig && action === "tap" && this._config.details_navigation_path) {
       actionConfig = { action: "navigate", navigation_path: this._config.details_navigation_path };
       configForEvent = { ...this._config, tap_action: actionConfig };
+    }
+
+    // Default hold → open the overview dialog with all main nodes
+    // pre-selected over the last 24h. Skipped if the user set
+    // `hold_action: { action: "none" }`.
+    if (action === "hold" && !actionConfig && this.holdDefaultEnabled()) {
+      this.openOverviewDialog();
+      return;
     }
 
     if (!actionConfig || !actionConfig.action || actionConfig.action === "none") {

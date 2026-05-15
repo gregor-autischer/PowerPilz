@@ -46,6 +46,7 @@ interface RangePreset {
 }
 
 const RANGE_PRESETS: RangePreset[] = [
+  { id: "24h", label: "24 h", hours: 24 },
   { id: "48h", label: "48 h", hours: 48 },
   { id: "7d", label: "7 d", hours: 24 * 7 },
   { id: "30d", label: "30 d", hours: 24 * 30 },
@@ -61,8 +62,12 @@ export interface EnergyNodeDialogOptions {
   hass: HomeAssistant;
   config: LovelaceCardConfig;
   /** The node the user clicked — defaults the focused series and the
-   *  dialog title. */
+   *  dialog title. Ignored when `overview` is true. */
   focusedNodeKey: string;
+  /** When true, the dialog opens in multi-series overview mode: every
+   *  main node (no sub-blocks) pre-selected, 24h range, no implicit
+   *  focus on a single series. Used by the card's long-press default. */
+  overview?: boolean;
 }
 
 /** Public API used by the energy card to open the dialog. */
@@ -71,6 +76,7 @@ export const openEnergyNodeDialog = (opts: EnergyNodeDialogOptions): void => {
   dlg.hass = opts.hass;
   dlg.energyConfig = opts.config;
   dlg.focusedNodeKey = opts.focusedNodeKey;
+  dlg.overview = opts.overview === true;
   document.body.appendChild(dlg);
 };
 
@@ -83,6 +89,9 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
 
   @property({ type: String })
   public focusedNodeKey = "";
+
+  @property({ type: Boolean })
+  public overview = false;
 
   @state() private _allSeries: NodeSeriesDescriptor[] = [];
   @state() private _selectedIds: Set<string> = new Set();
@@ -122,6 +131,10 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
       const start = new Date(now.getTime() - 7 * 24 * 3600 * 1000);
       this._customEndIso = _toLocalIsoMinute(now);
       this._customStartIso = _toLocalIsoMinute(start);
+    }
+    if (this.overview) {
+      this._mode = "multi";
+      this._presetId = "24h";
     }
     this._selectedIds = new Set(this._defaultSelection().map((s) => s.id));
     this.dialogTitle = this._titleForFocusedNode();
@@ -180,6 +193,9 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
   }
 
   private _titleForFocusedNode(): string {
+    if (this.overview) {
+      return tr(haLang(this.hass), "energy.overview_title");
+    }
     const focused = this._resolveFocusedSeries();
     if (focused) return focused.label;
     // Fallback for a node key that has no entity (rare).
@@ -192,6 +208,11 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
   }
 
   private _defaultSelection(): NodeSeriesDescriptor[] {
+    if (this.overview) {
+      // Main nodes only — sub-blocks stay deselectable by the user but
+      // don't clutter the initial overview chart.
+      return this._allSeries.filter((s) => !s.isSubBlock);
+    }
     const focused = this._resolveFocusedSeries();
     return focused ? [focused] : this._allSeries.slice(0, 1);
   }
