@@ -46,11 +46,13 @@ interface PowerPilzHeatingCurveCardConfig extends LovelaceCardConfig {
   show_day_selector?: boolean;
   show_mode_control?: boolean;
   show_now_indicator?: boolean;
-  show_value_labels?: boolean;
+  show_time_labels?: boolean;
   tap_action?: ActionConfig;
+  /** Default behaviour (when undefined): opens the inline curve editor.
+   *  Set `hold_action.action` to `"none"` to disable, or to any HA
+   *  `ui_action` for a custom action. */
   hold_action?: ActionConfig;
   double_tap_action?: ActionConfig;
-  long_press_opens_editor?: boolean;
 }
 
 export class PowerPilzHeatingCurveCard extends LitElement implements LovelaceCard {
@@ -95,7 +97,7 @@ export class PowerPilzHeatingCurveCard extends LitElement implements LovelaceCar
       show_day_selector: config.show_day_selector ?? true,
       show_mode_control: config.show_mode_control ?? true,
       show_now_indicator: config.show_now_indicator ?? true,
-      show_value_labels: config.show_value_labels ?? true
+      show_time_labels: config.show_time_labels ?? true
     };
   }
 
@@ -138,8 +140,7 @@ export class PowerPilzHeatingCurveCard extends LitElement implements LovelaceCar
     this._actionCleanup?.destroy();
     const explicitHold = !!this._config?.hold_action?.action
       && this._config.hold_action.action !== "none";
-    const defaultHold = this._config?.long_press_opens_editor !== false
-      && !this._config?.hold_action?.action;
+    const defaultHold = !this._config?.hold_action?.action;
     const hasHold = explicitHold || defaultHold;
     const hasDoubleTap = !!this._config?.double_tap_action
       && this._config.double_tap_action.action !== undefined
@@ -168,9 +169,7 @@ export class PowerPilzHeatingCurveCard extends LitElement implements LovelaceCar
     }
 
     if (kind === "hold" && (!actionConfig || !actionConfig.action)) {
-      if (this._config.long_press_opens_editor !== false) {
-        actionConfig = { action: ACTION_CURVE_EDIT };
-      }
+      actionConfig = { action: ACTION_CURVE_EDIT };
     }
 
     if (!actionConfig || !actionConfig.action || actionConfig.action === "none") return;
@@ -397,8 +396,20 @@ export class PowerPilzHeatingCurveCard extends LitElement implements LovelaceCar
       ? `${pathD} L ${W} ${H} L 0 ${H} Z`
       : "";
 
+    const showLabels = config.show_time_labels !== false;
+    const hourLabels = showLabels ? _hourLabels24h() : [];
+
     return html`
       <div class="curve-container">
+        ${showLabels
+          ? html`
+              <div class="time-labels">
+                ${hourLabels.map(
+                  (l) => html`<span class="time-label" style=${styleMap({ left: `${l.pct}%` })}>${String(l.hour).padStart(2, "0")}</span>`
+                )}
+              </div>
+            `
+          : nothing}
         <svg
           viewBox="0 0 ${W} ${H}"
           preserveAspectRatio="none"
@@ -535,6 +546,15 @@ export class PowerPilzHeatingCurveCard extends LitElement implements LovelaceCar
           ` : nothing}
           <div class="row row-curve">
             <div class="curve-container">
+              ${config.show_time_labels !== false
+                ? html`
+                    <div class="time-labels">
+                      ${_hourLabels24h().map(
+                        (l) => html`<span class="time-label" style=${styleMap({ left: `${l.pct}%` })}>${String(l.hour).padStart(2, "0")}</span>`
+                      )}
+                    </div>
+                  `
+                : nothing}
               <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="curve-svg">
                 <path d=${fillD} fill=${activeColor} fill-opacity="0.18" />
                 <path d=${pathD}
@@ -592,6 +612,8 @@ export class PowerPilzHeatingCurveCard extends LitElement implements LovelaceCar
         : this._modeLabel(mode));
     const showDays = config.show_day_selector !== false;
     const showMode = config.show_mode_control !== false;
+    const showTimeLabels = config.show_time_labels !== false;
+    const compactInline = !showDays && !showMode && !showTimeLabels;
 
     const isOn = this._isDeviceOn();
     const iconStyle = isOn
@@ -600,7 +622,7 @@ export class PowerPilzHeatingCurveCard extends LitElement implements LovelaceCar
 
     return html`
       <ha-card>
-        <div class="container">
+        <div class="container${compactInline ? " compact-inline" : ""}">
           <div class="row row-header">
             <div class="state-item">
               <div class="icon-wrap">
@@ -635,7 +657,7 @@ export class PowerPilzHeatingCurveCard extends LitElement implements LovelaceCar
 
     :host {
       display: block;
-      container-type: inline-size;
+      container-type: size;
       height: 100%;
       box-sizing: border-box;
       --spacing: var(--mush-spacing, 10px);
@@ -729,7 +751,48 @@ export class PowerPilzHeatingCurveCard extends LitElement implements LovelaceCar
       color: var(--primary-text-color);
     }
 
+    /* Compact-inline: when day-picker, mode button and time labels are
+     * all off AND the card is rendered at single-row height, the curve
+     * collapses into the header row so the whole card fits into a
+     * single mushroom-height line. Gated by a height container query so
+     * a multi-row card keeps the stacked layout even with the class set. */
+    @container (max-height: 80px) {
+      .container.compact-inline {
+        flex-direction: row;
+        align-items: center;
+      }
+      .container.compact-inline > .row { flex: 0 0 auto; }
+      .container.compact-inline > .row-header {
+        flex: 0 1 auto;
+        min-width: 0;
+      }
+      .container.compact-inline > .row-header .info { flex: 0 1 auto; min-width: 0; }
+      .container.compact-inline > .row-header .state-item { padding-right: 0; }
+      .container.compact-inline > .row-curve {
+        flex: 1 1 auto;
+        max-width: 60%;
+        min-width: 0;
+        padding-left: var(--spacing);
+        padding-right: var(--spacing);
+      }
+    }
+
     .curve-container { position: relative; }
+    .time-labels {
+      position: absolute;
+      left: 0; right: 0;
+      bottom: calc(100% + 2px);
+      height: 14px;
+      font-size: 10px;
+      color: var(--secondary-text-color);
+      user-select: none;
+      pointer-events: none;
+    }
+    .time-label {
+      position: absolute;
+      transform: translateX(-50%);
+      white-space: nowrap;
+    }
     .curve-svg {
       width: 100%;
       height: var(--icon-size);
@@ -776,3 +839,12 @@ declare global {
 
 // Suppress unused warning — sampleSmoothCurve is exported for the dialog.
 void sampleSmoothCurve;
+
+function _hourLabels24h(): { hour: number; pct: number }[] {
+  // Matches the schedule-card hour-marker algorithm: every 6h across
+  // 0–24, with 24 displayed as 00 for visual consistency.
+  return [0, 6, 12, 18, 24].map((h) => ({
+    hour: h >= 24 ? 0 : h,
+    pct: (h / 24) * 100,
+  }));
+}
