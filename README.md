@@ -79,6 +79,8 @@ All PowerPilz cards can be configured with the Home Assistant dashboard UI edito
 - 🔌 [Wallbox card](docs/cards/wallbox.md)
 - 🎚️ [Switch card](docs/cards/switch.md)
 - 📅 [Schedule card](docs/cards/schedule.md)
+- 🔔 [Event Schedule card](docs/cards/event-schedule.md)
+- 🌡 [Heating Curve card](docs/cards/heating-curve.md)
 - ⏱ [Timer card](docs/cards/timer.md)
 - 📈 [Graph card](docs/cards/graph.md)
 - 🧱 [Graph stack card](docs/cards/graph-stack.md)

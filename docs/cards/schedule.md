@@ -73,8 +73,8 @@ The [PowerPilz Companion](https://github.com/gregor-autischer/PowerPilz-Companio
 
 - A target device (switch / light / input_boolean / fan / climate)
 - Three renameable mode options with custom icons: Off / On / Auto
-- A weekly schedule — stored inside the integration, editable via this card
-- A companion `binary_sensor.<name>_active` that flips on/off with the schedule — use it as an automation state trigger
+- A weekly schedule, stored inside the integration, editable via this card
+- A `schedule_active` attribute on the select entity that flips on/off at each block boundary, ready as an automation state trigger
 
 The card reads the following attributes from the helper:
 
@@ -89,22 +89,22 @@ Saves from the inline editor or a timeline-tap go through the `powerpilz_compani
 
 ### Using the schedule in automations
 
-You don't need a separate `schedule.*` helper. Use the companion binary sensor:
+You don't need a separate `schedule.*` helper or `binary_sensor.*`. Trigger directly off the `schedule_active` attribute on the helper's `select`:
 
 ```yaml
 # Trigger when the schedule becomes active
 trigger:
   platform: state
-  entity_id: binary_sensor.living_room_heating_active
-  to: "on"
+  entity_id: select.living_room_heating
+  attribute: schedule_active
+  to: true
 
 # Or condition
 condition:
-  condition: state
-  entity_id: binary_sensor.living_room_heating_active
-  state: "on"
+  condition: template
+  value_template: "{{ state_attr('select.living_room_heating', 'schedule_active') }}"
 
-# Or template — rich attributes give you the next transition time
+# Or template, rich attributes give you the next transition time
 template: >
   Next schedule event: {{ state_attr('select.living_room_heating', 'next_event') }}
 ```
