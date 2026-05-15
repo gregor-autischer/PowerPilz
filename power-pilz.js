@@ -2993,7 +2993,7 @@ const fn = "power-pilz-energy-node-dialog", Yt = [
       const e = /* @__PURE__ */ new Date(), i = new Date(e.getTime() - 168 * 3600 * 1e3);
       this._customEndIso = ur(e), this._customStartIso = ur(i);
     }
-    this.overview && (this._mode = "multi", this._presetId = "24h"), this._selectedIds = new Set(this._defaultSelection().map((e) => e.id)), this.dialogTitle = this._titleForFocusedNode(), document.addEventListener("mousedown", this._onDocumentMouseDown, !0), this._fetchHistory();
+    this.overview && (this._mode = "overlay", this._presetId = "24h"), this._selectedIds = new Set(this._defaultSelection().map((e) => e.id)), this.dialogTitle = this._titleForFocusedNode(), document.addEventListener("mousedown", this._onDocumentMouseDown, !0), this._fetchHistory();
   }
   disconnectedCallback() {
     var e;

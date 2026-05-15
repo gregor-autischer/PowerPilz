@@ -133,7 +133,7 @@ class PowerPilzEnergyNodeDialog extends PowerPilzDialogBase {
       this._customStartIso = _toLocalIsoMinute(start);
     }
     if (this.overview) {
-      this._mode = "multi";
+      this._mode = "overlay";
       this._presetId = "24h";
     }
     this._selectedIds = new Set(this._defaultSelection().map((s) => s.id));
