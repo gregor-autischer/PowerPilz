@@ -45,7 +45,7 @@ const Ja = (t) => new ds(typeof t == "string" ? t : t + "", void 0, Gn), Z = (t,
  * Copyright 2017 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
  */
-const { is: el, defineProperty: tl, getOwnPropertyDescriptor: il, getOwnPropertyNames: nl, getOwnPropertySymbols: ol, getPrototypeOf: rl } = Object, Ue = globalThis, Fo = Ue.trustedTypes, sl = Fo ? Fo.emptyScript : "", Vi = Ue.reactiveElementPolyfillSupport, Pt = (t, e) => t, di = { toAttribute(t, e) {
+const { is: el, defineProperty: tl, getOwnPropertyDescriptor: il, getOwnPropertyNames: nl, getOwnPropertySymbols: ol, getPrototypeOf: rl } = Object, Ue = globalThis, Bo = Ue.trustedTypes, sl = Bo ? Bo.emptyScript : "", Vi = Ue.reactiveElementPolyfillSupport, Pt = (t, e) => t, di = { toAttribute(t, e) {
   switch (e) {
     case Boolean:
       t = t ? sl : null;
@@ -73,7 +73,7 @@ const { is: el, defineProperty: tl, getOwnPropertyDescriptor: il, getOwnProperty
       }
   }
   return i;
-} }, Yn = (t, e) => !el(t, e), Bo = { attribute: !0, type: String, converter: di, reflect: !1, useDefault: !1, hasChanged: Yn };
+} }, Yn = (t, e) => !el(t, e), Fo = { attribute: !0, type: String, converter: di, reflect: !1, useDefault: !1, hasChanged: Yn };
 Symbol.metadata ?? (Symbol.metadata = Symbol("metadata")), Ue.litPropertyMetadata ?? (Ue.litPropertyMetadata = /* @__PURE__ */ new WeakMap());
 let _t = class extends HTMLElement {
   static addInitializer(e) {
@@ -82,7 +82,7 @@ let _t = class extends HTMLElement {
   static get observedAttributes() {
     return this.finalize(), this._$Eh && [...this._$Eh.keys()];
   }
-  static createProperty(e, i = Bo) {
+  static createProperty(e, i = Fo) {
     if (i.state && (i.attribute = !1), this._$Ei(), this.prototype.hasOwnProperty(e) && ((i = Object.create(i)).wrapped = !0), this.elementProperties.set(e, i), !i.noAccessor) {
       const n = Symbol(), o = this.getPropertyDescriptor(e, n, i);
       o !== void 0 && tl(this.prototype, e, o);
@@ -100,7 +100,7 @@ let _t = class extends HTMLElement {
     }, configurable: !0, enumerable: !0 };
   }
   static getPropertyOptions(e) {
-    return this.elementProperties.get(e) ?? Bo;
+    return this.elementProperties.get(e) ?? Fo;
   }
   static _$Ei() {
     if (this.hasOwnProperty(Pt("elementProperties"))) return;
@@ -656,7 +656,7 @@ const fs = "important", wl = " !" + fs, z = vl(class extends bl {
 }), R = (t, e) => {
   if (e)
     return t.states[e];
-}, B = (t, e) => {
+}, F = (t, e) => {
   const i = R(t, e);
   if (!i)
     return null;
@@ -1317,7 +1317,7 @@ const fs = "important", wl = " !" + fs, z = vl(class extends bl {
 }, Hl = (t, e) => {
   const i = Math.max(0, Math.min(dn.length - 1, e)), n = dn[i] ?? "";
   return t === "energy" ? `${n}Wh` : `${n}W`;
-}, Fl = (t) => {
+}, Bl = (t) => {
   if (!Number.isFinite(t) || t <= 0)
     return 0;
   let e = 0, i = t;
@@ -1331,9 +1331,9 @@ const fs = "important", wl = " !" + fs, z = vl(class extends bl {
   const r = te(e);
   if (!n.enabled || !r)
     return `${t.toFixed(i)} ${e}`.trim();
-  const s = t < 0 ? "-" : "", a = Math.abs(t) * r.factor, l = Fl(a), c = Hl(r.family, l), h = a / Math.pow(1e3, l), d = l === 0 ? n.baseDecimals : n.prefixedDecimals;
+  const s = t < 0 ? "-" : "", a = Math.abs(t) * r.factor, l = Bl(a), c = Hl(r.family, l), h = a / Math.pow(1e3, l), d = l === 0 ? n.baseDecimals : n.prefixedDecimals;
   return `${s}${h.toFixed(d)} ${c}`.trim();
-}, Bl = (t) => {
+}, Fl = (t) => {
   const e = Object.keys(t), i = {};
   if (e.length === 0)
     return {
@@ -3803,59 +3803,59 @@ uo.styles = [
       }
     `
 ];
-let F = uo;
+let B = uo;
 K([
   I({ attribute: !1 })
-], F.prototype, "hass");
+], B.prototype, "hass");
 K([
   I({ attribute: !1 })
-], F.prototype, "energyConfig");
+], B.prototype, "energyConfig");
 K([
   I({ type: String })
-], F.prototype, "focusedNodeKey");
+], B.prototype, "focusedNodeKey");
 K([
   I({ type: Boolean })
-], F.prototype, "overview");
+], B.prototype, "overview");
 K([
   C()
-], F.prototype, "_allSeries");
+], B.prototype, "_allSeries");
 K([
   C()
-], F.prototype, "_selectedIds");
+], B.prototype, "_selectedIds");
 K([
   C()
-], F.prototype, "_mode");
+], B.prototype, "_mode");
 K([
   C()
-], F.prototype, "_presetId");
+], B.prototype, "_presetId");
 K([
   C()
-], F.prototype, "_useCustomRange");
+], B.prototype, "_useCustomRange");
 K([
   C()
-], F.prototype, "_customStartIso");
+], B.prototype, "_customStartIso");
 K([
   C()
-], F.prototype, "_customEndIso");
+], B.prototype, "_customEndIso");
 K([
   C()
-], F.prototype, "_historyByEntity");
+], B.prototype, "_historyByEntity");
 K([
   C()
-], F.prototype, "_loading");
+], B.prototype, "_loading");
 K([
   C()
-], F.prototype, "_loadError");
+], B.prototype, "_loadError");
 K([
   C()
-], F.prototype, "_hover");
+], B.prototype, "_hover");
 K([
   C()
-], F.prototype, "_openPopover");
+], B.prototype, "_openPopover");
 K([
   C()
-], F.prototype, "_focusedEntityIdOverride");
-customElements.get(fn) || customElements.define(fn, F);
+], B.prototype, "_focusedEntityIdOverride");
+customElements.get(fn) || customElements.define(fn, B);
 const ur = (t) => {
   const e = (a) => String(a).padStart(2, "0"), i = t.getFullYear(), n = e(t.getMonth() + 1), o = e(t.getDate()), r = e(t.getHours()), s = e(t.getMinutes());
   return `${i}-${n}-${o}T${r}:${s}`;
@@ -4227,7 +4227,7 @@ const Ji = (t) => {
    *  reflecting both charge direction and SOC level, and the low-alert
    *  color override when the configured threshold is reached. */
   _buildBatteryView(e, i, n) {
-    const o = e === "battery" ? "battery_percentage_entity" : "battery_secondary_percentage_entity", r = e === "battery" ? "battery_entity" : "battery_secondary_entity", s = `${e}_icon`, a = `${e}_icon_color`, l = `${e}_low_alert`, c = `${e}_low_threshold`, h = `${e}_low_alert_color`, d = Ji(i[o]), p = Ji(i[r]), _ = p ? W(this.hass, p) : void 0, m = typeof _ == "string" && _.trim() === "%", g = d ? B(this.hass, d) : null, y = p ? B(this.hass, p) : null, b = g !== null ? g : m ? y : null, v = b !== null ? `${Math.round(Math.max(0, Math.min(100, b)))}%` : "—", x = this._batteryIcon(
+    const o = e === "battery" ? "battery_percentage_entity" : "battery_secondary_percentage_entity", r = e === "battery" ? "battery_entity" : "battery_secondary_entity", s = `${e}_icon`, a = `${e}_icon_color`, l = `${e}_low_alert`, c = `${e}_low_threshold`, h = `${e}_low_alert_color`, d = Ji(i[o]), p = Ji(i[r]), _ = p ? W(this.hass, p) : void 0, m = typeof _ == "string" && _.trim() === "%", g = d ? F(this.hass, d) : null, y = p ? F(this.hass, p) : null, b = g !== null ? g : m ? y : null, v = b !== null ? `${Math.round(Math.max(0, Math.min(100, b)))}%` : "—", x = this._batteryIcon(
       b,
       m ? null : y,
       i[s]
@@ -4260,7 +4260,7 @@ const Ji = (t) => {
     if (e.computed) {
       let i = 0, n = null;
       for (const s of e.computed.dependencies) {
-        const a = B(this.hass, s);
+        const a = F(this.hass, s);
         if (a === null) return null;
         const l = e.computed.unitsByEntityId[s] ?? "", c = e.computed.signsByEntityId[s] ?? 1, h = te(l), d = (h == null ? void 0 : h.factor) ?? 1;
         i += c * a * d, n ?? (n = (h == null ? void 0 : h.family) ?? null);
@@ -4268,7 +4268,7 @@ const Ji = (t) => {
       const o = te(e.computed.outputUnit), r = o && o.family === n ? o.factor : 1;
       return r > 0 ? i / r : i;
     }
-    return B(this.hass, e.entityId);
+    return F(this.hass, e.entityId);
   }
   _fallbackIcon(e) {
     return e.startsWith("solar") ? "mdi:weather-sunny" : e.startsWith("grid_secondary") || e.startsWith("grid") ? "mdi:transmission-tower" : e.startsWith("home") ? "mdi:home-lightning-bolt" : e.startsWith("battery_secondary") ? "mdi:battery-outline" : e.startsWith("battery") ? "mdi:battery" : "mdi:flash";
@@ -4471,7 +4471,7 @@ customElements.get(yn) || customElements.define(yn, _e);
 const qt = (t) => String(t).padStart(2, "0"), Ac = (t) => {
   const e = new Date(t);
   return `${qt(e.getDate())}.${qt(e.getMonth() + 1)}. ${qt(e.getHours())}:${qt(e.getMinutes())}`;
-}, Te = "0.7.0";
+}, Te = "0.7.1";
 var Pc = Object.defineProperty, Ic = Object.getOwnPropertyDescriptor, Qn = (t, e, i, n) => {
   for (var o = n > 1 ? void 0 : n ? Ic(e, i) : e, r = t.length - 1, s; r >= 0; r--)
     (s = t[r]) && (o = (n ? s(e, i, o) : s(o)) || o);
@@ -4597,10 +4597,10 @@ const Dc = 4, Oc = 8, _r = 2, Rc = /* @__PURE__ */ new Set(["solar", "home", "gr
       { label: "History (raw)", value: "history" }
     ]
   }
-}, Fc = (t) => {
+}, Bc = (t) => {
   const e = ie(t, "hybrid");
   return e === "hybrid" ? "auto" : e;
-}, Bc = (t) => t === "auto" || t === "history" || t === "statistics" || t === "hybrid" ? t : "auto", gn = "When enabled, the solar main node shows the sum of enabled solar sub-node entities instead of the solar entity. Solar sub-nodes with State mode enabled are excluded from this sum.", vn = "When enabled, the home main node is calculated as solar + grid + grid 2 - battery - battery 2 using compatible unit conversion.", zt = "When enabled, negative grid values (energy exported to the grid) are highlighted in the trend with the export color.", Mt = "When enabled, the grid icon switches to the export icon color while the grid value is negative.", bn = "When enabled, the main grid node is shown. When disabled, the grid node is hidden.", wn = "When enabled, the second grid node is shown. When disabled, the second grid node is hidden.", xn = "When enabled, the main solar node is shown. When disabled, the solar node is hidden.", Sn = "Flow direction: + value animates from Solar to Center. 0 or - value shows no solar flow.", $n = "When enabled, the main home node is shown. When disabled, the home node is hidden.", En = "Flow direction: + value animates from Center to Home. 0 or - value shows no home flow.", kn = "When enabled, the main battery node is shown. When disabled, the battery node is hidden.", Cn = "Flow direction: + value animates from Center to Battery (charging). - value animates Battery to Center (discharging).", Tn = "When enabled, the second battery node is shown. When disabled, the second battery node is hidden.", zn = "Flow direction: + value animates from Center to Battery 2 (charging). - value animates Battery 2 to Center (discharging).", At = "Color used for battery low-threshold alert styling (icon and low trend section).", Qt = "Reverse the animated arrow direction (charge ↔ discharge). Use this when your inverter reports the opposite sign for charge/discharge than what PowerPilz expects.", ei = "Flip the sign of the displayed kW/W value and the power trend graph. Independent from the flow toggle. Does not affect the SOC %.", Mn = "Flow direction: + value animates from Grid to Center (import). - value animates from Center to Grid (export).", An = "Flow direction: + value animates from Grid 2 to Center (import). - value animates from Center to Grid 2 (export).", Pn = "In default mode, this sub-node renders the entity as numeric value + unit.", In = "When enabled, this sub-node displays the entity state text (for example AUS/WW/HZ) instead of numeric value + unit.", Dn = "When enabled, this solar sub-node displays entity state text instead of numeric value + unit and is excluded from Solar auto-calc.", On = "Automatically formats values with metric prefixes (for example W/kW/MW and Wh/kWh/MWh).", Rn = "Optional unit override/fallback. Used when entities have no unit and as preferred output unit for auto-calculated values.", Nn = "Default decimal precision for displayed values and fallback when base/prefixed decimals are not set.", Ln = "Decimal precision for base units (W, Wh) when Auto unit scaling is enabled.", Hn = "Decimal precision for prefixed units (kW, MW, kWh, MWh) when Auto unit scaling is enabled.", Fn = "Controls where trend data is fetched from. In most setups, keep Auto (recommended), which prefers statistics and falls back to history automatically.", mr = "When on, each node has its own tap/hold/double-tap, configured inside that node's own Interactions section. Tap defaults to the zoom view, long-press to the node detail dialog. The card-level Tap/Hold/Double-tap fields below are then no longer applied to node clicks.", fr = "Choose what happens when you tap, long-press or double-tap this node. Long-press defaults to opening the PowerPilz node detail dialog with a history graph.", Qe = (t, e = "Interactions") => ({
+}, Fc = (t) => t === "auto" || t === "history" || t === "statistics" || t === "hybrid" ? t : "auto", gn = "When enabled, the solar main node shows the sum of enabled solar sub-node entities instead of the solar entity. Solar sub-nodes with State mode enabled are excluded from this sum.", vn = "When enabled, the home main node is calculated as solar + grid + grid 2 - battery - battery 2 using compatible unit conversion.", zt = "When enabled, negative grid values (energy exported to the grid) are highlighted in the trend with the export color.", Mt = "When enabled, the grid icon switches to the export icon color while the grid value is negative.", bn = "When enabled, the main grid node is shown. When disabled, the grid node is hidden.", wn = "When enabled, the second grid node is shown. When disabled, the second grid node is hidden.", xn = "When enabled, the main solar node is shown. When disabled, the solar node is hidden.", Sn = "Flow direction: + value animates from Solar to Center. 0 or - value shows no solar flow.", $n = "When enabled, the main home node is shown. When disabled, the home node is hidden.", En = "Flow direction: + value animates from Center to Home. 0 or - value shows no home flow.", kn = "When enabled, the main battery node is shown. When disabled, the battery node is hidden.", Cn = "Flow direction: + value animates from Center to Battery (charging). - value animates Battery to Center (discharging).", Tn = "When enabled, the second battery node is shown. When disabled, the second battery node is hidden.", zn = "Flow direction: + value animates from Center to Battery 2 (charging). - value animates Battery 2 to Center (discharging).", At = "Color used for battery low-threshold alert styling (icon and low trend section).", Qt = "Reverse the animated arrow direction (charge ↔ discharge). Use this when your inverter reports the opposite sign for charge/discharge than what PowerPilz expects.", ei = "Flip the sign of the displayed kW/W value and the power trend graph. Independent from the flow toggle. Does not affect the SOC %.", Mn = "Flow direction: + value animates from Grid to Center (import). - value animates from Center to Grid (export).", An = "Flow direction: + value animates from Grid 2 to Center (import). - value animates from Center to Grid 2 (export).", Pn = "In default mode, this sub-node renders the entity as numeric value + unit.", In = "When enabled, this sub-node displays the entity state text (for example AUS/WW/HZ) instead of numeric value + unit.", Dn = "When enabled, this solar sub-node displays entity state text instead of numeric value + unit and is excluded from Solar auto-calc.", On = "Automatically formats values with metric prefixes (for example W/kW/MW and Wh/kWh/MWh).", Rn = "Optional unit override/fallback. Used when entities have no unit and as preferred output unit for auto-calculated values.", Nn = "Default decimal precision for displayed values and fallback when base/prefixed decimals are not set.", Ln = "Decimal precision for base units (W, Wh) when Auto unit scaling is enabled.", Hn = "Decimal precision for prefixed units (kW, MW, kWh, MWh) when Auto unit scaling is enabled.", Bn = "Controls where trend data is fetched from. In most setups, keep Auto (recommended), which prefers statistics and falls back to history automatically.", mr = "When on, each node has its own tap/hold/double-tap, configured inside that node's own Interactions section. Tap defaults to the zoom view, long-press to the node detail dialog. The card-level Tap/Hold/Double-tap fields below are then no longer applied to node clicks.", fr = "Choose what happens when you tap, long-press or double-tap this node. Long-press defaults to opening the PowerPilz node detail dialog with a history graph.", Qe = (t, e = "Interactions") => ({
   type: "expandable",
   name: "",
   title: e,
@@ -4736,8 +4736,8 @@ const Dc = 4, Oc = 8, _r = 2, Rc = /* @__PURE__ */ new Set(["solar", "home", "gr
               {
                 name: "trend_data_source",
                 selector: Hc,
-                helper: Fn,
-                description: Fn
+                helper: Bn,
+                description: Bn
               }
             ]
           }
@@ -5552,7 +5552,7 @@ let _i = class extends L {
       if (e === "decimals_prefixed_unit")
         return Hn;
       if (e === "trend_data_source")
-        return Fn;
+        return Bn;
       if (e === "auto_scale_units")
         return On;
     }, this.valueChanged = (t) => {
@@ -5564,7 +5564,7 @@ let _i = class extends L {
         return;
       const n = {
         ...i,
-        trend_data_source: Bc(i.trend_data_source),
+        trend_data_source: Fc(i.trend_data_source),
         type: "custom:power-pilz-energy-card"
       };
       this.dispatchEvent(
@@ -5603,7 +5603,7 @@ let _i = class extends L {
       battery_secondary_invert_flow: t.battery_secondary_invert_flow ?? !1,
       battery_secondary_invert_value_sign: t.battery_secondary_invert_value_sign ?? !1,
       shared_trend_scale: t.shared_trend_scale ?? !1,
-      trend_data_source: Fc(t.trend_data_source),
+      trend_data_source: Bc(t.trend_data_source),
       debug_performance: t.debug_performance ?? !1,
       decimals: t.decimals ?? 1,
       auto_scale_units: t.auto_scale_units ?? !1,
@@ -5784,8 +5784,8 @@ let me = class extends L {
       return f`<ha-card>Invalid configuration</ha-card>`;
     if (!this.hass)
       return f``;
-    const t = this._config, e = t.decimals ?? xt, i = t.home_visible !== !1, n = t.solar_visible !== !1, o = t.grid_visible !== !1, r = o && t.grid_secondary_visible === !0, s = t.battery_visible !== !1, a = s && t.battery_secondary_visible === !0, l = this.normalizeBatteryDualAlignment(t.battery_dual_alignment), c = n ? this.collectSubBlocks("solar", t) : [], h = c.filter((N) => !N.stateMode), d = o ? this.collectSubBlocks("grid", t) : [], p = r ? this.collectSubBlocks("grid_secondary", t) : [], _ = i ? this.collectSubBlocks("home", t) : [], m = (N, qa) => N !== null ? N : this.preview ? qa : null, g = m(B(this.hass, t.home_entity), 3.2), y = n ? m(B(this.hass, t.solar_entity), 4.1) : null, b = o ? m(B(this.hass, t.grid_entity), -1.3) : null, v = r ? m(B(this.hass, t.grid_secondary_entity), 0.2) : null, x = s ? m(B(this.hass, t.battery_entity), 1.5) : null, E = m(B(this.hass, t.battery_percentage_entity), 72), w = a ? m(B(this.hass, t.battery_secondary_entity), 0) : null, S = m(
-      B(this.hass, t.battery_secondary_percentage_entity),
+    const t = this._config, e = t.decimals ?? xt, i = t.home_visible !== !1, n = t.solar_visible !== !1, o = t.grid_visible !== !1, r = o && t.grid_secondary_visible === !0, s = t.battery_visible !== !1, a = s && t.battery_secondary_visible === !0, l = this.normalizeBatteryDualAlignment(t.battery_dual_alignment), c = n ? this.collectSubBlocks("solar", t) : [], h = c.filter((N) => !N.stateMode), d = o ? this.collectSubBlocks("grid", t) : [], p = r ? this.collectSubBlocks("grid_secondary", t) : [], _ = i ? this.collectSubBlocks("home", t) : [], m = (N, qa) => N !== null ? N : this.preview ? qa : null, g = m(F(this.hass, t.home_entity), 3.2), y = n ? m(F(this.hass, t.solar_entity), 4.1) : null, b = o ? m(F(this.hass, t.grid_entity), -1.3) : null, v = r ? m(F(this.hass, t.grid_secondary_entity), 0.2) : null, x = s ? m(F(this.hass, t.battery_entity), 1.5) : null, E = m(F(this.hass, t.battery_percentage_entity), 72), w = a ? m(F(this.hass, t.battery_secondary_entity), 0) : null, S = m(
+      F(this.hass, t.battery_secondary_percentage_entity),
       85
     ), $ = t.unit ?? "kW", T = W(this.hass, t.solar_entity) ?? $, A = W(this.hass, t.grid_entity) ?? $, P = W(this.hass, t.grid_secondary_entity) ?? $, D = W(this.hass, t.battery_entity), O = W(this.hass, t.battery_percentage_entity), H = W(this.hass, t.battery_secondary_entity), Q = W(this.hass, t.battery_secondary_percentage_entity), ee = D ?? $, ze = H ?? $, Ne = this.resolveBatteryPercentage(
       E,
@@ -5795,7 +5795,7 @@ let me = class extends L {
       S,
       w,
       H
-    ), ki = !!this.readConfigString(t.battery_percentage_entity) || this.isPercentageUnit(D), Ci = !!this.readConfigString(t.battery_secondary_percentage_entity) || this.isPercentageUnit(H), vt = t.solar_auto_calculate === !0 ? this.resolveAutoSolarUnit(t, h, $) : T, bt = t.solar_auto_calculate === !0 ? this.computeAutoSolarValueFromSubBlocks(h, vt) : y, Ti = t.home_auto_calculate === !0 ? this.resolveAutoHomeUnit(t, $, vt) : W(this.hass, t.home_entity) ?? $, Bt = t.home_auto_calculate === !0 ? this.computeAutoHomeValueFromNodeValues(
+    ), ki = !!this.readConfigString(t.battery_percentage_entity) || this.isPercentageUnit(D), Ci = !!this.readConfigString(t.battery_secondary_percentage_entity) || this.isPercentageUnit(H), vt = t.solar_auto_calculate === !0 ? this.resolveAutoSolarUnit(t, h, $) : T, bt = t.solar_auto_calculate === !0 ? this.computeAutoSolarValueFromSubBlocks(h, vt) : y, Ti = t.home_auto_calculate === !0 ? this.resolveAutoHomeUnit(t, $, vt) : W(this.hass, t.home_entity) ?? $, Ft = t.home_auto_calculate === !0 ? this.computeAutoHomeValueFromNodeValues(
       {
         solar: bt,
         grid: b,
@@ -5811,7 +5811,7 @@ let me = class extends L {
         battery_secondary: ze
       },
       Ti
-    ) : g, Js = ki ? O ?? "%" : ee, Qs = Ci ? Q ?? "%" : ze, ea = this.toUnidirectionalFlow(bt), ta = this.toUnidirectionalFlow(Bt), ia = this.toBidirectionalFlow(b), na = this.toBidirectionalFlow(v), oa = this.sumComparableValues([
+    ) : g, Js = ki ? O ?? "%" : ee, Qs = Ci ? Q ?? "%" : ze, ea = this.toUnidirectionalFlow(bt), ta = this.toUnidirectionalFlow(Ft), ia = this.toBidirectionalFlow(b), na = this.toBidirectionalFlow(v), oa = this.sumComparableValues([
       { value: b, unit: A },
       { value: v, unit: P }
     ]), ra = b === null && v === null ? "none" : this.toBidirectionalFlow(oa), sa = t.battery_invert_flow === !0, aa = t.battery_secondary_invert_flow === !0, So = sa && x !== null ? -x : x, $o = aa && w !== null ? -w : w, la = this.toBidirectionalFlow(So), ca = this.toBidirectionalFlow($o), da = this.sumComparableValues([
@@ -5853,14 +5853,14 @@ let me = class extends L {
     ), Ri = n ? this.normalizePlacement({ col: 3, row: 1, colSpan: 2, rowSpan: 2 }, G) : null, Vt = Pi ? this.normalizePlacement(Pi, G) : null, Ut = Ii ? this.normalizePlacement(Ii, G) : null, Ni = i ? this.normalizePlacement({ col: 5, row: 3, colSpan: 2, rowSpan: 2 }, G) : null, Wt = Di ? this.normalizePlacement(Di, G) : null, jt = Oi ? this.normalizePlacement(Oi, G) : null, Io = this.normalizePlacement({ col: 3, row: 3, colSpan: 2, rowSpan: 2 }, G), Sa = this.normalizePositions(Ao, G), $a = this.normalizePositions(zo, G), Ea = this.normalizePositions(Mo, G), ka = this.normalizePositions(To, G), Do = this.normalizeBatteryThreshold(t.battery_low_threshold), Oo = !!t.battery_low_alert, Ro = this.normalizeBatteryThreshold(t.battery_secondary_low_threshold), No = !!t.battery_secondary_low_alert, Kt = this.resolveColor(Ze), Li = this.resolveColor(t.battery_low_alert_color, Kt), Hi = this.resolveColor(
       t.battery_secondary_low_alert_color,
       Kt
-    ), Fi = Oo && Ne !== null && Ne <= Do, Ca = this.iconColorStyle(
-      Fi ? Li : t.battery_icon_color
+    ), Bi = Oo && Ne !== null && Ne <= Do, Ca = this.iconColorStyle(
+      Bi ? Li : t.battery_icon_color
     ), Ta = this.batteryIcon(
       Ne,
       this.isPercentageUnit(D) ? null : x,
       t.battery_icon
-    ), Bi = No && Le !== null && Le <= Ro, za = this.iconColorStyle(
-      Bi ? Hi : t.battery_secondary_icon_color
+    ), Fi = No && Le !== null && Le <= Ro, za = this.iconColorStyle(
+      Fi ? Hi : t.battery_secondary_icon_color
     ), Ma = this.batteryIcon(
       Le,
       this.isPercentageUnit(H) ? null : w,
@@ -5869,10 +5869,10 @@ let me = class extends L {
       t.grid_export_icon_highlight === !0 && Aa ? t.grid_export_icon_color : t.grid_icon_color
     ), Da = this.iconColorStyle(
       t.grid_secondary_export_icon_highlight === !0 && Pa ? t.grid_secondary_export_icon_color : t.grid_secondary_icon_color
-    ), Oa = { "--flow-color-rgb": this.toRgbCss(t.flow_color) ?? Xc }, ct = this.resolveColor("purple"), Ra = this.resolveColor(t.solar_trend_color, ct), Na = this.resolveColor(t.grid_trend_color, ct), La = this.resolveColor(t.grid_secondary_trend_color, ct), Ha = this.resolveColor(t.grid_export_trend_color, Kt), Fa = this.resolveColor(
+    ), Oa = { "--flow-color-rgb": this.toRgbCss(t.flow_color) ?? Xc }, ct = this.resolveColor("purple"), Ra = this.resolveColor(t.solar_trend_color, ct), Na = this.resolveColor(t.grid_trend_color, ct), La = this.resolveColor(t.grid_secondary_trend_color, ct), Ha = this.resolveColor(t.grid_export_trend_color, Kt), Ba = this.resolveColor(
       t.grid_secondary_export_trend_color,
       Kt
-    ), Ba = this.resolveColor(t.home_trend_color, ct), Va = this.resolveColor(t.battery_trend_color, ct), Ua = this.resolveColor(t.battery_secondary_trend_color, ct), Wa = t.grid_export_highlight === !0 ? wr : null, ja = t.grid_secondary_export_highlight === !0 ? wr : null, Ka = Oo && ki ? Do : null, Ga = ki ? Ne : Eo, Ya = No && Ci ? Ro : null, Xa = Ci ? Le : ko, Za = this.buildFlowSegments(
+    ), Fa = this.resolveColor(t.home_trend_color, ct), Va = this.resolveColor(t.battery_trend_color, ct), Ua = this.resolveColor(t.battery_secondary_trend_color, ct), Wa = t.grid_export_highlight === !0 ? wr : null, ja = t.grid_secondary_export_highlight === !0 ? wr : null, Ka = Oo && ki ? Do : null, Ga = ki ? Ne : Eo, Ya = No && Ci ? Ro : null, Xa = Ci ? Le : ko, Za = this.buildFlowSegments(
       Ni,
       Io,
       Ri,
@@ -5981,7 +5981,7 @@ let me = class extends L {
       !!t.grid_secondary_trend,
       La,
       ja,
-      Fa
+      Ba
     )}
                     <div class="energy-content">
                       <ha-icon
@@ -5997,18 +5997,18 @@ let me = class extends L {
 
             ${i && Ni ? f`
                   <div
-                    class="energy-value home ${Bt === null ? "missing" : ""}"
+                    class="energy-value home ${Ft === null ? "missing" : ""}"
                     data-pp-node-key="home"
                     style=${z(this.gridPlacementStyle(Ni))}
                   >
-                    ${this.renderTrend("home", Bt, Ti, !!t.home_trend, Ba, null, "")}
+                    ${this.renderTrend("home", Ft, Ti, !!t.home_trend, Fa, null, "")}
                     <div class="energy-content">
                       <ha-icon
                         class="energy-icon"
                         .icon=${t.home_icon ?? "mdi:home-lightning-bolt"}
                         style=${z(fa)}
                       ></ha-icon>
-                      <div class="energy-number">${this.formatValue(Bt, Ti, e)}</div>
+                      <div class="energy-number">${this.formatValue(Ft, Ti, e)}</div>
                       <div class="energy-label">${t.home_label}</div>
                     </div>
                   </div>
@@ -6039,8 +6039,8 @@ let me = class extends L {
                         <ha-icon class="energy-icon" .icon=${Ta} style=${z(Ca)}></ha-icon>
                         ${Ne !== null ? f`
                               <div
-                                class="battery-percentage ${Fi ? "alert" : ""}"
-                                style=${z(Fi ? { color: Li } : {})}
+                                class="battery-percentage ${Bi ? "alert" : ""}"
+                                style=${z(Bi ? { color: Li } : {})}
                               >
                                 ${this.formatBatteryPercentage(Ne)}
                               </div>
@@ -6076,8 +6076,8 @@ let me = class extends L {
                         ></ha-icon>
                         ${Le !== null ? f`
                               <div
-                                class="battery-percentage ${Bi ? "alert" : ""}"
-                                style=${z(Bi ? { color: Hi } : {})}
+                                class="battery-percentage ${Fi ? "alert" : ""}"
+                                style=${z(Fi ? { color: Hi } : {})}
                               >
                                 ${this.formatBatteryPercentage(Le)}
                               </div>
@@ -6137,7 +6137,7 @@ let me = class extends L {
         icon: this.readConfigString(e[`${t}_sub_${d}_icon`]) ?? n,
         iconStyle: this.iconColorStyle(e[`${t}_sub_${d}_icon_color`]),
         label: this.readConfigString(e[`${t}_sub_${d}_label`]) ?? `${o} ${d}`,
-        value: B(this.hass, _),
+        value: F(this.hass, _),
         unit: W(this.hass, _) ?? e.unit ?? "kW",
         stateMode: m,
         stateText: m ? ci(this.hass, _) : void 0
@@ -6158,7 +6158,7 @@ let me = class extends L {
         icon: l,
         iconStyle: this.iconColorStyle(c),
         label: h,
-        value: B(this.hass, a),
+        value: F(this.hass, a),
         unit: W(this.hass, a) ?? e.unit ?? "kW",
         stateMode: !1
       }
@@ -6429,7 +6429,7 @@ let me = class extends L {
       const d = t[h], p = e[h];
       d != null && Number.isFinite(d) && (r += 1, p && (o[h] = p));
     });
-    const s = Object.keys(o).length === r ? Bl(o) : { comparable: !1, family: null, factors: {} }, a = s.comparable ? s.factors : void 0, l = (h) => {
+    const s = Object.keys(o).length === r ? Fl(o) : { comparable: !1, family: null, factors: {} }, a = s.comparable ? s.factors : void 0, l = (h) => {
       const d = t[h];
       if (d == null || !Number.isFinite(d))
         return 0;
@@ -8033,7 +8033,7 @@ const we = (t) => {
     default:
       return;
   }
-}, Fs = (t, e) => {
+}, Bs = (t, e) => {
   switch (t) {
     case 1:
       return e.entity_1_trend_color;
@@ -8046,7 +8046,7 @@ const we = (t) => {
     default:
       return;
   }
-}, Bs = (t) => t === "column" ? "column" : "row", eo = (t, e = 24) => {
+}, Fs = (t) => t === "column" ? "column" : "row", eo = (t, e = 24) => {
   const i = typeof t == "number" ? t : typeof t == "string" ? Number.parseInt(t, 10) : NaN;
   return i === 6 || i === 12 || i === 24 || i === 48 || i === 72 || i === 168 || i === 336 || i === 720 ? i : e;
 }, to = (t) => typeof t != "number" || !Number.isFinite(t) ? 1.5 : Math.max(0.5, Math.min(6, t)), Vs = (t, e, i, n) => {
@@ -8070,7 +8070,7 @@ const we = (t) => {
   2: "blue",
   3: "amber",
   4: "green"
-}, $r = "When enabled, hovering over the graph shows the value and timestamp for that point in the legend.", Er = "When enabled, the area below each trend line is filled with a semi-transparent gradient.", kr = "When enabled, all entities share the same Y-axis scale. When disabled, each entity auto-scales independently.", Cr = "When enabled, the graph area is clipped so it does not extend behind the legend labels.", Tr = "Thickness of the trend lines in pixels.", zr = "Controls where trend data is fetched from. Hybrid prefers statistics and falls back to history automatically.", Mr = "The time window shown in the graph.", Ar = "Controls whether entity legend items are displayed in a row or column layout.", Pr = "When enabled, all entity values are normalized as percentages of a reference total, so the graph always fills 0–100%.", Ir = "The entity whose value represents 100%. Defaults to the last enabled entity in the stack.", Dr = "When enabled, the 100% total is auto-calculated by summing all other entities. Useful when you don't have a total meter.", Or = "Default entity used by more-info actions. Required when tap/hold/double-tap is set to 'More info'.", Rr = "Automatically formats values with metric prefixes (e.g. W/kW/MW and Wh/kWh/MWh).", Nr = "Optional unit override. Used when entities have no unit_of_measurement attribute.", Lr = "Default decimal precision for displayed values.", Hr = "Decimal precision for base units (W, Wh) when auto unit scaling is enabled.", Fr = "Decimal precision for prefixed units (kW, MW, kWh, MWh) when auto unit scaling is enabled.", Jc = {
+}, $r = "When enabled, hovering over the graph shows the value and timestamp for that point in the legend.", Er = "When enabled, the area below each trend line is filled with a semi-transparent gradient.", kr = "When enabled, all entities share the same Y-axis scale. When disabled, each entity auto-scales independently.", Cr = "When enabled, the graph area is clipped so it does not extend behind the legend labels.", Tr = "Thickness of the trend lines in pixels.", zr = "Controls where trend data is fetched from. Hybrid prefers statistics and falls back to history automatically.", Mr = "The time window shown in the graph.", Ar = "Controls whether entity legend items are displayed in a row or column layout.", Pr = "When enabled, all entity values are normalized as percentages of a reference total, so the graph always fills 0–100%.", Ir = "The entity whose value represents 100%. Defaults to the last enabled entity in the stack.", Dr = "When enabled, the 100% total is auto-calculated by summing all other entities. Useful when you don't have a total meter.", Or = "Default entity used by more-info actions. Required when tap/hold/double-tap is set to 'More info'.", Rr = "Automatically formats values with metric prefixes (e.g. W/kW/MW and Wh/kWh/MWh).", Nr = "Optional unit override. Used when entities have no unit_of_measurement attribute.", Lr = "Default decimal precision for displayed values.", Hr = "Decimal precision for base units (W, Wh) when auto unit scaling is enabled.", Br = "Decimal precision for prefixed units (kW, MW, kWh, MWh) when auto unit scaling is enabled.", Jc = {
   legend_layout: "Layout",
   timeframe_hours: "Range",
   hover_enabled: "Hover",
@@ -8417,8 +8417,8 @@ const we = (t) => {
               {
                 name: "decimals_prefixed_unit",
                 selector: { number: { mode: "box", min: 0, max: 4, step: 1 } },
-                helper: Fr,
-                description: Fr
+                helper: Br,
+                description: Br
               }
             ]
           }
@@ -8584,7 +8584,7 @@ var od = Object.defineProperty, rd = Object.getOwnPropertyDescriptor, Ke = (t, e
     (s = t[r]) && (o = (n ? s(e, i, o) : s(o)) || o);
   return n && o && od(e, i, o), o;
 };
-const St = 1, Br = 24, Vr = 300 * 1e3, sd = 60 * 1e3, ad = 350, ii = 0.01, $t = 4, ld = "rgb(var(--rgb-primary-text-color, 33, 33, 33))", cd = [
+const St = 1, Fr = 24, Vr = 300 * 1e3, sd = 60 * 1e3, ad = 350, ii = 0.01, $t = 4, ld = "rgb(var(--rgb-primary-text-color, 33, 33, 33))", cd = [
   "hui-card-preview",
   "hui-dialog-edit-card",
   "hui-dialog-create-card",
@@ -8640,7 +8640,7 @@ let $e = class extends L {
     return {
       type: "custom:power-pilz-graph-card",
       legend_layout: "row",
-      timeframe_hours: Br,
+      timeframe_hours: Fr,
       hover_enabled: !0,
       fill_area_enabled: !0,
       shared_trend_scale: !1,
@@ -8814,7 +8814,7 @@ let $e = class extends L {
       const o = n, r = this.slotEnabled(o, t), s = this.slotEntityId(o, t);
       if (!r || !s)
         continue;
-      const a = this.entityName(this.slotCustomName(o, t), s, n), l = B(this.hass, s), c = t.unit ?? W(this.hass, s) ?? "", h = this.formatValue(l, c, e), d = this.slotIcon(o, t), p = this.iconStyle(this.slotIconColor(o, t)), _ = this.resolveColor(Ur[o], ld), m = this.resolveColor(this.slotTrendColor(o, t), _);
+      const a = this.entityName(this.slotCustomName(o, t), s, n), l = F(this.hass, s), c = t.unit ?? W(this.hass, s) ?? "", h = this.formatValue(l, c, e), d = this.slotIcon(o, t), p = this.iconStyle(this.slotIconColor(o, t)), _ = this.resolveColor(Ur[o], ld), m = this.resolveColor(this.slotTrendColor(o, t), _);
       i.push({
         slot: o,
         entityId: s,
@@ -8850,7 +8850,7 @@ let $e = class extends L {
     return Hs(t, e);
   }
   slotTrendColor(t, e) {
-    return Fs(t, e);
+    return Bs(t, e);
   }
   entityName(t, e, i) {
     return Vs(this.hass.states, t, e, i);
@@ -8888,10 +8888,10 @@ let $e = class extends L {
     return we(t);
   }
   normalizeLegendLayout(t) {
-    return Bs(t);
+    return Fs(t);
   }
   normalizeTimeframeHours(t) {
-    return eo(t, Br);
+    return eo(t, Fr);
   }
   trendWindowMs(t) {
     return this.normalizeTimeframeHours(t == null ? void 0 : t.timeframe_hours) * 60 * 60 * 1e3;
@@ -9948,7 +9948,7 @@ let Ee = class extends L {
       const o = n, r = this.slotEnabled(o, t), s = this.slotEntityId(o, t);
       if (!r || !s)
         continue;
-      const a = this.entityName(this.slotCustomName(o, t), s, n), l = B(this.hass, s), c = t.unit ?? W(this.hass, s) ?? "", h = this.formatValue(l, c, e), d = this.slotIcon(o, t), p = this.iconStyle(this.slotIconColor(o, t)), _ = this.resolveColor(Kr[o], fd), m = this.resolveColor(this.slotTrendColor(o, t), _);
+      const a = this.entityName(this.slotCustomName(o, t), s, n), l = F(this.hass, s), c = t.unit ?? W(this.hass, s) ?? "", h = this.formatValue(l, c, e), d = this.slotIcon(o, t), p = this.iconStyle(this.slotIconColor(o, t)), _ = this.resolveColor(Kr[o], fd), m = this.resolveColor(this.slotTrendColor(o, t), _);
       i.push({
         slot: o,
         entityId: s,
@@ -10026,7 +10026,7 @@ let Ee = class extends L {
     return Hs(t, e);
   }
   slotTrendColor(t, e) {
-    return Fs(t, e);
+    return Bs(t, e);
   }
   entityName(t, e, i) {
     return Vs(this.hass.states, t, e, i);
@@ -10083,7 +10083,7 @@ let Ee = class extends L {
     return we(t);
   }
   normalizeLegendLayout(t) {
-    return Bs(t);
+    return Fs(t);
   }
   normalizeTimeframeHours(t) {
     return eo(t, Wr);
@@ -11064,7 +11064,7 @@ const xd = 0.01, Gr = "power-pilz-wallbox-mode-menu-portal-style", _o = class _o
       if (this.isEditorPreview() || !this._config || this._actionBusy)
         return;
       e.stopPropagation(), this.closeModeMenuPortal();
-      const i = B(this.hass, this._config.power_entity), n = ci(this.hass, this._config.status_entity), o = this.isCharging(n, i, this._config.command_entity), r = this.resolveActionCommand(o);
+      const i = F(this.hass, this._config.power_entity), n = ci(this.hass, this._config.status_entity), o = this.isCharging(n, i, this._config.command_entity), r = this.resolveActionCommand(o);
       if (r) {
         this._actionBusy = !0;
         try {
@@ -11136,7 +11136,7 @@ const xd = 0.01, Gr = "power-pilz-wallbox-mode-menu-portal-style", _o = class _o
       return f`<ha-card>${u(e, "common.invalid_config")}</ha-card>`;
     if (!this.hass)
       return f``;
-    const i = this._config, n = B(this.hass, i.power_entity), o = n !== null ? n : this.preview ? 7.2 : null, r = W(this.hass, i.power_entity) ?? "kW", s = ci(this.hass, i.status_entity), a = s || (this.preview ? "charging" : s), l = R(this.hass, i.mode_entity), c = (l == null ? void 0 : l.state) ?? (this.preview ? "Eco" : ""), h = this.getModeOptions(l), d = h.length > 0 ? h : this.preview ? ["Eco", "Fast", "Solar"] : h, p = this.isCharging(a, o, i.command_entity), _ = this.resolveActionCommand(p), m = p ? u(e, "wallbox.stop") : u(e, "wallbox.start"), g = p ? "mdi:pause" : "mdi:play", y = this.statusLabel(a, p), b = this.formatPower(o, r, i.decimals ?? 1), v = this.showModeSelector(i, d), x = this.showLiveValue(i), E = this.showCommandButton(i), w = this.isEditorPreview() || this._actionBusy || !i.mode_entity || d.length === 0, S = c || d[0] || u(e, "wallbox.mode_fallback"), $ = this._modeMenuOpen ? "mdi:chevron-up" : "mdi:chevron-down", T = this.iconStyle(i.icon_color), P = Number(x) + Number(E) === 1, D = v && x && E, O = P && x, H = P && E || D, Q = O || H, ee = x && !O, ze = E && !H, Ne = v || ee || ze, Le = v ? ee || ze ? ze ? "actions" : "actions no-command" : "actions mode-only" : "actions no-mode";
+    const i = this._config, n = F(this.hass, i.power_entity), o = n !== null ? n : this.preview ? 7.2 : null, r = W(this.hass, i.power_entity) ?? "kW", s = ci(this.hass, i.status_entity), a = s || (this.preview ? "charging" : s), l = R(this.hass, i.mode_entity), c = (l == null ? void 0 : l.state) ?? (this.preview ? "Eco" : ""), h = this.getModeOptions(l), d = h.length > 0 ? h : this.preview ? ["Eco", "Fast", "Solar"] : h, p = this.isCharging(a, o, i.command_entity), _ = this.resolveActionCommand(p), m = p ? u(e, "wallbox.stop") : u(e, "wallbox.start"), g = p ? "mdi:pause" : "mdi:play", y = this.statusLabel(a, p), b = this.formatPower(o, r, i.decimals ?? 1), v = this.showModeSelector(i, d), x = this.showLiveValue(i), E = this.showCommandButton(i), w = this.isEditorPreview() || this._actionBusy || !i.mode_entity || d.length === 0, S = c || d[0] || u(e, "wallbox.mode_fallback"), $ = this._modeMenuOpen ? "mdi:chevron-up" : "mdi:chevron-down", T = this.iconStyle(i.icon_color), P = Number(x) + Number(E) === 1, D = v && x && E, O = P && x, H = P && E || D, Q = O || H, ee = x && !O, ze = E && !H, Ne = v || ee || ze, Le = v ? ee || ze ? ze ? "actions" : "actions no-command" : "actions mode-only" : "actions no-mode";
     return (!v || w) && this._modeMenuOpen && this.closeModeMenuPortal(), f`
       <ha-card>
         <div class="container">
@@ -11974,7 +11974,7 @@ ro([
 gi = ro([
   ce("power-pilz-switch-card-editor")
 ], gi);
-var kd = Object.defineProperty, Ft = (t, e, i, n) => {
+var kd = Object.defineProperty, Bt = (t, e, i, n) => {
   for (var o = void 0, r = t.length - 1, s; r >= 0; r--)
     (s = t[r]) && (o = s(e, i, o) || o);
   return o && kd(e, i, o), o;
@@ -12439,19 +12439,19 @@ mo.styles = Z`
     }
   `;
 let De = mo;
-Ft([
+Bt([
   I({ attribute: !1 })
 ], De.prototype, "hass");
-Ft([
+Bt([
   I({ type: Boolean })
 ], De.prototype, "preview");
-Ft([
+Bt([
   I({ type: Boolean })
 ], De.prototype, "editMode");
-Ft([
+Bt([
   I({ reflect: !0, type: String })
 ], De.prototype, "layout");
-Ft([
+Bt([
   C()
 ], De.prototype, "_config");
 class zd extends De {
@@ -12463,7 +12463,7 @@ var Md = Object.defineProperty, oe = (t, e, i, n) => {
     (s = t[r]) && (o = s(e, i, o) || o);
   return o && Md(e, i, o), o;
 };
-const Bn = "power-pilz-schedule-edit-dialog", tn = [
+const Fn = "power-pilz-schedule-edit-dialog", tn = [
   { key: "monday", dayIndex: 1 },
   { key: "tuesday", dayIndex: 2 },
   { key: "wednesday", dayIndex: 3 },
@@ -13300,10 +13300,10 @@ function Pd(t) {
   }
   return i;
 }
-customElements.get(Bn) || customElements.define(Bn, X);
+customElements.get(Fn) || customElements.define(Fn, X);
 function Id(t) {
   if (!t.scheduleEntityId) return;
-  const e = document.createElement(Bn);
+  const e = document.createElement(Fn);
   e.hass = t.hass, e.scheduleEntityId = t.scheduleEntityId, t.title && (e.dialogTitle = t.title), document.body.appendChild(e);
 }
 const qs = Z`
@@ -14392,7 +14392,7 @@ const go = class go extends le {
       const i = e.currentTarget, n = i.dataset.day;
       if (!n) return;
       const o = this._pxToMin(i, e.clientX), r = this._eventsForDay(n);
-      r.some((s) => Fe(s.time) === o) || (r.push({ time: sn(o) }), this._setEventsForDay(n, r));
+      r.some((s) => Be(s.time) === o) || (r.push({ time: sn(o) }), this._setEventsForDay(n, r));
     }, this._handleTrackPointerMove = (e) => {
       const i = e.currentTarget, n = i.dataset.day;
       if (this._pinDrag && e.pointerId === this._pinDrag.pointerId) {
@@ -14430,7 +14430,7 @@ const go = class go extends le {
           index: o,
           trackEl: r,
           pointerId: e.pointerId,
-          origMin: Fe(a.time),
+          origMin: Be(a.time),
           anchorClientX: e.clientX,
           deltaMin: 0,
           moved: !1
@@ -14459,7 +14459,7 @@ const go = class go extends le {
       const n = this._eventsForDay(i.day), o = n[i.index];
       if (o) {
         const r = i.origMin + i.deltaMin;
-        if (!n.some((a, l) => l !== i.index && Fe(a.time) === r)) {
+        if (!n.some((a, l) => l !== i.index && Be(a.time) === r)) {
           const a = { time: sn(r) };
           o.data && (a.data = o.data), n[i.index] = a, this._setEventsForDay(i.day, n);
         }
@@ -14543,7 +14543,7 @@ const go = class go extends le {
   }
   _saveEdit() {
     if (!this._editing) return;
-    const e = M(this.hass), { day: i, index: n, time: o, dataText: r } = this._editing, s = Fe(o);
+    const e = M(this.hass), { day: i, index: n, time: o, dataText: r } = this._editing, s = Be(o);
     if (isNaN(s)) {
       this._editing = { ...this._editing, error: u(e, "schedule.edit_dialog.err_time") };
       return;
@@ -14564,7 +14564,7 @@ const go = class go extends le {
         return;
       }
     const c = this._eventsForDay(i);
-    if (c.some((p, _) => _ !== n && Fe(p.time) === s)) {
+    if (c.some((p, _) => _ !== n && Be(p.time) === s)) {
       this._editing = { ...this._editing, error: u(e, "schedule.edit_dialog.err_overlap") };
       return;
     }
@@ -14722,7 +14722,7 @@ const go = class go extends le {
         >
           ${this._eventsForDay(e).map((r, s) => {
       var d, p;
-      const a = Fe(r.time), l = ((d = this._pinDrag) == null ? void 0 : d.day) === e && this._pinDrag.index === s, c = l ? a + (((p = this._pinDrag) == null ? void 0 : p.deltaMin) ?? 0) : a, h = c / He * 100;
+      const a = Be(r.time), l = ((d = this._pinDrag) == null ? void 0 : d.day) === e && this._pinDrag.index === s, c = l ? a + (((p = this._pinDrag) == null ? void 0 : p.deltaMin) ?? 0) : a, h = c / He * 100;
       return f`
               <div
                 class="pp-pin ${l ? "moving" : ""}"
@@ -14994,7 +14994,7 @@ de([
 de([
   C()
 ], q.prototype, "_cursor");
-function Fe(t) {
+function Be(t) {
   if (!t || typeof t != "string") return 0;
   const e = t.split(":"), i = parseInt(e[0] ?? "0", 10), n = parseInt(e[1] ?? "0", 10), o = parseInt(e[2] ?? "0", 10);
   return isNaN(i) || isNaN(n) ? 0 : i * 60 + n + (isNaN(o) ? 0 : o / 60);
@@ -15018,7 +15018,7 @@ function es(t) {
   return `${i}:${n}:${o}`;
 }
 function Ld(t) {
-  return t.filter((e) => typeof (e == null ? void 0 : e.time) == "string").slice().sort((e, i) => Fe(e.time) - Fe(i.time));
+  return t.filter((e) => typeof (e == null ? void 0 : e.time) == "string").slice().sort((e, i) => Be(e.time) - Be(i.time));
 }
 customElements.get(Un) || customElements.define(Un, q);
 function Hd(t) {
@@ -15026,10 +15026,10 @@ function Hd(t) {
   const e = document.createElement(Un);
   e.hass = t.hass, e.scheduleEntityId = t.scheduleEntityId, t.title && (e.dialogTitle = t.title), document.body.appendChild(e);
 }
-var Fd = Object.defineProperty, Bd = Object.getOwnPropertyDescriptor, ao = (t, e, i, n) => {
-  for (var o = n > 1 ? void 0 : n ? Bd(e, i) : e, r = t.length - 1, s; r >= 0; r--)
+var Bd = Object.defineProperty, Fd = Object.getOwnPropertyDescriptor, ao = (t, e, i, n) => {
+  for (var o = n > 1 ? void 0 : n ? Fd(e, i) : e, r = t.length - 1, s; r >= 0; r--)
     (s = t[r]) && (o = (n ? s(e, i, o) : s(o)) || o);
-  return n && o && Fd(e, i, o), o;
+  return n && o && Bd(e, i, o), o;
 };
 let bi = class extends L {
   constructor() {
@@ -16732,7 +16732,7 @@ const jn = "power-pilz-heating-curve-edit-dialog", Ct = [
   { key: "friday", dayIndex: 5 },
   { key: "saturday", dayIndex: 6 },
   { key: "sunday", dayIndex: 0 }
-], se = 15, Be = 1440, si = 1e3, Tt = 220, Ae = 30, Pe = 14, ln = 22;
+], se = 15, Fe = 1440, si = 1e3, Tt = 220, Ae = 30, Pe = 14, ln = 22;
 function rs() {
   return {
     monday: [],
@@ -16788,7 +16788,7 @@ const wo = class wo extends le {
         return;
       }
       if (n) {
-        const { minutes: o } = this._svgToData(i, e.clientX, e.clientY), r = Math.round(o / se) * se, s = Math.max(0, Math.min(Be, r));
+        const { minutes: o } = this._svgToData(i, e.clientX, e.clientY), r = Math.round(o / se) * se, s = Math.max(0, Math.min(Fe, r));
         (!this._cursor || this._cursor.day !== n || this._cursor.min !== s) && (this._cursor = { day: n, min: s });
       }
     }, this._handleSvgPointerLeave = (e) => {
@@ -16938,7 +16938,7 @@ const wo = class wo extends le {
   _movePoint(e, i, n, o) {
     const r = this._pointsForDay(e);
     if (i < 0 || i >= r.length) return;
-    const s = Math.round(n / se) * se, a = i > 0 ? he(r[i - 1].time) + se : 0, l = i < r.length - 1 ? he(r[i + 1].time) - se : Be, c = Math.max(a, Math.min(l, s));
+    const s = Math.round(n / se) * se, a = i > 0 ? he(r[i - 1].time) + se : 0, l = i < r.length - 1 ? he(r[i + 1].time) - se : Fe, c = Math.max(a, Math.min(l, s));
     r[i] = {
       time: cn(c),
       value: ai(this._clamp(o))
@@ -16957,7 +16957,7 @@ const wo = class wo extends le {
   _svgToData(e, i, n) {
     const o = e.createSVGPoint();
     o.x = i, o.y = n;
-    const r = e.getScreenCTM(), s = r ? o.matrixTransform(r.inverse()) : { x: 0, y: 0 }, a = si - 2 * Ae, l = Tt - Pe - ln, c = Math.max(0, Math.min(a, s.x - Ae)), h = Math.max(0, Math.min(l, s.y - Pe)), d = c / a * Be, p = this._valueMax - h / l * (this._valueMax - this._valueMin);
+    const r = e.getScreenCTM(), s = r ? o.matrixTransform(r.inverse()) : { x: 0, y: 0 }, a = si - 2 * Ae, l = Tt - Pe - ln, c = Math.max(0, Math.min(a, s.x - Ae)), h = Math.max(0, Math.min(l, s.y - Pe)), d = c / a * Fe, p = this._valueMax - h / l * (this._valueMax - this._valueMin);
     return { minutes: d, value: p };
   }
   _saveEdit() {
@@ -16967,7 +16967,7 @@ const wo = class wo extends le {
       this._editing = { ...this._editing, error: u(e, "heating_curve.edit_dialog.err_time") };
       return;
     }
-    const a = this._pointsForDay(i), l = Math.round(s / se) * se, c = n > 0 ? he(a[n - 1].time) + se : 0, h = n < a.length - 1 ? he(a[n + 1].time) - se : Be;
+    const a = this._pointsForDay(i), l = Math.round(s / se) * se, c = n > 0 ? he(a[n - 1].time) + se : 0, h = n < a.length - 1 ? he(a[n + 1].time) - se : Fe;
     if (l < c || l > h) {
       this._editing = { ...this._editing, error: u(e, "heating_curve.edit_dialog.err_overlap") };
       return;
@@ -17098,9 +17098,9 @@ const wo = class wo extends le {
   _renderDayRow(e, i, n) {
     var b, v;
     const o = this._pointsForDay(e), r = this._sameForAll ? u(n, "heating_curve.edit_dialog.all_days") : ne(n, i), s = si - 2 * Ae, a = Tt - Pe - ln, l = Math.max(1e-4, this._valueMax - this._valueMin), c = (x) => ({
-      x: Ae + x.x / Be * s,
+      x: Ae + x.x / Fe * s,
       y: Pe + (1 - (x.y - this._valueMin) / l) * a
-    }), h = o.map((x) => ({ x: he(x.time), y: x.value })).sort((x, E) => x.x - E.x), d = Wn(h, c), p = ((b = this._cursor) == null ? void 0 : b.day) === e && !this._drag, _ = p ? Ae + this._cursor.min / Be * s : 0, m = p ? _ / si * 100 : 0, g = !!this._clipboard, y = ((v = this._clipboard) == null ? void 0 : v.source) === e;
+    }), h = o.map((x) => ({ x: he(x.time), y: x.value })).sort((x, E) => x.x - E.x), d = Wn(h, c), p = ((b = this._cursor) == null ? void 0 : b.day) === e && !this._drag, _ = p ? Ae + this._cursor.min / Fe * s : 0, m = p ? _ / si * 100 : 0, g = !!this._clipboard, y = ((v = this._clipboard) == null ? void 0 : v.source) === e;
     return f`
       <div class="hc-row">
         <div class="hc-row-head">
@@ -17489,11 +17489,11 @@ function he(t) {
   return isNaN(i) || isNaN(n) ? 0 : i * 60 + n;
 }
 function cn(t) {
-  const e = Math.max(0, Math.min(Be, Math.round(t))), i = Math.floor(e / 60), n = e % 60;
+  const e = Math.max(0, Math.min(Fe, Math.round(t))), i = Math.floor(e / 60), n = e % 60;
   return i === 24 && n === 0 ? "24:00:00" : `${String(i).padStart(2, "0")}:${String(n).padStart(2, "0")}:00`;
 }
 function Xd(t) {
-  const e = Math.max(0, Math.min(Be, Math.round(t))), i = Math.floor(e / 60), n = e % 60;
+  const e = Math.max(0, Math.min(Fe, Math.round(t))), i = Math.floor(e / 60), n = e % 60;
   return `${String(i).padStart(2, "0")}:${String(n).padStart(2, "0")}`;
 }
 function ai(t) {
@@ -17845,10 +17845,6 @@ const ss = "powerpilz-heating-curve-edit", as = [
     const e = this._entityAttrs(), i = e == null ? void 0 : e.week_points;
     return i && typeof i == "object" && !Array.isArray(i) ? i : {};
   }
-  _sameForAll() {
-    var e;
-    return ((e = this._entityAttrs()) == null ? void 0 : e.same_for_all_days) === !0;
-  }
   _valueRange() {
     const e = this._entityAttrs(), i = Number(e == null ? void 0 : e.value_min), n = Number(e == null ? void 0 : e.value_max);
     return {
@@ -17862,7 +17858,7 @@ const ss = "powerpilz-heating-curve-edit", as = [
     return typeof e == "string" ? e : "°C";
   }
   _dayKey(e) {
-    return this._sameForAll() ? "monday" : as[e] ?? "monday";
+    return as[e] ?? "monday";
   }
   _pointsForDay(e) {
     const n = this._weekPoints()[this._dayKey(e)];
@@ -17918,7 +17914,7 @@ const ss = "powerpilz-heating-curve-edit", as = [
   renderCurvePreview() {
     const e = this._config;
     this._tick;
-    const i = this._pointsForDay(this._sameForAll() ? 1 : this._selectedDay), { min: n, max: o } = this._valueRange(), r = this._resolvedActiveColor(), s = this._sameForAll() || this._selectedDay === (/* @__PURE__ */ new Date()).getDay(), a = e.show_now_indicator !== !1 && s, l = this._nowMin(), c = [];
+    const i = this._pointsForDay(this._selectedDay), { min: n, max: o } = this._valueRange(), r = this._resolvedActiveColor(), s = this._selectedDay === (/* @__PURE__ */ new Date()).getDay(), a = e.show_now_indicator !== !1 && s, l = this._nowMin(), c = [];
     if (i.length > 0) {
       i[0].x > 0 && c.push({ x: 0, y: i[0].y }), c.push(...i);
       const v = i[i.length - 1];
@@ -17971,7 +17967,6 @@ const ss = "powerpilz-heating-curve-edit", as = [
     `;
   }
   renderDaySelector() {
-    if (this._sameForAll()) return k;
     const e = (/* @__PURE__ */ new Date()).getDay();
     return f`
       <div class="day-selector">
