@@ -18,7 +18,6 @@ interface ScheduleCardConfig extends LovelaceCardConfig {
   show_mode_control?: boolean;
   show_now_indicator?: boolean;
   show_time_labels?: boolean;
-  long_press_opens_editor?: boolean;
   tap_action?: Record<string, unknown>;
   hold_action?: Record<string, unknown>;
   double_tap_action?: Record<string, unknown>;
@@ -54,7 +53,6 @@ export class PowerPilzScheduleCardEditor extends LitElement implements LovelaceC
       show_mode_control: config.show_mode_control ?? true,
       show_now_indicator: config.show_now_indicator ?? true,
       show_time_labels: config.show_time_labels ?? true,
-      long_press_opens_editor: config.long_press_opens_editor ?? true,
       type: "custom:power-pilz-schedule-card"
     };
   }
@@ -216,10 +214,6 @@ export class PowerPilzScheduleCardEditor extends LitElement implements LovelaceC
         expanded: false,
         schema: [
           {
-            name: "long_press_opens_editor",
-            selector: { boolean: {} }
-          },
-          {
             name: "tap_action",
             selector: { ui_action: {} }
           },
@@ -251,7 +245,6 @@ export class PowerPilzScheduleCardEditor extends LitElement implements LovelaceC
       show_mode_control: tr(lang, "schedule.editor.show_mode_control"),
       show_now_indicator: tr(lang, "schedule.editor.show_now_indicator"),
       show_time_labels: tr(lang, "schedule.editor.show_time_labels"),
-      long_press_opens_editor: tr(lang, "schedule.editor.long_press_opens_editor"),
       tap_action: tr(lang, "schedule.editor.tap_action"),
       hold_action: tr(lang, "schedule.editor.hold_action"),
       double_tap_action: tr(lang, "schedule.editor.double_tap_action")
@@ -267,7 +260,6 @@ export class PowerPilzScheduleCardEditor extends LitElement implements LovelaceC
       active_color: tr(lang, "schedule.editor.active_color_help"),
       show_day_selector: tr(lang, "schedule.editor.show_day_help"),
       show_mode_control: tr(lang, "schedule.editor.show_mode_help"),
-      long_press_opens_editor: tr(lang, "schedule.editor.long_press_opens_editor_help"),
       show_now_indicator: tr(lang, "schedule.editor.show_now_help"),
       show_time_labels: tr(lang, "schedule.editor.show_labels_help")
     };

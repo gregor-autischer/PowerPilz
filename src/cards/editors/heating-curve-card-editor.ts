@@ -15,8 +15,7 @@ interface HeatingCurveCardConfig extends LovelaceCardConfig {
   show_day_selector?: boolean;
   show_mode_control?: boolean;
   show_now_indicator?: boolean;
-  show_value_labels?: boolean;
-  long_press_opens_editor?: boolean;
+  show_time_labels?: boolean;
   tap_action?: Record<string, unknown>;
   hold_action?: Record<string, unknown>;
   double_tap_action?: Record<string, unknown>;
@@ -38,8 +37,7 @@ export class PowerPilzHeatingCurveCardEditor extends LitElement implements Lovel
       show_day_selector: config.show_day_selector ?? true,
       show_mode_control: config.show_mode_control ?? true,
       show_now_indicator: config.show_now_indicator ?? true,
-      show_value_labels: config.show_value_labels ?? true,
-      long_press_opens_editor: config.long_press_opens_editor ?? true,
+      show_time_labels: config.show_time_labels ?? true,
       type: "custom:power-pilz-heating-curve-card"
     };
   }
@@ -121,7 +119,7 @@ export class PowerPilzHeatingCurveCardEditor extends LitElement implements Lovel
               { name: "show_day_selector", selector: { boolean: {} } },
               { name: "show_mode_control", selector: { boolean: {} } },
               { name: "show_now_indicator", selector: { boolean: {} } },
-              { name: "show_value_labels", selector: { boolean: {} } }
+              { name: "show_time_labels", selector: { boolean: {} } }
             ]
           }
         ]
@@ -133,9 +131,11 @@ export class PowerPilzHeatingCurveCardEditor extends LitElement implements Lovel
         icon: "mdi:gesture-tap",
         expanded: false,
         schema: [
-          { name: "long_press_opens_editor", selector: { boolean: {} } },
           { name: "tap_action", selector: { ui_action: {} } },
-          { name: "hold_action", selector: { ui_action: {} } },
+          {
+            name: "hold_action",
+            selector: { ui_action: {} }
+          },
           { name: "double_tap_action", selector: { ui_action: {} } }
         ]
       }
@@ -154,8 +154,7 @@ export class PowerPilzHeatingCurveCardEditor extends LitElement implements Lovel
       show_day_selector: tr(lang, "heating_curve.editor.show_day_selector"),
       show_mode_control: tr(lang, "heating_curve.editor.show_mode_control"),
       show_now_indicator: tr(lang, "heating_curve.editor.show_now_indicator"),
-      show_value_labels: tr(lang, "heating_curve.editor.show_value_labels"),
-      long_press_opens_editor: tr(lang, "heating_curve.editor.long_press_opens_editor"),
+      show_time_labels: tr(lang, "heating_curve.editor.show_time_labels"),
       tap_action: tr(lang, "heating_curve.editor.tap_action"),
       hold_action: tr(lang, "heating_curve.editor.hold_action"),
       double_tap_action: tr(lang, "heating_curve.editor.double_tap_action")
