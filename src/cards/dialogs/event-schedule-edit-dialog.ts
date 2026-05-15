@@ -62,6 +62,18 @@ interface EditingEventState {
   error?: string;
 }
 
+/** State while dragging an existing pin to a new time. */
+interface PinDragState {
+  day: DayKey;
+  index: number;
+  trackEl: HTMLElement;
+  pointerId: number;
+  origMin: number;
+  anchorClientX: number;
+  deltaMin: number;
+  moved: boolean;
+}
+
 export interface EventScheduleEditDialogOptions {
   hass: HomeAssistant;
   /** The PowerPilz Smart Event Schedule `select.*` entity id. Events
@@ -86,11 +98,19 @@ class PowerPilzEventScheduleEditDialog extends PowerPilzDialogBase {
   public scheduleEntityId = "";
 
   @state() private _events: WeekEvents = _emptyWeek();
+  /** Single "uniform" template used when same-for-all-days is enabled.
+   *  Stored independently from `_events` so toggling the flag off
+   *  restores the per-day data the user had before. */
+  @state() private _uniformEvents: ScheduleEvent[] = [];
+  @state() private _sameForAll = false;
   @state() private _loading = true;
   @state() private _loadError?: string;
   @state() private _saving = false;
   @state() private _dirty = false;
   @state() private _editing?: EditingEventState;
+  @state() private _pinDrag?: PinDragState;
+  /** Cursor position over a track for the live time hint. */
+  @state() private _cursor?: { day: DayKey; min: number };
 
   connectedCallback(): void {
     super.connectedCallback();
@@ -152,12 +172,26 @@ class PowerPilzEventScheduleEditDialog extends PowerPilzDialogBase {
     this._saving = true;
     this.lockClose = true;
     try {
+      // When same-for-all-days is enabled, flatten the uniform template
+      // onto every day in the saved payload. The per-day `_events`
+      // state is left untouched so the user can toggle back.
+      const payload = this._sameForAll
+        ? {
+            monday: this._uniformEvents,
+            tuesday: this._uniformEvents,
+            wednesday: this._uniformEvents,
+            thursday: this._uniformEvents,
+            friday: this._uniformEvents,
+            saturday: this._uniformEvents,
+            sunday: this._uniformEvents,
+          }
+        : this._events;
       await this.hass.callService(
         "powerpilz_companion",
         "set_schedule_events",
         {
           entity_id: this.scheduleEntityId,
-          events: this._events,
+          events: payload,
         },
       );
       this._dirty = false;
@@ -173,16 +207,36 @@ class PowerPilzEventScheduleEditDialog extends PowerPilzDialogBase {
   // Event list helpers
   // ------------------------------------------------------------
 
+  /** Reads the events for a given day, transparently routing to the
+   *  uniform template when same-for-all-days is enabled. */
   private _eventsForDay(key: DayKey): ScheduleEvent[] {
+    if (this._sameForAll) return [...this._uniformEvents];
     const events = this._events[key];
     return Array.isArray(events) ? [...events] : [];
   }
 
   private _setEventsForDay(key: DayKey, events: ScheduleEvent[]): void {
     const cleaned = _sortEvents(events);
-    this._events = { ...this._events, [key]: cleaned };
+    if (this._sameForAll) {
+      this._uniformEvents = cleaned;
+    } else {
+      this._events = { ...this._events, [key]: cleaned };
+    }
     this._dirty = true;
   }
+
+  private _toggleSameForAll = (): void => {
+    const next = !this._sameForAll;
+    if (next) {
+      // Seed the uniform template from the first day that has events.
+      const seed = WEEK
+        .map((w) => this._events[w.key])
+        .find((e) => Array.isArray(e) && e.length > 0);
+      this._uniformEvents = seed ? [...seed] : [];
+    }
+    this._sameForAll = next;
+    this._dirty = true;
+  };
 
   // ------------------------------------------------------------
   // Click-to-insert interaction
@@ -198,6 +252,10 @@ class PowerPilzEventScheduleEditDialog extends PowerPilzDialogBase {
   private _handleTrackClick = (event: MouseEvent): void => {
     if (this._loading || this._loadError) return;
     if ((event.target as HTMLElement).closest(".pp-pin")) return;
+    // Suppress when a pin-drag just released — the up-event fires both
+    // pointerup AND a click; without this guard the click would insert
+    // a phantom pin at the drop location.
+    if (this._pinDrag) return;
     const trackEl = event.currentTarget as HTMLElement;
     const day = trackEl.dataset.day as DayKey | undefined;
     if (!day) return;
@@ -208,21 +266,116 @@ class PowerPilzEventScheduleEditDialog extends PowerPilzDialogBase {
     this._setEventsForDay(day, existing);
   };
 
-  private _handlePinClick = (event: MouseEvent): void => {
-    event.stopPropagation();
+  // ------------------------------------------------------------
+  // Cursor hint + drag-to-move pin
+  // ------------------------------------------------------------
+
+  private _handleTrackPointerMove = (event: PointerEvent): void => {
+    const trackEl = event.currentTarget as HTMLElement;
+    const day = trackEl.dataset.day as DayKey | undefined;
+
+    if (this._pinDrag && event.pointerId === this._pinDrag.pointerId) {
+      const rect = trackEl.getBoundingClientRect();
+      const dxPx = event.clientX - this._pinDrag.anchorClientX;
+      const dxMinRaw = (dxPx / rect.width) * DAY_MINUTES;
+      let delta = Math.round(dxMinRaw / SNAP_MINUTES) * SNAP_MINUTES;
+      const minDelta = -this._pinDrag.origMin;
+      const maxDelta = DAY_MINUTES - this._pinDrag.origMin;
+      if (delta < minDelta) delta = minDelta;
+      if (delta > maxDelta) delta = maxDelta;
+      if (delta !== this._pinDrag.deltaMin) {
+        this._pinDrag = {
+          ...this._pinDrag,
+          deltaMin: delta,
+          moved: this._pinDrag.moved || delta !== 0,
+        };
+      }
+      return;
+    }
+
+    if (day) {
+      const min = this._pxToMin(trackEl, event.clientX);
+      if (!this._cursor || this._cursor.day !== day || this._cursor.min !== min) {
+        this._cursor = { day, min };
+      }
+    }
+  };
+
+  private _handleTrackPointerLeave = (_event: PointerEvent): void => {
+    if (this._pinDrag) return;
+    this._cursor = undefined;
+  };
+
+  private _handlePinPointerDown = (event: PointerEvent): void => {
+    if (event.button !== 0) return;
+    if (this._loading || this._loadError) return;
     const el = event.currentTarget as HTMLElement;
     const day = el.dataset.day as DayKey | undefined;
     const idx = parseInt(el.dataset.index ?? "-1", 10);
     if (!day || idx < 0) return;
+    const trackEl = el.parentElement as HTMLElement | null;
+    if (!trackEl) return;
+
     const events = this._eventsForDay(day);
     const ev = events[idx];
     if (!ev) return;
-    this._editing = {
+
+    event.preventDefault();
+    event.stopPropagation();
+    try { trackEl.setPointerCapture(event.pointerId); } catch { /* ignore */ }
+
+    this._pinDrag = {
       day,
       index: idx,
-      time: _normaliseHms(ev.time),
-      dataText: ev.data ? JSON.stringify(ev.data, null, 2) : "",
+      trackEl,
+      pointerId: event.pointerId,
+      origMin: _toMin(ev.time),
+      anchorClientX: event.clientX,
+      deltaMin: 0,
+      moved: false,
     };
+  };
+
+  private _handlePinPointerUp = (event: PointerEvent): void => {
+    if (!this._pinDrag) return;
+    if (event.pointerId !== this._pinDrag.pointerId) return;
+    const drag = this._pinDrag;
+    try { drag.trackEl.releasePointerCapture(drag.pointerId); } catch { /* ignore */ }
+
+    // No real drag → open the edit modal. Clear `_pinDrag` AFTER the
+    // upcoming `_handleTrackClick` so its guard kicks in and suppresses
+    // a stray phantom insert.
+    if (!drag.moved || drag.deltaMin === 0) {
+      const events = this._eventsForDay(drag.day);
+      const ev = events[drag.index];
+      // Defer the click guard release by one task tick so the click
+      // event (which fires right after pointerup) sees `_pinDrag` set.
+      setTimeout(() => { this._pinDrag = undefined; }, 0);
+      if (!ev) return;
+      this._editing = {
+        day: drag.day,
+        index: drag.index,
+        time: _normaliseHms(ev.time),
+        dataText: ev.data ? JSON.stringify(ev.data, null, 2) : "",
+      };
+      return;
+    }
+
+    // Apply the move; reject if another pin already occupies the
+    // target time.
+    const events = this._eventsForDay(drag.day);
+    const moved = events[drag.index];
+    if (moved) {
+      const newMin = drag.origMin + drag.deltaMin;
+      const collision = events.some((ev, i) => i !== drag.index && _toMin(ev.time) === newMin);
+      if (!collision) {
+        const updated: ScheduleEvent = { time: _minToHms(newMin) };
+        if (moved.data) updated.data = moved.data;
+        events[drag.index] = updated;
+        this._setEventsForDay(drag.day, events);
+      }
+    }
+    setTimeout(() => { this._pinDrag = undefined; }, 0);
   };
 
   // ------------------------------------------------------------
@@ -330,8 +483,22 @@ class PowerPilzEventScheduleEditDialog extends PowerPilzDialogBase {
     if (this._loadError) {
       return html`<div class="msg error">${this._loadError}</div>`;
     }
+    const rows = this._sameForAll
+      ? [{ key: "monday" as DayKey, label: tr(lang, "schedule.edit_dialog.all_days") }]
+      : WEEK.map((w) => ({ key: w.key, label: weekdayShort(lang, w.dayIndex) }));
+
     return html`
       <div class="editor">
+        <div class="pp-toolbar">
+          <label class="pp-toggle">
+            <input
+              type="checkbox"
+              .checked=${this._sameForAll}
+              @change=${this._toggleSameForAll}
+            />
+            <span>${tr(lang, "schedule.edit_dialog.same_for_all")}</span>
+          </label>
+        </div>
         <div class="hour-header">
           <div class="day-col"></div>
           <div class="hour-labels">
@@ -340,8 +507,8 @@ class PowerPilzEventScheduleEditDialog extends PowerPilzDialogBase {
             )}
           </div>
         </div>
-        ${WEEK.map((w) => this._renderDayRow(w.key, w.dayIndex, lang))}
-        <div class="hint">${tr(lang, "event_schedule.edit_dialog.hint")}</div>
+        ${rows.map((row) => this._renderDayRow(row.key, row.label))}
+        <div class="hint">${tr(lang, "event_schedule.edit_dialog.hint_v2")}</div>
       </div>
     `;
   }
@@ -422,29 +589,46 @@ class PowerPilzEventScheduleEditDialog extends PowerPilzDialogBase {
     `;
   }
 
-  private _renderDayRow(key: DayKey, dayIndex: number, lang: "en" | "de"): TemplateResult {
+  private _renderDayRow(key: DayKey, label: string): TemplateResult {
+    // Cursor chip while pointer is over this track (and not dragging).
+    let cursorChip: TemplateResult | typeof nothing = nothing;
+    if (this._cursor?.day === key && !this._pinDrag) {
+      const left = (this._cursor.min / DAY_MINUTES) * 100;
+      cursorChip = html`
+        <div class="pp-cursor-chip" style=${styleMap({ left: `${left}%` })}>
+          ${_minToHm(this._cursor.min)}
+        </div>
+      `;
+    }
+
     return html`
       <div class="day-row">
-        <div class="day-col">${weekdayShort(lang, dayIndex)}</div>
+        <div class="day-col">${label}</div>
         <div
           class="day-track"
           data-day=${key}
           @click=${this._handleTrackClick}
+          @pointermove=${this._handleTrackPointerMove}
+          @pointerleave=${this._handleTrackPointerLeave}
+          @pointerup=${this._handlePinPointerUp}
         >
           ${this._eventsForDay(key).map((ev, idx) => {
-            const min = _toMin(ev.time);
+            const baseMin = _toMin(ev.time);
+            const isMoving = this._pinDrag?.day === key && this._pinDrag.index === idx;
+            const min = isMoving ? baseMin + (this._pinDrag?.deltaMin ?? 0) : baseMin;
             const left = (min / DAY_MINUTES) * 100;
             return html`
               <div
-                class="pp-pin"
+                class="pp-pin ${isMoving ? "moving" : ""}"
                 data-day=${key}
                 data-index=${idx}
                 style=${styleMap({ left: `${left}%` })}
                 title="${_minToHm(min)}"
-                @click=${this._handlePinClick}
+                @pointerdown=${this._handlePinPointerDown}
               ></div>
             `;
           })}
+          ${cursorChip}
         </div>
       </div>
     `;
@@ -503,7 +687,9 @@ class PowerPilzEventScheduleEditDialog extends PowerPilzDialogBase {
             transparent 75%),
           rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.04);
         cursor: copy;
-        overflow: hidden;
+        /* overflow visible so the cursor-time chip can render above
+         * the track. Pin positions are clamped, nothing else leaks. */
+        overflow: visible;
         user-select: none;
       }
 
@@ -516,11 +702,63 @@ class PowerPilzEventScheduleEditDialog extends PowerPilzDialogBase {
         background-color: var(--primary-color, #03a9f4);
         box-shadow: 0 0 0 2px var(--card-background-color, #fff);
         transform: translate(-50%, -50%);
-        cursor: pointer;
+        cursor: grab;
+        touch-action: none;
         transition: transform 0.12s ease;
       }
       .pp-pin:hover {
         transform: translate(-50%, -50%) scale(1.15);
+      }
+      .pp-pin.moving {
+        cursor: grabbing;
+        opacity: 0.9;
+      }
+
+      /* ----- Toolbar (same-for-all toggle) ----- */
+      .pp-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 2px 8px;
+      }
+      .pp-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--primary-text-color);
+        cursor: pointer;
+        user-select: none;
+      }
+      .pp-toggle input {
+        accent-color: var(--primary-color, #03a9f4);
+        cursor: pointer;
+      }
+
+      /* ----- Cursor time hint while hovering a track ----- */
+      .pp-cursor-chip {
+        position: absolute;
+        top: -22px;
+        transform: translateX(-50%);
+        background: var(--primary-text-color);
+        color: var(--card-background-color, #fff);
+        font-size: 10px;
+        font-weight: 600;
+        padding: 2px 6px;
+        border-radius: 4px;
+        pointer-events: none;
+        white-space: nowrap;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+        z-index: 5;
+      }
+      .pp-cursor-chip::after {
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        border: 3px solid transparent;
+        border-top-color: var(--primary-text-color);
       }
 
       .hint {

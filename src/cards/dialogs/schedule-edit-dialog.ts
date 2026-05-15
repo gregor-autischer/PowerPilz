@@ -65,6 +65,19 @@ interface DragState {
   endMin: number;
 }
 
+/** State while dragging an existing block to a new position. */
+interface MoveDragState {
+  day: DayKey;
+  index: number;
+  trackEl: HTMLElement;
+  pointerId: number;
+  origFrom: number;     // minutes
+  origTo: number;       // minutes
+  anchorClientX: number;
+  deltaMin: number;     // current snapped delta
+  moved: boolean;
+}
+
 interface EditingState {
   day: DayKey;
   index: number;
@@ -104,13 +117,22 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
   public scheduleEntityId = "";
 
   @state() private _blocks: WeekBlocks = _emptyWeek();
+  /** Single "uniform" template used when same-for-all-days is enabled.
+   *  Stored independently from `_blocks` so toggling the flag off
+   *  restores the per-day data the user had before. */
+  @state() private _uniformBlocks: ScheduleBlock[] = [];
+  @state() private _sameForAll = false;
   @state() private _loading = true;
   @state() private _loadError?: string;
   @state() private _saving = false;
   @state() private _dirty = false;
 
   @state() private _drag?: DragState;
+  @state() private _moveDrag?: MoveDragState;
   @state() private _editing?: EditingState;
+  /** Live cursor position over a track, used to show the time hint
+   *  while hovering. */
+  @state() private _cursor?: { day: DayKey; min: number };
 
   connectedCallback(): void {
     super.connectedCallback();
@@ -175,12 +197,27 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
     this._saving = true;
     this.lockClose = true;
     try {
+      // When same-for-all-days is enabled, flatten the uniform template
+      // onto every day in the saved payload. The per-day `_blocks` state
+      // is left untouched so the user can toggle back and see the old
+      // per-day plan reappear without losing data.
+      const payload = this._sameForAll
+        ? {
+            monday: this._uniformBlocks,
+            tuesday: this._uniformBlocks,
+            wednesday: this._uniformBlocks,
+            thursday: this._uniformBlocks,
+            friday: this._uniformBlocks,
+            saturday: this._uniformBlocks,
+            sunday: this._uniformBlocks,
+          }
+        : this._blocks;
       await this.hass.callService(
         "powerpilz_companion",
         "set_schedule_blocks",
         {
           entity_id: this.scheduleEntityId,
-          blocks: this._blocks,
+          blocks: payload,
         },
       );
       this._dirty = false;
@@ -196,19 +233,45 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
   // Block list helpers
   // ------------------------------------------------------------
 
+  /** Returns the blocks for the given day, transparently routing to
+   *  `_uniformBlocks` when same-for-all-days is enabled. */
   private _blocksForDay(key: DayKey): ScheduleBlock[] {
+    if (this._sameForAll) return [...this._uniformBlocks];
     const blocks = this._blocks[key];
     return Array.isArray(blocks) ? [...blocks] : [];
   }
 
   private _setBlocksForDay(key: DayKey, blocks: ScheduleBlock[]): void {
     const cleaned = _sortAndMerge(blocks);
-    this._blocks = { ...this._blocks, [key]: cleaned };
+    if (this._sameForAll) {
+      this._uniformBlocks = cleaned;
+    } else {
+      this._blocks = { ...this._blocks, [key]: cleaned };
+    }
     this._dirty = true;
   }
 
+  private _toggleSameForAll = (): void => {
+    const next = !this._sameForAll;
+    if (next) {
+      // Switching ON: seed the uniform template. Prefer the first day
+      // that already has blocks (Mon → Sun); fall back to empty so the
+      // user starts with a clean slate they can build out.
+      const seed = WEEK
+        .map((w) => this._blocks[w.key])
+        .find((b) => Array.isArray(b) && b.length > 0);
+      this._uniformBlocks = seed ? [...seed] : [];
+    }
+    // Switching OFF: leave `_blocks` untouched — the original per-day
+    // plan reappears unchanged. `_uniformBlocks` stays around in case
+    // the user toggles back on.
+    this._sameForAll = next;
+    this._dirty = true;
+  };
+
   // ------------------------------------------------------------
-  // Drag-to-create interaction
+  // Pointer interaction — paint new blocks, move existing blocks,
+  // and track cursor position for the live time hint.
   // ------------------------------------------------------------
 
   private _pxToMin(trackEl: HTMLElement, clientX: number): number {
@@ -221,6 +284,7 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
   private _handleTrackPointerDown = (event: PointerEvent): void => {
     if (event.button !== 0) return;
     if (this._loading || this._loadError) return;
+    // Block-clicks are handled by their own pointerdown handler.
     if ((event.target as HTMLElement).closest(".pp-block")) return;
 
     const trackEl = event.currentTarget as HTMLElement;
@@ -241,15 +305,58 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
   };
 
   private _handleTrackPointerMove = (event: PointerEvent): void => {
-    if (!this._drag) return;
-    if (event.pointerId !== this._drag.pointerId) return;
-    const endMin = this._pxToMin(this._drag.trackEl, event.clientX);
-    if (endMin !== this._drag.endMin) {
-      this._drag = { ...this._drag, endMin };
+    const trackEl = event.currentTarget as HTMLElement;
+    const day = trackEl.dataset.day as DayKey | undefined;
+
+    if (this._moveDrag && event.pointerId === this._moveDrag.pointerId) {
+      // Compute delta against the original drag-start pointer x.
+      const rect = trackEl.getBoundingClientRect();
+      const dxPx = event.clientX - this._moveDrag.anchorClientX;
+      const dxMinRaw = (dxPx / rect.width) * DAY_MINUTES;
+      let delta = Math.round(dxMinRaw / SNAP_MINUTES) * SNAP_MINUTES;
+      // Clamp so the moved block can't slide past the day boundaries.
+      const minDelta = -this._moveDrag.origFrom;
+      const maxDelta = DAY_MINUTES - this._moveDrag.origTo;
+      if (delta < minDelta) delta = minDelta;
+      if (delta > maxDelta) delta = maxDelta;
+      if (delta !== this._moveDrag.deltaMin) {
+        this._moveDrag = {
+          ...this._moveDrag,
+          deltaMin: delta,
+          moved: this._moveDrag.moved || delta !== 0,
+        };
+      }
+      return;
+    }
+
+    if (this._drag && event.pointerId === this._drag.pointerId) {
+      const endMin = this._pxToMin(this._drag.trackEl, event.clientX);
+      if (endMin !== this._drag.endMin) {
+        this._drag = { ...this._drag, endMin };
+      }
+      return;
+    }
+
+    // Hover hint: update the cursor time chip while no drag is active.
+    if (day) {
+      const min = this._pxToMin(trackEl, event.clientX);
+      if (!this._cursor || this._cursor.day !== day || this._cursor.min !== min) {
+        this._cursor = { day, min };
+      }
     }
   };
 
+  private _handleTrackPointerLeave = (_event: PointerEvent): void => {
+    if (this._moveDrag || this._drag) return;
+    this._cursor = undefined;
+  };
+
   private _handleTrackPointerUp = (event: PointerEvent): void => {
+    // Move-existing path takes priority over paint-new.
+    if (this._moveDrag && event.pointerId === this._moveDrag.pointerId) {
+      this._finishMoveDrag();
+      return;
+    }
     if (!this._drag) return;
     if (event.pointerId !== this._drag.pointerId) return;
     const drag = this._drag;
@@ -271,6 +378,86 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
     this._setBlocksForDay(drag.day, existing);
   };
 
+  // ------------------------------------------------------------
+  // Drag-to-move existing block
+  // ------------------------------------------------------------
+
+  private _handleBlockPointerDown = (event: PointerEvent): void => {
+    if (event.button !== 0) return;
+    if (this._loading || this._loadError) return;
+    const el = event.currentTarget as HTMLElement;
+    const day = el.dataset.day as DayKey | undefined;
+    const idx = parseInt(el.dataset.index ?? "-1", 10);
+    if (!day || idx < 0) return;
+    const trackEl = el.parentElement as HTMLElement | null;
+    if (!trackEl) return;
+
+    const blocks = this._blocksForDay(day);
+    const block = blocks[idx];
+    if (!block) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    try { trackEl.setPointerCapture(event.pointerId); } catch { /* ignore */ }
+
+    this._moveDrag = {
+      day,
+      index: idx,
+      trackEl,
+      pointerId: event.pointerId,
+      origFrom: _toMin(block.from),
+      origTo: _toMin(block.to),
+      anchorClientX: event.clientX,
+      deltaMin: 0,
+      moved: false,
+    };
+  };
+
+  private _finishMoveDrag(): void {
+    const drag = this._moveDrag;
+    if (!drag) return;
+    this._moveDrag = undefined;
+    try { drag.trackEl.releasePointerCapture(drag.pointerId); } catch { /* ignore */ }
+
+    // Not moved meaningfully → treat as a click and open the edit modal.
+    if (!drag.moved || drag.deltaMin === 0) {
+      const blocks = this._blocksForDay(drag.day);
+      const block = blocks[drag.index];
+      if (!block) return;
+      this._editing = {
+        day: drag.day,
+        index: drag.index,
+        from: _normaliseHms(block.from),
+        to: _normaliseHms(block.to),
+        dataText: block.data ? JSON.stringify(block.data, null, 2) : "",
+      };
+      return;
+    }
+
+    // Compute the new position and apply collision + adjacency-merge.
+    const newFrom = drag.origFrom + drag.deltaMin;
+    const newTo = drag.origTo + drag.deltaMin;
+    const blocks = this._blocksForDay(drag.day);
+    const moved = blocks[drag.index];
+    if (!moved) return;
+
+    // Reject if the new range overlaps a different block (touching is OK
+    // — _sortAndMerge will fuse them).
+    const overlaps = blocks.some((b, i) => {
+      if (i === drag.index) return false;
+      return _rangesOverlap(_toMin(b.from), _toMin(b.to), newFrom, newTo);
+    });
+    if (overlaps) return; // discard move; old position stays
+
+    const updated: ScheduleBlock = {
+      from: _minToHms(newFrom),
+      to: _minToHms(newTo),
+    };
+    if (moved.data) updated.data = moved.data;
+    blocks[drag.index] = updated;
+    this._setBlocksForDay(drag.day, blocks);
+  }
+
   private _handleTrackPointerCancel = (event: PointerEvent): void => {
     if (!this._drag) return;
     if (event.pointerId !== this._drag.pointerId) return;
@@ -282,26 +469,8 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
   // Block-edit modal
   // ------------------------------------------------------------
 
-  private _handleBlockClick = (event: MouseEvent): void => {
-    event.stopPropagation();
-    const el = event.currentTarget as HTMLElement;
-    const day = el.dataset.day as DayKey | undefined;
-    const idx = parseInt(el.dataset.index ?? "-1", 10);
-    if (!day || idx < 0) return;
-    const blocks = this._blocksForDay(day);
-    const block = blocks[idx];
-    if (!block) return;
-
-    this._editing = {
-      day,
-      index: idx,
-      from: _normaliseHms(block.from),
-      to: _normaliseHms(block.to),
-      dataText: block.data
-        ? JSON.stringify(block.data, null, 2)
-        : "",
-    };
-  };
+  // Opening the edit modal is handled by `_finishMoveDrag` when the
+  // pointer-down on a block doesn't turn into an actual drag.
 
   private _updateEditingField(field: "from" | "to" | "dataText", value: string): void {
     if (!this._editing) return;
@@ -419,8 +588,25 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
       return html`<div class="msg error">${this._loadError}</div>`;
     }
 
+    // In same-for-all mode, render a single "All days" row that edits
+    // the shared `_uniformBlocks` template. The per-day `_blocks` are
+    // preserved so toggling back restores the original plan.
+    const rows = this._sameForAll
+      ? [{ key: "monday" as DayKey, label: tr(lang, "schedule.edit_dialog.all_days") }]
+      : WEEK.map((w) => ({ key: w.key, label: weekdayShort(lang, w.dayIndex) }));
+
     return html`
       <div class="editor">
+        <div class="pp-toolbar">
+          <label class="pp-toggle">
+            <input
+              type="checkbox"
+              .checked=${this._sameForAll}
+              @change=${this._toggleSameForAll}
+            />
+            <span>${tr(lang, "schedule.edit_dialog.same_for_all")}</span>
+          </label>
+        </div>
         <div class="hour-header">
           <div class="day-col"></div>
           <div class="hour-labels">
@@ -429,8 +615,8 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
             )}
           </div>
         </div>
-        ${WEEK.map((w) => this._renderDayRow(w.key, w.dayIndex, lang))}
-        <div class="hint">${tr(lang, "schedule.edit_dialog.hint_v2")}</div>
+        ${rows.map((row) => this._renderDayRow(row.key, row.label))}
+        <div class="hint">${tr(lang, "schedule.edit_dialog.hint_v3")}</div>
       </div>
     `;
   }
@@ -524,9 +710,10 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
     `;
   }
 
-  private _renderDayRow(key: DayKey, dayIndex: number, lang: "en" | "de"): TemplateResult {
+  private _renderDayRow(key: DayKey, label: string): TemplateResult {
     const blocks = this._blocksForDay(key);
 
+    // Ghost block during paint-new drag.
     let ghost: TemplateResult | typeof nothing = nothing;
     if (this._drag?.day === key) {
       const a = Math.min(this._drag.startMin, this._drag.endMin);
@@ -547,9 +734,21 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
       }
     }
 
+    // Live cursor-time chip while pointer is over this track and we're
+    // not in the middle of a drag.
+    let cursorChip: TemplateResult | typeof nothing = nothing;
+    if (this._cursor?.day === key && !this._drag && !this._moveDrag) {
+      const left = (this._cursor.min / DAY_MINUTES) * 100;
+      cursorChip = html`
+        <div class="pp-cursor-chip" style=${styleMap({ left: `${left}%` })}>
+          ${_minToHm(this._cursor.min)}
+        </div>
+      `;
+    }
+
     return html`
       <div class="day-row">
-        <div class="day-col">${weekdayShort(lang, dayIndex)}</div>
+        <div class="day-col">${label}</div>
         <div
           class="day-track"
           data-day=${key}
@@ -557,26 +756,36 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
           @pointermove=${this._handleTrackPointerMove}
           @pointerup=${this._handleTrackPointerUp}
           @pointercancel=${this._handleTrackPointerCancel}
+          @pointerleave=${this._handleTrackPointerLeave}
         >
           ${blocks.map((b, idx) => {
-            const start = _toMin(b.from);
-            const end = _toMin(b.to);
+            // While this block is being dragged-to-move, render it at
+            // its temporary position. The actual storage isn't mutated
+            // until pointerup.
+            const isMoving = this._moveDrag?.day === key && this._moveDrag.index === idx;
+            const baseFrom = _toMin(b.from);
+            const baseTo = _toMin(b.to);
+            const start = isMoving ? baseFrom + (this._moveDrag?.deltaMin ?? 0) : baseFrom;
+            const end = isMoving ? baseTo + (this._moveDrag?.deltaMin ?? 0) : baseTo;
             const left = (start / DAY_MINUTES) * 100;
             const width = ((end - start) / DAY_MINUTES) * 100;
+            const fromLabel = isMoving ? _minToHm(start) : b.from.slice(0, 5);
+            const toLabel = isMoving ? _minToHm(end) : b.to.slice(0, 5);
             return html`
               <div
-                class="pp-block"
+                class="pp-block ${isMoving ? "moving" : ""}"
                 data-day=${key}
                 data-index=${idx}
                 style=${styleMap({ left: `${left}%`, width: `${width}%` })}
-                @click=${this._handleBlockClick}
-                title="${b.from.slice(0, 5)}–${b.to.slice(0, 5)}"
+                @pointerdown=${this._handleBlockPointerDown}
+                title="${fromLabel}–${toLabel}"
               >
-                <span class="pp-block-label">${b.from.slice(0, 5)}–${b.to.slice(0, 5)}</span>
+                <span class="pp-block-label">${fromLabel}–${toLabel}</span>
               </div>
             `;
           })}
           ${ghost}
+          ${cursorChip}
         </div>
       </div>
     `;
@@ -643,7 +852,10 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
             transparent 75%),
           rgba(var(--rgb-primary-text-color, 33, 33, 33), 0.04);
         cursor: crosshair;
-        overflow: hidden;
+        /* overflow visible so the cursor-time chip can render above
+         * the track. Block/ghost positions are clamped to 0..100% so
+         * nothing else leaks out. */
+        overflow: visible;
         user-select: none;
         touch-action: none;
       }
@@ -674,6 +886,57 @@ class PowerPilzScheduleEditDialog extends PowerPilzDialogBase {
         white-space: nowrap;
         padding: 0 6px;
         pointer-events: none;
+      }
+      .pp-block.moving {
+        opacity: 0.85;
+        cursor: grabbing;
+      }
+
+      /* ----- Toolbar (same-for-all toggle) ----- */
+      .pp-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 2px 8px;
+      }
+      .pp-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--primary-text-color);
+        cursor: pointer;
+        user-select: none;
+      }
+      .pp-toggle input {
+        accent-color: var(--primary-color, #03a9f4);
+        cursor: pointer;
+      }
+
+      /* ----- Cursor time hint while hovering a track ----- */
+      .pp-cursor-chip {
+        position: absolute;
+        top: -22px;
+        transform: translateX(-50%);
+        background: var(--primary-text-color);
+        color: var(--card-background-color, #fff);
+        font-size: 10px;
+        font-weight: 600;
+        padding: 2px 6px;
+        border-radius: 4px;
+        pointer-events: none;
+        white-space: nowrap;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+        z-index: 5;
+      }
+      .pp-cursor-chip::after {
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        border: 3px solid transparent;
+        border-top-color: var(--primary-text-color);
       }
 
       .hint {
