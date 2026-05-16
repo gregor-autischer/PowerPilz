@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import type { HomeAssistant, LovelaceCardConfig, LovelaceCardEditor } from "../../types";
 import { normalizeTrendDataSource, type TrendDataSource } from "../../utils/history";
 import { POWER_PILZ_VERSION } from "../../version";
+import { tr, haLang, type Lang } from "../../utils/i18n";
 
 interface EnergyCardConfig extends LovelaceCardConfig {
   type: "custom:power-pilz-energy-card";
@@ -103,7 +104,22 @@ const HOME_SUB_BLOCK_COUNT = 8;
 const GRID_SUB_BLOCK_COUNT = 2;
 const SUB_NODE_STATE_MODE_PREFIXES = new Set(["solar", "home", "grid", "grid_secondary"]);
 
-const subBlockFields = (prefix: "solar" | "home" | "grid" | "grid_secondary", index: number): HaFormSchema[] => {
+const trendSourceSelector = (lang: Lang | string | undefined) => ({
+  select: {
+    mode: "dropdown",
+    options: [
+      { label: tr(lang, "energy.editor.trend_source_auto"), value: "auto" },
+      { label: tr(lang, "energy.editor.trend_source_statistics"), value: "statistics" },
+      { label: tr(lang, "energy.editor.trend_source_history"), value: "history" }
+    ]
+  }
+}) as const;
+
+const subBlockFields = (
+  prefix: "solar" | "home" | "grid" | "grid_secondary",
+  index: number,
+  lang: Lang | string | undefined
+): HaFormSchema[] => {
   const slot = `${prefix}_sub_${index}`;
   const supportsStateMode = SUB_NODE_STATE_MODE_PREFIXES.has(prefix);
 
@@ -118,7 +134,7 @@ const subBlockFields = (prefix: "solar" | "home" | "grid" | "grid_secondary", in
     {
       type: "expandable",
       name: "",
-      title: "Identity",
+      title: tr(lang, "energy.editor.section_identity"),
       icon: "mdi:view-list-outline",
       expanded: true,
       schema: [
@@ -144,8 +160,8 @@ const subBlockFields = (prefix: "solar" | "home" | "grid" | "grid_secondary", in
             {
               name: `${slot}_icon_color`,
               selector: { ui_color: { include_state: true, include_none: true, default_color: "state" } },
-              helper: SUB_NODE_IDENTITY_VALUE_RENDER_HELP,
-              description: SUB_NODE_IDENTITY_VALUE_RENDER_HELP
+              helper: tr(lang, "energy.editor.sub_node_identity_value_render_help"),
+              description: tr(lang, "energy.editor.sub_node_identity_value_render_help")
             }
           ]
         }
@@ -156,7 +172,7 @@ const subBlockFields = (prefix: "solar" | "home" | "grid" | "grid_secondary", in
           {
             type: "expandable",
             name: "",
-            title: "Display mode",
+            title: tr(lang, "energy.editor.section_display_mode"),
             icon: "mdi:form-dropdown",
             expanded: true,
             schema: [
@@ -167,8 +183,14 @@ const subBlockFields = (prefix: "solar" | "home" | "grid" | "grid_secondary", in
                   {
                     name: `${slot}_state_mode`,
                     selector: { boolean: {} },
-                    helper: prefix === "solar" ? SOLAR_SUB_NODE_STATE_MODE_HELP : SUB_NODE_STATE_MODE_HELP,
-                    description: prefix === "solar" ? SOLAR_SUB_NODE_STATE_MODE_HELP : SUB_NODE_STATE_MODE_HELP
+                    helper:
+                      prefix === "solar"
+                        ? tr(lang, "energy.editor.solar_sub_node_state_mode_help")
+                        : tr(lang, "energy.editor.sub_node_state_mode_help"),
+                    description:
+                      prefix === "solar"
+                        ? tr(lang, "energy.editor.solar_sub_node_state_mode_help")
+                        : tr(lang, "energy.editor.sub_node_state_mode_help")
                   }
                 ]
               }
@@ -176,7 +198,7 @@ const subBlockFields = (prefix: "solar" | "home" | "grid" | "grid_secondary", in
           }
         ]
       : []),
-    nodeActionSection(slot)
+    nodeActionSection(slot, lang)
   ];
 };
 
@@ -184,7 +206,8 @@ const subBlockSchemas = (
   prefix: "solar" | "home" | "grid" | "grid_secondary",
   title: string,
   icon: string,
-  count: number
+  count: number,
+  lang: Lang | string | undefined
 ): HaFormSchema => ({
   type: "expandable",
   name: "",
@@ -194,10 +217,10 @@ const subBlockSchemas = (
   schema: Array.from({ length: count }, (_, index) => ({
     type: "expandable",
     name: "",
-    title: `Block ${index + 1}`,
+    title: tr(lang, "energy.editor.block_n", { n: index + 1 }),
     icon: "mdi:view-grid-outline",
     expanded: false,
-    schema: subBlockFields(prefix, index + 1)
+    schema: subBlockFields(prefix, index + 1, lang)
   }))
 });
 
@@ -235,17 +258,6 @@ const nodeSubSection = (title: string, schema: HaFormSchema[]): HaFormSchema => 
   ]
 });
 
-const TREND_SOURCE_SELECTOR = {
-  select: {
-    mode: "dropdown",
-    options: [
-      { label: "Auto (recommended)", value: "auto" },
-      { label: "Statistics (fastest)", value: "statistics" },
-      { label: "History (raw)", value: "history" }
-    ]
-  }
-} as const;
-
 const toEditorTrendDataSource = (value: unknown): TrendDataSource | "auto" => {
   const normalized = normalizeTrendDataSource(value, "hybrid");
   return normalized === "hybrid" ? "auto" : normalized;
@@ -258,74 +270,17 @@ const toConfigTrendDataSource = (value: unknown): TrendDataSource | "auto" => {
   return "auto";
 };
 
-const SOLAR_AUTO_CALC_HELP =
-  "When enabled, the solar main node shows the sum of enabled solar sub-node entities instead of the solar entity. Solar sub-nodes with State mode enabled are excluded from this sum.";
-const HOME_AUTO_CALC_HELP =
-  "When enabled, the home main node is calculated as solar + grid + grid 2 - battery - battery 2 using compatible unit conversion.";
-const GRID_EXPORT_HIGHLIGHT_HELP =
-  "When enabled, negative grid values (energy exported to the grid) are highlighted in the trend with the export color.";
-const GRID_EXPORT_ICON_HIGHLIGHT_HELP =
-  "When enabled, the grid icon switches to the export icon color while the grid value is negative.";
-const GRID_VISIBLE_HELP =
-  "When enabled, the main grid node is shown. When disabled, the grid node is hidden.";
-const GRID_SECONDARY_VISIBLE_HELP =
-  "When enabled, the second grid node is shown. When disabled, the second grid node is hidden.";
-const SOLAR_VISIBLE_HELP =
-  "When enabled, the main solar node is shown. When disabled, the solar node is hidden.";
-const SOLAR_FLOW_DIRECTION_HELP =
-  "Flow direction: + value animates from Solar to Center. 0 or - value shows no solar flow.";
-const HOME_VISIBLE_HELP =
-  "When enabled, the main home node is shown. When disabled, the home node is hidden.";
-const HOME_FLOW_DIRECTION_HELP =
-  "Flow direction: + value animates from Center to Home. 0 or - value shows no home flow.";
-const BATTERY_VISIBLE_HELP =
-  "When enabled, the main battery node is shown. When disabled, the battery node is hidden.";
-const BATTERY_FLOW_DIRECTION_HELP =
-  "Flow direction: + value animates from Center to Battery (charging). - value animates Battery to Center (discharging).";
-const BATTERY_SECONDARY_VISIBLE_HELP =
-  "When enabled, the second battery node is shown. When disabled, the second battery node is hidden.";
-const BATTERY_SECONDARY_FLOW_DIRECTION_HELP =
-  "Flow direction: + value animates from Center to Battery 2 (charging). - value animates Battery 2 to Center (discharging).";
-const BATTERY_LOW_ALERT_COLOR_HELP =
-  "Color used for battery low-threshold alert styling (icon and low trend section).";
-const BATTERY_INVERT_FLOW_HELP =
-  "Reverse the animated arrow direction (charge ↔ discharge). Use this when your inverter reports the opposite sign for charge/discharge than what PowerPilz expects.";
-const BATTERY_INVERT_VALUE_SIGN_HELP =
-  "Flip the sign of the displayed kW/W value and the power trend graph. Independent from the flow toggle. Does not affect the SOC %.";
-const GRID_FLOW_DIRECTION_HELP =
-  "Flow direction: + value animates from Grid to Center (import). - value animates from Center to Grid (export).";
-const GRID_SECONDARY_FLOW_DIRECTION_HELP =
-  "Flow direction: + value animates from Grid 2 to Center (import). - value animates from Center to Grid 2 (export).";
-const SUB_NODE_IDENTITY_VALUE_RENDER_HELP =
-  "In default mode, this sub-node renders the entity as numeric value + unit.";
-const SUB_NODE_STATE_MODE_HELP =
-  "When enabled, this sub-node displays the entity state text (for example AUS/WW/HZ) instead of numeric value + unit.";
-const SOLAR_SUB_NODE_STATE_MODE_HELP =
-  "When enabled, this solar sub-node displays entity state text instead of numeric value + unit and is excluded from Solar auto-calc.";
-const AUTO_SCALE_UNITS_HELP =
-  "Automatically formats values with metric prefixes (for example W/kW/MW and Wh/kWh/MWh).";
-const UNIT_FIELD_HELP =
-  "Optional unit override/fallback. Used when entities have no unit and as preferred output unit for auto-calculated values.";
-const DECIMALS_DEFAULT_HELP =
-  "Default decimal precision for displayed values and fallback when base/prefixed decimals are not set.";
-const DECIMALS_BASE_HELP =
-  "Decimal precision for base units (W, Wh) when Auto unit scaling is enabled.";
-const DECIMALS_PREFIXED_HELP =
-  "Decimal precision for prefixed units (kW, MW, kWh, MWh) when Auto unit scaling is enabled.";
-const TREND_SOURCE_HELP =
-  "Controls where trend data is fetched from. In most setups, keep Auto (recommended), which prefers statistics and falls back to history automatically.";
-const NODE_ACTIONS_ENABLED_HELP =
-  "When on, each node has its own tap/hold/double-tap, configured inside that node's own Interactions section. Tap defaults to the zoom view, long-press to the node detail dialog. The card-level Tap/Hold/Double-tap fields below are then no longer applied to node clicks.";
-const NODE_INTERACTION_HELP =
-  "Choose what happens when you tap, long-press or double-tap this node. Long-press defaults to opening the PowerPilz node detail dialog with a history graph.";
-
 /** Builds an "Interactions" expandable section for a given node prefix
  *  (e.g. "solar", "home_sub_3"). Mirrors the Mushroom card's
  *  tap/hold/double-tap UI exactly. */
-const nodeActionSection = (prefix: string, title = "Interactions"): HaFormSchema => ({
+const nodeActionSection = (
+  prefix: string,
+  lang: Lang | string | undefined,
+  title?: string
+): HaFormSchema => ({
   type: "expandable",
   name: "",
-  title,
+  title: title ?? tr(lang, "energy.editor.section_interactions"),
   icon: "mdi:gesture-tap",
   expanded: false,
   schema: [
@@ -336,8 +291,8 @@ const nodeActionSection = (prefix: string, title = "Interactions"): HaFormSchema
         {
           name: `${prefix}_tap_action`,
           selector: { ui_action: {} },
-          helper: NODE_INTERACTION_HELP,
-          description: NODE_INTERACTION_HELP
+          helper: tr(lang, "energy.editor.node_interaction_help"),
+          description: tr(lang, "energy.editor.node_interaction_help")
         },
         {
           name: `${prefix}_hold_action`,
@@ -352,8 +307,8 @@ const nodeActionSection = (prefix: string, title = "Interactions"): HaFormSchema
   ]
 });
 
-const SCHEMA: HaFormSchema[] = [
-  nodeStyleSection("Center visuals", "mdi:palette-outline", [
+const buildSchema = (lang: Lang | string | undefined): HaFormSchema[] => [
+  nodeStyleSection(tr(lang, "energy.editor.section_center_visuals"), "mdi:palette-outline", [
     { name: "core_icon", selector: { icon: {} }, context: { icon_entity: "home_entity" } },
     {
       name: "core_icon_color",
@@ -367,7 +322,7 @@ const SCHEMA: HaFormSchema[] = [
   {
     type: "expandable",
     name: "",
-    title: "Units and Trend settings",
+    title: tr(lang, "energy.editor.section_units_trend"),
     icon: "mdi:chart-line",
     expanded: false,
     schema: [
@@ -381,7 +336,7 @@ const SCHEMA: HaFormSchema[] = [
       {
         type: "expandable",
         name: "",
-        title: "Auto scaling",
+        title: tr(lang, "energy.editor.section_auto_scaling"),
         icon: "mdi:scale-balance",
         expanded: true,
         schema: [
@@ -392,8 +347,8 @@ const SCHEMA: HaFormSchema[] = [
               {
                 name: "auto_scale_units",
                 selector: { boolean: {} },
-                helper: AUTO_SCALE_UNITS_HELP,
-                description: AUTO_SCALE_UNITS_HELP
+                helper: tr(lang, "energy.editor.auto_scale_units_help"),
+                description: tr(lang, "energy.editor.auto_scale_units_help")
               }
             ]
           },
@@ -405,14 +360,14 @@ const SCHEMA: HaFormSchema[] = [
               {
                 name: "decimals_prefixed_unit",
                 selector: { number: { mode: "box", min: 0, max: 4, step: 1 } },
-                helper: DECIMALS_PREFIXED_HELP,
-                description: DECIMALS_PREFIXED_HELP
+                helper: tr(lang, "energy.editor.decimals_prefixed_help"),
+                description: tr(lang, "energy.editor.decimals_prefixed_help")
               },
               {
                 name: "decimals_base_unit",
                 selector: { number: { mode: "box", min: 0, max: 4, step: 1 } },
-                helper: DECIMALS_BASE_HELP,
-                description: DECIMALS_BASE_HELP
+                helper: tr(lang, "energy.editor.decimals_base_help"),
+                description: tr(lang, "energy.editor.decimals_base_help")
               }
             ]
           }
@@ -421,7 +376,7 @@ const SCHEMA: HaFormSchema[] = [
       {
         type: "expandable",
         name: "",
-        title: "Display format",
+        title: tr(lang, "energy.editor.section_display_format"),
         icon: "mdi:format-list-numbered",
         expanded: true,
         schema: [
@@ -433,14 +388,14 @@ const SCHEMA: HaFormSchema[] = [
               {
                 name: "unit",
                 selector: { text: {} },
-                helper: UNIT_FIELD_HELP,
-                description: UNIT_FIELD_HELP
+                helper: tr(lang, "energy.editor.unit_field_help"),
+                description: tr(lang, "energy.editor.unit_field_help")
               },
               {
                 name: "decimals",
                 selector: { number: { mode: "box", min: 0, max: 3, step: 1 } },
-                helper: DECIMALS_DEFAULT_HELP,
-                description: DECIMALS_DEFAULT_HELP
+                helper: tr(lang, "energy.editor.decimals_default_help"),
+                description: tr(lang, "energy.editor.decimals_default_help")
               }
             ]
           }
@@ -449,7 +404,7 @@ const SCHEMA: HaFormSchema[] = [
       {
         type: "expandable",
         name: "",
-        title: "Trend source",
+        title: tr(lang, "energy.editor.section_trend_source"),
         icon: "mdi:database-search",
         expanded: true,
         schema: [
@@ -459,9 +414,9 @@ const SCHEMA: HaFormSchema[] = [
             schema: [
               {
                 name: "trend_data_source",
-                selector: TREND_SOURCE_SELECTOR,
-                helper: TREND_SOURCE_HELP,
-                description: TREND_SOURCE_HELP
+                selector: trendSourceSelector(lang),
+                helper: tr(lang, "energy.editor.trend_source_help"),
+                description: tr(lang, "energy.editor.trend_source_help")
               }
             ]
           }
@@ -472,7 +427,7 @@ const SCHEMA: HaFormSchema[] = [
   {
     type: "expandable",
     name: "",
-    title: "Solar node",
+    title: tr(lang, "energy.editor.section_solar_node"),
     icon: "mdi:weather-sunny",
     expanded: false,
     schema: [
@@ -483,15 +438,15 @@ const SCHEMA: HaFormSchema[] = [
           {
             name: "solar_visible",
             selector: { boolean: {} },
-            helper: SOLAR_VISIBLE_HELP,
-            description: SOLAR_VISIBLE_HELP
+            helper: tr(lang, "energy.editor.solar_visible_help"),
+            description: tr(lang, "energy.editor.solar_visible_help")
           }
         ]
       },
       {
         type: "expandable",
         name: "",
-        title: "Identity",
+        title: tr(lang, "energy.editor.section_identity"),
         icon: "mdi:view-list-outline",
         expanded: true,
         schema: [
@@ -503,8 +458,8 @@ const SCHEMA: HaFormSchema[] = [
               {
                 name: "solar_entity",
                 selector: { entity: { filter: { domain: ["sensor", "input_number", "number"] } } },
-                helper: SOLAR_FLOW_DIRECTION_HELP,
-                description: SOLAR_FLOW_DIRECTION_HELP
+                helper: tr(lang, "energy.editor.solar_flow_direction_help"),
+                description: tr(lang, "energy.editor.solar_flow_direction_help")
               },
               { name: "solar_label", selector: { text: {} } }
             ]
@@ -523,28 +478,28 @@ const SCHEMA: HaFormSchema[] = [
           }
         ]
       },
-      nodeSubSection("Calculation", [
+      nodeSubSection(tr(lang, "energy.editor.section_calculation"), [
         {
           name: "solar_auto_calculate",
           selector: { boolean: {} },
-          helper: SOLAR_AUTO_CALC_HELP,
-          description: SOLAR_AUTO_CALC_HELP
+          helper: tr(lang, "energy.editor.solar_auto_calc_help"),
+          description: tr(lang, "energy.editor.solar_auto_calc_help")
         }
       ]),
-      nodeSubSection("Trend", [
+      nodeSubSection(tr(lang, "energy.editor.section_trend"), [
         { name: "solar_trend", selector: { boolean: {} } },
         {
           name: "solar_trend_color",
           selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
         }
       ]),
-      nodeActionSection("solar")
+      nodeActionSection("solar", lang)
     ]
   },
   {
     type: "expandable",
     name: "",
-    title: "Grid node",
+    title: tr(lang, "energy.editor.section_grid_node"),
     icon: "mdi:transmission-tower",
     expanded: false,
     schema: [
@@ -555,15 +510,15 @@ const SCHEMA: HaFormSchema[] = [
           {
             name: "grid_visible",
             selector: { boolean: {} },
-            helper: GRID_VISIBLE_HELP,
-            description: GRID_VISIBLE_HELP
+            helper: tr(lang, "energy.editor.grid_visible_help"),
+            description: tr(lang, "energy.editor.grid_visible_help")
           }
         ]
       },
       {
         type: "expandable",
         name: "",
-        title: "Identity",
+        title: tr(lang, "energy.editor.section_identity"),
         icon: "mdi:view-list-outline",
         expanded: true,
         schema: [
@@ -575,8 +530,8 @@ const SCHEMA: HaFormSchema[] = [
               {
                 name: "grid_entity",
                 selector: { entity: { filter: { domain: ["sensor", "input_number", "number"] } } },
-                helper: GRID_FLOW_DIRECTION_HELP,
-                description: GRID_FLOW_DIRECTION_HELP
+                helper: tr(lang, "energy.editor.grid_flow_direction_help"),
+                description: tr(lang, "energy.editor.grid_flow_direction_help")
               },
               { name: "grid_label", selector: { text: {} } }
             ]
@@ -595,19 +550,19 @@ const SCHEMA: HaFormSchema[] = [
           }
         ]
       },
-      nodeSubSection("Trend", [
+      nodeSubSection(tr(lang, "energy.editor.section_trend"), [
         { name: "grid_trend", selector: { boolean: {} } },
         {
           name: "grid_trend_color",
           selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
         }
       ]),
-      nodeSubSection("Export", [
+      nodeSubSection(tr(lang, "energy.editor.section_export"), [
         {
           name: "grid_export_highlight",
           selector: { boolean: {} },
-          helper: GRID_EXPORT_HIGHLIGHT_HELP,
-          description: GRID_EXPORT_HIGHLIGHT_HELP
+          helper: tr(lang, "energy.editor.grid_export_highlight_help"),
+          description: tr(lang, "energy.editor.grid_export_highlight_help")
         },
         {
           name: "grid_export_trend_color",
@@ -616,21 +571,21 @@ const SCHEMA: HaFormSchema[] = [
         {
           name: "grid_export_icon_highlight",
           selector: { boolean: {} },
-          helper: GRID_EXPORT_ICON_HIGHLIGHT_HELP,
-          description: GRID_EXPORT_ICON_HIGHLIGHT_HELP
+          helper: tr(lang, "energy.editor.grid_export_icon_highlight_help"),
+          description: tr(lang, "energy.editor.grid_export_icon_highlight_help")
         },
         {
           name: "grid_export_icon_color",
           selector: { ui_color: { include_state: false, include_none: false, default_color: "red" } }
         }
       ]),
-      nodeActionSection("grid")
+      nodeActionSection("grid", lang)
     ]
   },
   {
     type: "expandable",
     name: "",
-    title: "Grid 2 node",
+    title: tr(lang, "energy.editor.section_grid_2_node"),
     icon: "mdi:transmission-tower",
     expanded: false,
     schema: [
@@ -641,15 +596,15 @@ const SCHEMA: HaFormSchema[] = [
           {
             name: "grid_secondary_visible",
             selector: { boolean: {} },
-            helper: GRID_SECONDARY_VISIBLE_HELP,
-            description: GRID_SECONDARY_VISIBLE_HELP
+            helper: tr(lang, "energy.editor.grid_secondary_visible_help"),
+            description: tr(lang, "energy.editor.grid_secondary_visible_help")
           }
         ]
       },
       {
         type: "expandable",
         name: "",
-        title: "Identity",
+        title: tr(lang, "energy.editor.section_identity"),
         icon: "mdi:view-list-outline",
         expanded: true,
         schema: [
@@ -661,8 +616,8 @@ const SCHEMA: HaFormSchema[] = [
               {
                 name: "grid_secondary_entity",
                 selector: { entity: { filter: { domain: ["sensor", "input_number", "number"] } } },
-                helper: GRID_SECONDARY_FLOW_DIRECTION_HELP,
-                description: GRID_SECONDARY_FLOW_DIRECTION_HELP
+                helper: tr(lang, "energy.editor.grid_secondary_flow_direction_help"),
+                description: tr(lang, "energy.editor.grid_secondary_flow_direction_help")
               },
               { name: "grid_secondary_label", selector: { text: {} } }
             ]
@@ -681,19 +636,19 @@ const SCHEMA: HaFormSchema[] = [
           }
         ]
       },
-      nodeSubSection("Trend", [
+      nodeSubSection(tr(lang, "energy.editor.section_trend"), [
         { name: "grid_secondary_trend", selector: { boolean: {} } },
         {
           name: "grid_secondary_trend_color",
           selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
         }
       ]),
-      nodeSubSection("Export", [
+      nodeSubSection(tr(lang, "energy.editor.section_export"), [
         {
           name: "grid_secondary_export_highlight",
           selector: { boolean: {} },
-          helper: GRID_EXPORT_HIGHLIGHT_HELP,
-          description: GRID_EXPORT_HIGHLIGHT_HELP
+          helper: tr(lang, "energy.editor.grid_export_highlight_help"),
+          description: tr(lang, "energy.editor.grid_export_highlight_help")
         },
         {
           name: "grid_secondary_export_trend_color",
@@ -702,21 +657,21 @@ const SCHEMA: HaFormSchema[] = [
         {
           name: "grid_secondary_export_icon_highlight",
           selector: { boolean: {} },
-          helper: GRID_EXPORT_ICON_HIGHLIGHT_HELP,
-          description: GRID_EXPORT_ICON_HIGHLIGHT_HELP
+          helper: tr(lang, "energy.editor.grid_export_icon_highlight_help"),
+          description: tr(lang, "energy.editor.grid_export_icon_highlight_help")
         },
         {
           name: "grid_secondary_export_icon_color",
           selector: { ui_color: { include_state: false, include_none: false, default_color: "red" } }
         }
       ]),
-      nodeActionSection("grid_secondary")
+      nodeActionSection("grid_secondary", lang)
     ]
   },
   {
     type: "expandable",
     name: "",
-    title: "Home node",
+    title: tr(lang, "energy.editor.section_home_node"),
     icon: "mdi:home-lightning-bolt",
     expanded: false,
     schema: [
@@ -727,15 +682,15 @@ const SCHEMA: HaFormSchema[] = [
           {
             name: "home_visible",
             selector: { boolean: {} },
-            helper: HOME_VISIBLE_HELP,
-            description: HOME_VISIBLE_HELP
+            helper: tr(lang, "energy.editor.home_visible_help"),
+            description: tr(lang, "energy.editor.home_visible_help")
           }
         ]
       },
       {
         type: "expandable",
         name: "",
-        title: "Identity",
+        title: tr(lang, "energy.editor.section_identity"),
         icon: "mdi:view-list-outline",
         expanded: true,
         schema: [
@@ -747,8 +702,8 @@ const SCHEMA: HaFormSchema[] = [
               {
                 name: "home_entity",
                 selector: { entity: { filter: { domain: ["sensor", "input_number", "number"] } } },
-                helper: HOME_FLOW_DIRECTION_HELP,
-                description: HOME_FLOW_DIRECTION_HELP
+                helper: tr(lang, "energy.editor.home_flow_direction_help"),
+                description: tr(lang, "energy.editor.home_flow_direction_help")
               },
               { name: "home_label", selector: { text: {} } }
             ]
@@ -767,28 +722,28 @@ const SCHEMA: HaFormSchema[] = [
           }
         ]
       },
-      nodeSubSection("Calculation", [
+      nodeSubSection(tr(lang, "energy.editor.section_calculation"), [
         {
           name: "home_auto_calculate",
           selector: { boolean: {} },
-          helper: HOME_AUTO_CALC_HELP,
-          description: HOME_AUTO_CALC_HELP
+          helper: tr(lang, "energy.editor.home_auto_calc_help"),
+          description: tr(lang, "energy.editor.home_auto_calc_help")
         }
       ]),
-      nodeSubSection("Trend", [
+      nodeSubSection(tr(lang, "energy.editor.section_trend"), [
         { name: "home_trend", selector: { boolean: {} } },
         {
           name: "home_trend_color",
           selector: { ui_color: { include_state: true, include_none: false, default_color: "purple" } }
         }
       ]),
-      nodeActionSection("home")
+      nodeActionSection("home", lang)
     ]
   },
   {
     type: "expandable",
     name: "",
-    title: "Battery node",
+    title: tr(lang, "energy.editor.section_battery_node"),
     icon: "mdi:battery",
     expanded: false,
     schema: [
@@ -799,15 +754,15 @@ const SCHEMA: HaFormSchema[] = [
           {
             name: "battery_visible",
             selector: { boolean: {} },
-            helper: BATTERY_VISIBLE_HELP,
-            description: BATTERY_VISIBLE_HELP
+            helper: tr(lang, "energy.editor.battery_visible_help"),
+            description: tr(lang, "energy.editor.battery_visible_help")
           }
         ]
       },
       {
         type: "expandable",
         name: "",
-        title: "Identity",
+        title: tr(lang, "energy.editor.section_identity"),
         icon: "mdi:view-list-outline",
         expanded: true,
         schema: [
@@ -819,8 +774,8 @@ const SCHEMA: HaFormSchema[] = [
               {
                 name: "battery_entity",
                 selector: { entity: { filter: { domain: ["sensor", "input_number", "number"] } } },
-                helper: BATTERY_FLOW_DIRECTION_HELP,
-                description: BATTERY_FLOW_DIRECTION_HELP
+                helper: tr(lang, "energy.editor.battery_flow_direction_help"),
+                description: tr(lang, "energy.editor.battery_flow_direction_help")
               },
               { name: "battery_percentage_entity", selector: { entity: { filter: { domain: ["sensor", "input_number", "number"] } } } }
             ]
@@ -846,7 +801,7 @@ const SCHEMA: HaFormSchema[] = [
           }
         ]
       },
-      nodeSubSection("Trend", [
+      nodeSubSection(tr(lang, "energy.editor.section_trend"), [
         { name: "battery_trend", selector: { boolean: {} } },
         {
           name: "battery_trend_color",
@@ -856,7 +811,7 @@ const SCHEMA: HaFormSchema[] = [
       {
         type: "expandable",
         name: "",
-        title: "Sign convention",
+        title: tr(lang, "energy.editor.section_sign_convention"),
         icon: "mdi:swap-vertical",
         expanded: false,
         schema: [
@@ -868,14 +823,14 @@ const SCHEMA: HaFormSchema[] = [
               {
                 name: "battery_invert_flow",
                 selector: { boolean: {} },
-                helper: BATTERY_INVERT_FLOW_HELP,
-                description: BATTERY_INVERT_FLOW_HELP
+                helper: tr(lang, "energy.editor.battery_invert_flow_help"),
+                description: tr(lang, "energy.editor.battery_invert_flow_help")
               },
               {
                 name: "battery_invert_value_sign",
                 selector: { boolean: {} },
-                helper: BATTERY_INVERT_VALUE_SIGN_HELP,
-                description: BATTERY_INVERT_VALUE_SIGN_HELP
+                helper: tr(lang, "energy.editor.battery_invert_value_sign_help"),
+                description: tr(lang, "energy.editor.battery_invert_value_sign_help")
               }
             ]
           }
@@ -884,7 +839,7 @@ const SCHEMA: HaFormSchema[] = [
       {
         type: "expandable",
         name: "",
-        title: "Alert",
+        title: tr(lang, "energy.editor.section_alert"),
         icon: "mdi:alert-outline",
         expanded: true,
         schema: [
@@ -907,20 +862,20 @@ const SCHEMA: HaFormSchema[] = [
               {
                 name: "battery_low_alert_color",
                 selector: { ui_color: { include_state: false, include_none: false, default_color: "red" } },
-                helper: BATTERY_LOW_ALERT_COLOR_HELP,
-                description: BATTERY_LOW_ALERT_COLOR_HELP
+                helper: tr(lang, "energy.editor.battery_low_alert_color_help"),
+                description: tr(lang, "energy.editor.battery_low_alert_color_help")
               }
             ]
           }
         ]
       },
-      nodeActionSection("battery")
+      nodeActionSection("battery", lang)
     ]
   },
   {
     type: "expandable",
     name: "",
-    title: "Battery 2 node",
+    title: tr(lang, "energy.editor.section_battery_2_node"),
     icon: "mdi:battery-outline",
     expanded: false,
     schema: [
@@ -931,15 +886,15 @@ const SCHEMA: HaFormSchema[] = [
           {
             name: "battery_secondary_visible",
             selector: { boolean: {} },
-            helper: BATTERY_SECONDARY_VISIBLE_HELP,
-            description: BATTERY_SECONDARY_VISIBLE_HELP
+            helper: tr(lang, "energy.editor.battery_secondary_visible_help"),
+            description: tr(lang, "energy.editor.battery_secondary_visible_help")
           }
         ]
       },
       {
         type: "expandable",
         name: "",
-        title: "Identity",
+        title: tr(lang, "energy.editor.section_identity"),
         icon: "mdi:view-list-outline",
         expanded: true,
         schema: [
@@ -951,8 +906,8 @@ const SCHEMA: HaFormSchema[] = [
               {
                 name: "battery_secondary_entity",
                 selector: { entity: { filter: { domain: ["sensor", "input_number", "number"] } } },
-                helper: BATTERY_SECONDARY_FLOW_DIRECTION_HELP,
-                description: BATTERY_SECONDARY_FLOW_DIRECTION_HELP
+                helper: tr(lang, "energy.editor.battery_secondary_flow_direction_help"),
+                description: tr(lang, "energy.editor.battery_secondary_flow_direction_help")
               },
               { name: "battery_secondary_percentage_entity", selector: { entity: { filter: { domain: ["sensor", "input_number", "number"] } } } }
             ]
@@ -988,7 +943,7 @@ const SCHEMA: HaFormSchema[] = [
           }
         ]
       },
-      nodeSubSection("Trend", [
+      nodeSubSection(tr(lang, "energy.editor.section_trend"), [
         { name: "battery_secondary_trend", selector: { boolean: {} } },
         {
           name: "battery_secondary_trend_color",
@@ -998,7 +953,7 @@ const SCHEMA: HaFormSchema[] = [
       {
         type: "expandable",
         name: "",
-        title: "Sign convention",
+        title: tr(lang, "energy.editor.section_sign_convention"),
         icon: "mdi:swap-vertical",
         expanded: false,
         schema: [
@@ -1010,14 +965,14 @@ const SCHEMA: HaFormSchema[] = [
               {
                 name: "battery_secondary_invert_flow",
                 selector: { boolean: {} },
-                helper: BATTERY_INVERT_FLOW_HELP,
-                description: BATTERY_INVERT_FLOW_HELP
+                helper: tr(lang, "energy.editor.battery_invert_flow_help"),
+                description: tr(lang, "energy.editor.battery_invert_flow_help")
               },
               {
                 name: "battery_secondary_invert_value_sign",
                 selector: { boolean: {} },
-                helper: BATTERY_INVERT_VALUE_SIGN_HELP,
-                description: BATTERY_INVERT_VALUE_SIGN_HELP
+                helper: tr(lang, "energy.editor.battery_invert_value_sign_help"),
+                description: tr(lang, "energy.editor.battery_invert_value_sign_help")
               }
             ]
           }
@@ -1026,7 +981,7 @@ const SCHEMA: HaFormSchema[] = [
       {
         type: "expandable",
         name: "",
-        title: "Alert",
+        title: tr(lang, "energy.editor.section_alert"),
         icon: "mdi:alert-outline",
         expanded: true,
         schema: [
@@ -1049,24 +1004,24 @@ const SCHEMA: HaFormSchema[] = [
               {
                 name: "battery_secondary_low_alert_color",
                 selector: { ui_color: { include_state: false, include_none: false, default_color: "red" } },
-                helper: BATTERY_LOW_ALERT_COLOR_HELP,
-                description: BATTERY_LOW_ALERT_COLOR_HELP
+                helper: tr(lang, "energy.editor.battery_low_alert_color_help"),
+                description: tr(lang, "energy.editor.battery_low_alert_color_help")
               }
             ]
           }
         ]
       },
-      nodeActionSection("battery_secondary")
+      nodeActionSection("battery_secondary", lang)
     ]
   },
-  subBlockSchemas("solar", "Solar sub blocks", "mdi:solar-power-variant", SOLAR_SUB_BLOCK_COUNT),
-  subBlockSchemas("grid", "Grid 1 sub blocks", "mdi:transmission-tower", GRID_SUB_BLOCK_COUNT),
-  subBlockSchemas("grid_secondary", "Grid 2 sub blocks", "mdi:transmission-tower", GRID_SUB_BLOCK_COUNT),
-  subBlockSchemas("home", "Home sub blocks", "mdi:flash", HOME_SUB_BLOCK_COUNT),
+  subBlockSchemas("solar", tr(lang, "energy.editor.section_solar_sub_blocks"), "mdi:solar-power-variant", SOLAR_SUB_BLOCK_COUNT, lang),
+  subBlockSchemas("grid", tr(lang, "energy.editor.section_grid_1_sub_blocks"), "mdi:transmission-tower", GRID_SUB_BLOCK_COUNT, lang),
+  subBlockSchemas("grid_secondary", tr(lang, "energy.editor.section_grid_2_sub_blocks"), "mdi:transmission-tower", GRID_SUB_BLOCK_COUNT, lang),
+  subBlockSchemas("home", tr(lang, "energy.editor.section_home_sub_blocks"), "mdi:flash", HOME_SUB_BLOCK_COUNT, lang),
   {
     type: "expandable",
     name: "",
-    title: "Tap behavior",
+    title: tr(lang, "energy.editor.section_tap_behavior"),
     icon: "mdi:gesture-tap",
     expanded: false,
     schema: [
@@ -1077,16 +1032,16 @@ const SCHEMA: HaFormSchema[] = [
           {
             name: "node_actions_enabled",
             selector: { boolean: {} },
-            helper: NODE_ACTIONS_ENABLED_HELP,
-            description: NODE_ACTIONS_ENABLED_HELP
+            helper: tr(lang, "energy.editor.node_actions_enabled_help"),
+            description: tr(lang, "energy.editor.node_actions_enabled_help")
           }
         ]
       },
       {
         name: "entity",
         selector: { entity: {} },
-        helper: "Default entity used by card-level more-info actions. Each main node and sub-block can override its own entity via its Interactions section.",
-        description: "Default entity used by card-level more-info actions. Each main node and sub-block can override its own entity via its Interactions section."
+        helper: tr(lang, "energy.editor.default_entity_help"),
+        description: tr(lang, "energy.editor.default_entity_help")
       },
       { name: "tap_action", selector: { ui_action: {} } },
       { name: "hold_action", selector: { ui_action: {} } },
@@ -1094,118 +1049,6 @@ const SCHEMA: HaFormSchema[] = [
     ]
   }
 ];
-
-const LABELS: Record<string, string> = {
-  name: "Name",
-  home_visible: "Show home",
-  solar_visible: "Show solar",
-  grid_visible: "Show grid",
-  grid_secondary_visible: "Show grid 2",
-  battery_visible: "Show battery",
-  battery_secondary_visible: "Show battery 2",
-  battery_dual_alignment: "Battery 2 alignment",
-  home_auto_calculate: "Auto-calc home",
-  solar_auto_calculate: "Auto-calc solar",
-  home_entity: "Home sensor",
-  solar_entity: "Solar sensor",
-  grid_entity: "Grid sensor",
-  grid_secondary_entity: "Grid 2 sensor",
-  battery_entity: "Battery sensor",
-  battery_percentage_entity: "Battery SoC sensor",
-  battery_secondary_entity: "Battery 2 sensor",
-  battery_secondary_percentage_entity: "Battery 2 SoC sensor",
-  solar_sub_enabled: "Enable solar sub",
-  solar_sub_entity: "Solar sub sensor",
-  solar_sub_label: "Solar sub name",
-  solar_sub_icon: "Solar sub icon",
-  solar_sub_icon_color: "Solar sub color",
-  home_sub_enabled: "Enable home sub",
-  home_sub_entity: "Home sub sensor",
-  home_sub_label: "Home sub name",
-  home_sub_icon: "Home sub icon",
-  home_sub_icon_color: "Home sub color",
-  solar_label: "Solar name",
-  home_label: "Home name",
-  grid_label: "Grid name",
-  grid_secondary_label: "Grid 2 name",
-  battery_label: "Battery name",
-  battery_secondary_label: "Battery 2 name",
-  solar_icon: "Solar icon",
-  solar_icon_color: "Solar icon color",
-  solar_trend: "Solar trend",
-  solar_trend_color: "Solar trend color",
-  grid_icon: "Grid icon",
-  grid_icon_color: "Grid icon color",
-  grid_secondary_icon: "Grid 2 icon",
-  grid_secondary_icon_color: "Grid 2 icon color",
-  grid_secondary_trend: "Grid 2 trend",
-  grid_secondary_trend_color: "Grid 2 trend color",
-  grid_trend: "Grid trend",
-  grid_trend_color: "Grid trend color",
-  grid_export_highlight: "Highlight export in trend",
-  grid_export_trend_color: "Export trend color",
-  grid_export_icon_highlight: "Highlight export icon",
-  grid_export_icon_color: "Export icon color",
-  grid_secondary_export_highlight: "Highlight export in trend",
-  grid_secondary_export_trend_color: "Export trend color",
-  grid_secondary_export_icon_highlight: "Highlight export icon",
-  grid_secondary_export_icon_color: "Export icon color",
-  home_icon: "Home icon",
-  home_icon_color: "Home icon color",
-  home_trend: "Home trend",
-  home_trend_color: "Home trend color",
-  battery_icon: "Battery icon",
-  battery_icon_color: "Battery icon color",
-  battery_trend: "Battery trend",
-  battery_trend_color: "Battery trend color",
-  battery_secondary_icon: "Battery 2 icon",
-  battery_secondary_icon_color: "Battery 2 icon color",
-  battery_secondary_trend: "Battery 2 trend",
-  battery_secondary_trend_color: "Battery 2 trend color",
-  shared_trend_scale: "Shared trend scale",
-  trend_data_source: "Trend source",
-  battery_low_alert: "Low battery alert",
-  battery_low_threshold: "Low battery %",
-  battery_low_alert_color: "Low alert color",
-  battery_secondary_low_alert: "Battery 2 low alert",
-  battery_secondary_low_threshold: "Battery 2 low %",
-  battery_secondary_low_alert_color: "Low alert color",
-  battery_invert_flow: "Reverse flow direction",
-  battery_invert_value_sign: "Flip displayed value sign",
-  battery_secondary_invert_flow: "Reverse flow direction",
-  battery_secondary_invert_value_sign: "Flip displayed value sign",
-  core_icon: "Core icon",
-  core_icon_color: "Core icon color",
-  flow_color: "Flow line color",
-  unit: "Unit",
-  decimals: "Decimals",
-  auto_scale_units: "Auto unit scaling",
-  decimals_base_unit: "Decimals (base unit)",
-  decimals_prefixed_unit: "Decimals (prefixed units)",
-  entity: "Action entity",
-  tap_action: "Tap behavior",
-  hold_action: "Hold behavior (default: 24h overview)",
-  double_tap_action: "Double tap behavior",
-  node_actions_enabled: "Enable per-node interactions",
-  solar_tap_action: "Tap behavior (default: zoom view)",
-  solar_hold_action: "Hold behavior (default: node detail)",
-  solar_double_tap_action: "Double tap behavior",
-  grid_tap_action: "Tap behavior (default: zoom view)",
-  grid_hold_action: "Hold behavior (default: node detail)",
-  grid_double_tap_action: "Double tap behavior",
-  grid_secondary_tap_action: "Tap behavior (default: zoom view)",
-  grid_secondary_hold_action: "Hold behavior (default: node detail)",
-  grid_secondary_double_tap_action: "Double tap behavior",
-  home_tap_action: "Tap behavior (default: zoom view)",
-  home_hold_action: "Hold behavior (default: node detail)",
-  home_double_tap_action: "Double tap behavior",
-  battery_tap_action: "Tap behavior (default: zoom view)",
-  battery_hold_action: "Hold behavior (default: node detail)",
-  battery_double_tap_action: "Double tap behavior",
-  battery_secondary_tap_action: "Tap behavior (default: zoom view)",
-  battery_secondary_hold_action: "Hold behavior (default: node detail)",
-  battery_secondary_double_tap_action: "Double tap behavior"
-};
 
 @customElement("power-pilz-energy-card-editor")
 export class PowerPilzEnergyCardEditor extends LitElement implements LovelaceCardEditor {
@@ -1253,23 +1096,154 @@ export class PowerPilzEnergyCardEditor extends LitElement implements LovelaceCar
     };
   }
 
+  private labelMap(): Record<string, string> {
+    const lang = haLang(this.hass);
+    return {
+      name: tr(lang, "energy.editor.name"),
+      home_visible: tr(lang, "energy.editor.home_visible"),
+      solar_visible: tr(lang, "energy.editor.solar_visible"),
+      grid_visible: tr(lang, "energy.editor.grid_visible"),
+      grid_secondary_visible: tr(lang, "energy.editor.grid_secondary_visible"),
+      battery_visible: tr(lang, "energy.editor.battery_visible"),
+      battery_secondary_visible: tr(lang, "energy.editor.battery_secondary_visible"),
+      battery_dual_alignment: tr(lang, "energy.editor.battery_dual_alignment"),
+      home_auto_calculate: tr(lang, "energy.editor.home_auto_calculate"),
+      solar_auto_calculate: tr(lang, "energy.editor.solar_auto_calculate"),
+      home_entity: tr(lang, "energy.editor.home_entity"),
+      solar_entity: tr(lang, "energy.editor.solar_entity"),
+      grid_entity: tr(lang, "energy.editor.grid_entity"),
+      grid_secondary_entity: tr(lang, "energy.editor.grid_secondary_entity"),
+      battery_entity: tr(lang, "energy.editor.battery_entity"),
+      battery_percentage_entity: tr(lang, "energy.editor.battery_percentage_entity"),
+      battery_secondary_entity: tr(lang, "energy.editor.battery_secondary_entity"),
+      battery_secondary_percentage_entity: tr(lang, "energy.editor.battery_secondary_percentage_entity"),
+      solar_sub_enabled: tr(lang, "energy.editor.solar_sub_enabled"),
+      solar_sub_entity: tr(lang, "energy.editor.solar_sub_entity"),
+      solar_sub_label: tr(lang, "energy.editor.solar_sub_label"),
+      solar_sub_icon: tr(lang, "energy.editor.solar_sub_icon"),
+      solar_sub_icon_color: tr(lang, "energy.editor.solar_sub_icon_color"),
+      home_sub_enabled: tr(lang, "energy.editor.home_sub_enabled"),
+      home_sub_entity: tr(lang, "energy.editor.home_sub_entity"),
+      home_sub_label: tr(lang, "energy.editor.home_sub_label"),
+      home_sub_icon: tr(lang, "energy.editor.home_sub_icon"),
+      home_sub_icon_color: tr(lang, "energy.editor.home_sub_icon_color"),
+      solar_label: tr(lang, "energy.editor.solar_label"),
+      home_label: tr(lang, "energy.editor.home_label"),
+      grid_label: tr(lang, "energy.editor.grid_label"),
+      grid_secondary_label: tr(lang, "energy.editor.grid_secondary_label"),
+      battery_label: tr(lang, "energy.editor.battery_label"),
+      battery_secondary_label: tr(lang, "energy.editor.battery_secondary_label"),
+      solar_icon: tr(lang, "energy.editor.solar_icon"),
+      solar_icon_color: tr(lang, "energy.editor.solar_icon_color"),
+      solar_trend: tr(lang, "energy.editor.solar_trend"),
+      solar_trend_color: tr(lang, "energy.editor.solar_trend_color"),
+      grid_icon: tr(lang, "energy.editor.grid_icon"),
+      grid_icon_color: tr(lang, "energy.editor.grid_icon_color"),
+      grid_secondary_icon: tr(lang, "energy.editor.grid_secondary_icon"),
+      grid_secondary_icon_color: tr(lang, "energy.editor.grid_secondary_icon_color"),
+      grid_secondary_trend: tr(lang, "energy.editor.grid_secondary_trend"),
+      grid_secondary_trend_color: tr(lang, "energy.editor.grid_secondary_trend_color"),
+      grid_trend: tr(lang, "energy.editor.grid_trend"),
+      grid_trend_color: tr(lang, "energy.editor.grid_trend_color"),
+      grid_export_highlight: tr(lang, "energy.editor.grid_export_highlight"),
+      grid_export_trend_color: tr(lang, "energy.editor.grid_export_trend_color"),
+      grid_export_icon_highlight: tr(lang, "energy.editor.grid_export_icon_highlight"),
+      grid_export_icon_color: tr(lang, "energy.editor.grid_export_icon_color"),
+      grid_secondary_export_highlight: tr(lang, "energy.editor.grid_export_highlight"),
+      grid_secondary_export_trend_color: tr(lang, "energy.editor.grid_export_trend_color"),
+      grid_secondary_export_icon_highlight: tr(lang, "energy.editor.grid_export_icon_highlight"),
+      grid_secondary_export_icon_color: tr(lang, "energy.editor.grid_export_icon_color"),
+      home_icon: tr(lang, "energy.editor.home_icon"),
+      home_icon_color: tr(lang, "energy.editor.home_icon_color"),
+      home_trend: tr(lang, "energy.editor.home_trend"),
+      home_trend_color: tr(lang, "energy.editor.home_trend_color"),
+      battery_icon: tr(lang, "energy.editor.battery_icon"),
+      battery_icon_color: tr(lang, "energy.editor.battery_icon_color"),
+      battery_trend: tr(lang, "energy.editor.battery_trend"),
+      battery_trend_color: tr(lang, "energy.editor.battery_trend_color"),
+      battery_secondary_icon: tr(lang, "energy.editor.battery_secondary_icon"),
+      battery_secondary_icon_color: tr(lang, "energy.editor.battery_secondary_icon_color"),
+      battery_secondary_trend: tr(lang, "energy.editor.battery_secondary_trend"),
+      battery_secondary_trend_color: tr(lang, "energy.editor.battery_secondary_trend_color"),
+      shared_trend_scale: tr(lang, "energy.editor.shared_trend_scale"),
+      trend_data_source: tr(lang, "energy.editor.trend_data_source"),
+      battery_low_alert: tr(lang, "energy.editor.battery_low_alert"),
+      battery_low_threshold: tr(lang, "energy.editor.battery_low_threshold"),
+      battery_low_alert_color: tr(lang, "energy.editor.battery_low_alert_color"),
+      battery_secondary_low_alert: tr(lang, "energy.editor.battery_secondary_low_alert"),
+      battery_secondary_low_threshold: tr(lang, "energy.editor.battery_secondary_low_threshold"),
+      battery_secondary_low_alert_color: tr(lang, "energy.editor.battery_secondary_low_alert_color"),
+      battery_invert_flow: tr(lang, "energy.editor.battery_invert_flow"),
+      battery_invert_value_sign: tr(lang, "energy.editor.battery_invert_value_sign"),
+      battery_secondary_invert_flow: tr(lang, "energy.editor.battery_secondary_invert_flow"),
+      battery_secondary_invert_value_sign: tr(lang, "energy.editor.battery_secondary_invert_value_sign"),
+      core_icon: tr(lang, "energy.editor.core_icon"),
+      core_icon_color: tr(lang, "energy.editor.core_icon_color"),
+      flow_color: tr(lang, "energy.editor.flow_color"),
+      unit: tr(lang, "energy.editor.unit"),
+      decimals: tr(lang, "energy.editor.decimals"),
+      auto_scale_units: tr(lang, "energy.editor.auto_scale_units"),
+      decimals_base_unit: tr(lang, "energy.editor.decimals_base_unit"),
+      decimals_prefixed_unit: tr(lang, "energy.editor.decimals_prefixed_unit"),
+      entity: tr(lang, "energy.editor.entity"),
+      tap_action: tr(lang, "energy.editor.tap_action"),
+      hold_action: tr(lang, "energy.editor.hold_action"),
+      double_tap_action: tr(lang, "energy.editor.double_tap_action"),
+      node_actions_enabled: tr(lang, "energy.editor.node_actions_enabled"),
+      solar_tap_action: tr(lang, "energy.editor.node_tap_action"),
+      solar_hold_action: tr(lang, "energy.editor.node_hold_action"),
+      solar_double_tap_action: tr(lang, "energy.editor.node_double_tap_action"),
+      grid_tap_action: tr(lang, "energy.editor.node_tap_action"),
+      grid_hold_action: tr(lang, "energy.editor.node_hold_action"),
+      grid_double_tap_action: tr(lang, "energy.editor.node_double_tap_action"),
+      grid_secondary_tap_action: tr(lang, "energy.editor.node_tap_action"),
+      grid_secondary_hold_action: tr(lang, "energy.editor.node_hold_action"),
+      grid_secondary_double_tap_action: tr(lang, "energy.editor.node_double_tap_action"),
+      home_tap_action: tr(lang, "energy.editor.node_tap_action"),
+      home_hold_action: tr(lang, "energy.editor.node_hold_action"),
+      home_double_tap_action: tr(lang, "energy.editor.node_double_tap_action"),
+      battery_tap_action: tr(lang, "energy.editor.node_tap_action"),
+      battery_hold_action: tr(lang, "energy.editor.node_hold_action"),
+      battery_double_tap_action: tr(lang, "energy.editor.node_double_tap_action"),
+      battery_secondary_tap_action: tr(lang, "energy.editor.node_tap_action"),
+      battery_secondary_hold_action: tr(lang, "energy.editor.node_hold_action"),
+      battery_secondary_double_tap_action: tr(lang, "energy.editor.node_double_tap_action")
+    };
+  }
+
+  private subLabelMap(): Record<string, string> {
+    const lang = haLang(this.hass);
+    return {
+      enabled: tr(lang, "energy.editor.sub_field_enabled"),
+      entity: tr(lang, "energy.editor.sub_field_entity"),
+      label: tr(lang, "energy.editor.sub_field_label"),
+      icon: tr(lang, "energy.editor.sub_field_icon"),
+      icon_color: tr(lang, "energy.editor.sub_field_icon_color"),
+      state_mode: tr(lang, "energy.editor.sub_field_state_mode"),
+      tap_action: tr(lang, "energy.editor.sub_field_tap_action"),
+      hold_action: tr(lang, "energy.editor.sub_field_hold_action"),
+      double_tap_action: tr(lang, "energy.editor.sub_field_double_tap_action")
+    };
+  }
+
   protected render() {
     if (!this.hass || !this._config) {
       return nothing;
     }
+
+    const lang = haLang(this.hass);
 
     return html`
       <div style="margin: 0 0 8px; color: var(--secondary-text-color); font-size: 12px;">
         PowerPilz v${POWER_PILZ_VERSION}
       </div>
       <div style="margin: 0 0 14px; color: var(--secondary-text-color); line-height: 1.4;">
-        Highly flexible energy flow card with configurable main nodes, trends, sub-nodes, auto calculations,
-        export highlighting, and advanced unit handling.
+        ${tr(lang, "energy.editor.intro")}
       </div>
       <ha-form
         .hass=${this.hass}
         .data=${this._config}
-        .schema=${SCHEMA}
+        .schema=${buildSchema(lang)}
         .computeLabel=${this.computeLabel}
         .computeHelper=${this.computeHelper}
         @value-changed=${this.valueChanged}
@@ -1284,101 +1258,92 @@ export class PowerPilzEnergyCardEditor extends LitElement implements LovelaceCar
     );
     if (subMatch) {
       const [, , , field] = subMatch;
-      const fieldLabels: Record<string, string> = {
-        enabled: "Enabled",
-        entity: "Entity",
-        label: "Label",
-        icon: "Icon",
-        icon_color: "Color",
-        state_mode: "State mode",
-        tap_action: "Tap behavior",
-        hold_action: "Hold behavior",
-        double_tap_action: "Double tap behavior"
-      };
+      const fieldLabels = this.subLabelMap();
       return fieldLabels[field] ?? field;
     }
-    return LABELS[name] ?? name;
+    return this.labelMap()[name] ?? name;
   };
 
   private computeHelper = (schema: { name?: string }): string | undefined => {
     const name = schema.name ?? "";
+    const lang = haLang(this.hass);
     if (name === "solar_entity") {
-      return SOLAR_FLOW_DIRECTION_HELP;
+      return tr(lang, "energy.editor.solar_flow_direction_help");
     }
     if (name === "grid_entity") {
-      return GRID_FLOW_DIRECTION_HELP;
+      return tr(lang, "energy.editor.grid_flow_direction_help");
     }
     if (name === "grid_secondary_entity") {
-      return GRID_SECONDARY_FLOW_DIRECTION_HELP;
+      return tr(lang, "energy.editor.grid_secondary_flow_direction_help");
     }
     if (name === "home_entity") {
-      return HOME_FLOW_DIRECTION_HELP;
+      return tr(lang, "energy.editor.home_flow_direction_help");
     }
     if (name === "battery_entity") {
-      return BATTERY_FLOW_DIRECTION_HELP;
+      return tr(lang, "energy.editor.battery_flow_direction_help");
     }
     if (name === "battery_secondary_entity") {
-      return BATTERY_SECONDARY_FLOW_DIRECTION_HELP;
+      return tr(lang, "energy.editor.battery_secondary_flow_direction_help");
     }
     if (/^(solar|home|grid|grid_secondary)_sub_\d+_icon_color$/.test(name)) {
-      return SUB_NODE_IDENTITY_VALUE_RENDER_HELP;
+      return tr(lang, "energy.editor.sub_node_identity_value_render_help");
     }
     if (/^(home|grid|grid_secondary)_sub_\d+_state_mode$/.test(name)) {
-      return SUB_NODE_STATE_MODE_HELP;
+      return tr(lang, "energy.editor.sub_node_state_mode_help");
     }
     if (/^solar_sub_\d+_state_mode$/.test(name)) {
-      return SOLAR_SUB_NODE_STATE_MODE_HELP;
+      return tr(lang, "energy.editor.solar_sub_node_state_mode_help");
     }
     if (name === "solar_visible") {
-      return SOLAR_VISIBLE_HELP;
+      return tr(lang, "energy.editor.solar_visible_help");
     }
     if (name === "home_visible") {
-      return HOME_VISIBLE_HELP;
+      return tr(lang, "energy.editor.home_visible_help");
     }
     if (name === "battery_visible") {
-      return BATTERY_VISIBLE_HELP;
+      return tr(lang, "energy.editor.battery_visible_help");
     }
     if (name === "battery_secondary_visible") {
-      return BATTERY_SECONDARY_VISIBLE_HELP;
+      return tr(lang, "energy.editor.battery_secondary_visible_help");
     }
     if (name === "solar_auto_calculate") {
-      return SOLAR_AUTO_CALC_HELP;
+      return tr(lang, "energy.editor.solar_auto_calc_help");
     }
     if (name === "home_auto_calculate") {
-      return HOME_AUTO_CALC_HELP;
+      return tr(lang, "energy.editor.home_auto_calc_help");
     }
     if (name === "grid_visible") {
-      return GRID_VISIBLE_HELP;
+      return tr(lang, "energy.editor.grid_visible_help");
     }
     if (name === "grid_secondary_visible") {
-      return GRID_SECONDARY_VISIBLE_HELP;
+      return tr(lang, "energy.editor.grid_secondary_visible_help");
     }
     if (name === "grid_export_highlight" || name === "grid_secondary_export_highlight") {
-      return GRID_EXPORT_HIGHLIGHT_HELP;
+      return tr(lang, "energy.editor.grid_export_highlight_help");
     }
     if (name === "grid_export_icon_highlight" || name === "grid_secondary_export_icon_highlight") {
-      return GRID_EXPORT_ICON_HIGHLIGHT_HELP;
+      return tr(lang, "energy.editor.grid_export_icon_highlight_help");
     }
     if (name === "battery_low_alert_color" || name === "battery_secondary_low_alert_color") {
-      return BATTERY_LOW_ALERT_COLOR_HELP;
+      return tr(lang, "energy.editor.battery_low_alert_color_help");
     }
     if (name === "unit") {
-      return UNIT_FIELD_HELP;
+      return tr(lang, "energy.editor.unit_field_help");
     }
     if (name === "decimals") {
-      return DECIMALS_DEFAULT_HELP;
+      return tr(lang, "energy.editor.decimals_default_help");
     }
     if (name === "decimals_base_unit") {
-      return DECIMALS_BASE_HELP;
+      return tr(lang, "energy.editor.decimals_base_help");
     }
     if (name === "decimals_prefixed_unit") {
-      return DECIMALS_PREFIXED_HELP;
+      return tr(lang, "energy.editor.decimals_prefixed_help");
     }
     if (name === "trend_data_source") {
-      return TREND_SOURCE_HELP;
+      return tr(lang, "energy.editor.trend_source_help");
     }
     if (name === "auto_scale_units") {
-      return AUTO_SCALE_UNITS_HELP;
+      return tr(lang, "energy.editor.auto_scale_units_help");
     }
     return undefined;
   };

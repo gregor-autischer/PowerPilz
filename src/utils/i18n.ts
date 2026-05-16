@@ -166,6 +166,205 @@ const EN: Dict = {
   "event_schedule.editor.double_tap_action": "Double-tap action",
   "energy.download_csv": "Download data as CSV",
   "energy.overview_title": "Energy overview",
+
+  // --- Energy card editor ---
+  "energy.editor.intro":
+    "Highly flexible energy flow card with configurable main nodes, trends, sub-nodes, auto calculations, export highlighting, and advanced unit handling.",
+  // Section titles
+  "energy.editor.section_identity": "Identity",
+  "energy.editor.section_display_mode": "Display mode",
+  "energy.editor.section_interactions": "Interactions",
+  "energy.editor.section_center_visuals": "Center visuals",
+  "energy.editor.section_units_trend": "Units and Trend settings",
+  "energy.editor.section_auto_scaling": "Auto scaling",
+  "energy.editor.section_display_format": "Display format",
+  "energy.editor.section_trend_source": "Trend source",
+  "energy.editor.section_solar_node": "Solar node",
+  "energy.editor.section_grid_node": "Grid node",
+  "energy.editor.section_grid_2_node": "Grid 2 node",
+  "energy.editor.section_home_node": "Home node",
+  "energy.editor.section_battery_node": "Battery node",
+  "energy.editor.section_battery_2_node": "Battery 2 node",
+  "energy.editor.section_calculation": "Calculation",
+  "energy.editor.section_trend": "Trend",
+  "energy.editor.section_export": "Export",
+  "energy.editor.section_sign_convention": "Sign convention",
+  "energy.editor.section_alert": "Alert",
+  "energy.editor.section_tap_behavior": "Tap behavior",
+  "energy.editor.section_solar_sub_blocks": "Solar sub blocks",
+  "energy.editor.section_grid_1_sub_blocks": "Grid 1 sub blocks",
+  "energy.editor.section_grid_2_sub_blocks": "Grid 2 sub blocks",
+  "energy.editor.section_home_sub_blocks": "Home sub blocks",
+  "energy.editor.block_n": "Block {n}",
+  // Trend source dropdown
+  "energy.editor.trend_source_auto": "Auto (recommended)",
+  "energy.editor.trend_source_statistics": "Statistics (fastest)",
+  "energy.editor.trend_source_history": "History (raw)",
+  // Helpers
+  "energy.editor.solar_auto_calc_help":
+    "When enabled, the solar main node shows the sum of enabled solar sub-node entities instead of the solar entity. Solar sub-nodes with State mode enabled are excluded from this sum.",
+  "energy.editor.home_auto_calc_help":
+    "When enabled, the home main node is calculated as solar + grid + grid 2 - battery - battery 2 using compatible unit conversion.",
+  "energy.editor.grid_export_highlight_help":
+    "When enabled, negative grid values (energy exported to the grid) are highlighted in the trend with the export color.",
+  "energy.editor.grid_export_icon_highlight_help":
+    "When enabled, the grid icon switches to the export icon color while the grid value is negative.",
+  "energy.editor.grid_visible_help":
+    "When enabled, the main grid node is shown. When disabled, the grid node is hidden.",
+  "energy.editor.grid_secondary_visible_help":
+    "When enabled, the second grid node is shown. When disabled, the second grid node is hidden.",
+  "energy.editor.solar_visible_help":
+    "When enabled, the main solar node is shown. When disabled, the solar node is hidden.",
+  "energy.editor.solar_flow_direction_help":
+    "Flow direction: + value animates from Solar to Center. 0 or - value shows no solar flow.",
+  "energy.editor.home_visible_help":
+    "When enabled, the main home node is shown. When disabled, the home node is hidden.",
+  "energy.editor.home_flow_direction_help":
+    "Flow direction: + value animates from Center to Home. 0 or - value shows no home flow.",
+  "energy.editor.battery_visible_help":
+    "When enabled, the main battery node is shown. When disabled, the battery node is hidden.",
+  "energy.editor.battery_flow_direction_help":
+    "Flow direction: + value animates from Center to Battery (charging). - value animates Battery to Center (discharging).",
+  "energy.editor.battery_secondary_visible_help":
+    "When enabled, the second battery node is shown. When disabled, the second battery node is hidden.",
+  "energy.editor.battery_secondary_flow_direction_help":
+    "Flow direction: + value animates from Center to Battery 2 (charging). - value animates Battery 2 to Center (discharging).",
+  "energy.editor.battery_low_alert_color_help":
+    "Color used for battery low-threshold alert styling (icon and low trend section).",
+  "energy.editor.battery_invert_flow_help":
+    "Reverse the animated arrow direction (charge / discharge). Use this when your inverter reports the opposite sign for charge/discharge than what PowerPilz expects.",
+  "energy.editor.battery_invert_value_sign_help":
+    "Flip the sign of the displayed kW/W value and the power trend graph. Independent from the flow toggle. Does not affect the SOC %.",
+  "energy.editor.grid_flow_direction_help":
+    "Flow direction: + value animates from Grid to Center (import). - value animates from Center to Grid (export).",
+  "energy.editor.grid_secondary_flow_direction_help":
+    "Flow direction: + value animates from Grid 2 to Center (import). - value animates from Center to Grid 2 (export).",
+  "energy.editor.sub_node_identity_value_render_help":
+    "In default mode, this sub-node renders the entity as numeric value + unit.",
+  "energy.editor.sub_node_state_mode_help":
+    "When enabled, this sub-node displays the entity state text (for example AUS/WW/HZ) instead of numeric value + unit.",
+  "energy.editor.solar_sub_node_state_mode_help":
+    "When enabled, this solar sub-node displays entity state text instead of numeric value + unit and is excluded from Solar auto-calc.",
+  "energy.editor.auto_scale_units_help":
+    "Automatically formats values with metric prefixes (for example W/kW/MW and Wh/kWh/MWh).",
+  "energy.editor.unit_field_help":
+    "Optional unit override/fallback. Used when entities have no unit and as preferred output unit for auto-calculated values.",
+  "energy.editor.decimals_default_help":
+    "Default decimal precision for displayed values and fallback when base/prefixed decimals are not set.",
+  "energy.editor.decimals_base_help":
+    "Decimal precision for base units (W, Wh) when Auto unit scaling is enabled.",
+  "energy.editor.decimals_prefixed_help":
+    "Decimal precision for prefixed units (kW, MW, kWh, MWh) when Auto unit scaling is enabled.",
+  "energy.editor.trend_source_help":
+    "Controls where trend data is fetched from. In most setups, keep Auto (recommended), which prefers statistics and falls back to history automatically.",
+  "energy.editor.node_actions_enabled_help":
+    "When on, each node has its own tap/hold/double-tap, configured inside that node's own Interactions section. Tap defaults to the zoom view, long-press to the node detail dialog. The card-level Tap/Hold/Double-tap fields below are then no longer applied to node clicks.",
+  "energy.editor.node_interaction_help":
+    "Choose what happens when you tap, long-press or double-tap this node. Long-press defaults to opening the PowerPilz node detail dialog with a history graph.",
+  "energy.editor.default_entity_help":
+    "Default entity used by card-level more-info actions. Each main node and sub-block can override its own entity via its Interactions section.",
+  // Field labels (LABELS map)
+  "energy.editor.name": "Name",
+  "energy.editor.home_visible": "Show home",
+  "energy.editor.solar_visible": "Show solar",
+  "energy.editor.grid_visible": "Show grid",
+  "energy.editor.grid_secondary_visible": "Show grid 2",
+  "energy.editor.battery_visible": "Show battery",
+  "energy.editor.battery_secondary_visible": "Show battery 2",
+  "energy.editor.battery_dual_alignment": "Battery 2 alignment",
+  "energy.editor.home_auto_calculate": "Auto-calc home",
+  "energy.editor.solar_auto_calculate": "Auto-calc solar",
+  "energy.editor.home_entity": "Home sensor",
+  "energy.editor.solar_entity": "Solar sensor",
+  "energy.editor.grid_entity": "Grid sensor",
+  "energy.editor.grid_secondary_entity": "Grid 2 sensor",
+  "energy.editor.battery_entity": "Battery sensor",
+  "energy.editor.battery_percentage_entity": "Battery SoC sensor",
+  "energy.editor.battery_secondary_entity": "Battery 2 sensor",
+  "energy.editor.battery_secondary_percentage_entity": "Battery 2 SoC sensor",
+  "energy.editor.solar_sub_enabled": "Enable solar sub",
+  "energy.editor.solar_sub_entity": "Solar sub sensor",
+  "energy.editor.solar_sub_label": "Solar sub name",
+  "energy.editor.solar_sub_icon": "Solar sub icon",
+  "energy.editor.solar_sub_icon_color": "Solar sub color",
+  "energy.editor.home_sub_enabled": "Enable home sub",
+  "energy.editor.home_sub_entity": "Home sub sensor",
+  "energy.editor.home_sub_label": "Home sub name",
+  "energy.editor.home_sub_icon": "Home sub icon",
+  "energy.editor.home_sub_icon_color": "Home sub color",
+  "energy.editor.solar_label": "Solar name",
+  "energy.editor.home_label": "Home name",
+  "energy.editor.grid_label": "Grid name",
+  "energy.editor.grid_secondary_label": "Grid 2 name",
+  "energy.editor.battery_label": "Battery name",
+  "energy.editor.battery_secondary_label": "Battery 2 name",
+  "energy.editor.solar_icon": "Solar icon",
+  "energy.editor.solar_icon_color": "Solar icon color",
+  "energy.editor.solar_trend": "Solar trend",
+  "energy.editor.solar_trend_color": "Solar trend color",
+  "energy.editor.grid_icon": "Grid icon",
+  "energy.editor.grid_icon_color": "Grid icon color",
+  "energy.editor.grid_secondary_icon": "Grid 2 icon",
+  "energy.editor.grid_secondary_icon_color": "Grid 2 icon color",
+  "energy.editor.grid_secondary_trend": "Grid 2 trend",
+  "energy.editor.grid_secondary_trend_color": "Grid 2 trend color",
+  "energy.editor.grid_trend": "Grid trend",
+  "energy.editor.grid_trend_color": "Grid trend color",
+  "energy.editor.grid_export_highlight": "Highlight export in trend",
+  "energy.editor.grid_export_trend_color": "Export trend color",
+  "energy.editor.grid_export_icon_highlight": "Highlight export icon",
+  "energy.editor.grid_export_icon_color": "Export icon color",
+  "energy.editor.home_icon": "Home icon",
+  "energy.editor.home_icon_color": "Home icon color",
+  "energy.editor.home_trend": "Home trend",
+  "energy.editor.home_trend_color": "Home trend color",
+  "energy.editor.battery_icon": "Battery icon",
+  "energy.editor.battery_icon_color": "Battery icon color",
+  "energy.editor.battery_trend": "Battery trend",
+  "energy.editor.battery_trend_color": "Battery trend color",
+  "energy.editor.battery_secondary_icon": "Battery 2 icon",
+  "energy.editor.battery_secondary_icon_color": "Battery 2 icon color",
+  "energy.editor.battery_secondary_trend": "Battery 2 trend",
+  "energy.editor.battery_secondary_trend_color": "Battery 2 trend color",
+  "energy.editor.shared_trend_scale": "Shared trend scale",
+  "energy.editor.trend_data_source": "Trend source",
+  "energy.editor.battery_low_alert": "Low battery alert",
+  "energy.editor.battery_low_threshold": "Low battery %",
+  "energy.editor.battery_low_alert_color": "Low alert color",
+  "energy.editor.battery_secondary_low_alert": "Battery 2 low alert",
+  "energy.editor.battery_secondary_low_threshold": "Battery 2 low %",
+  "energy.editor.battery_secondary_low_alert_color": "Low alert color",
+  "energy.editor.battery_invert_flow": "Reverse flow direction",
+  "energy.editor.battery_invert_value_sign": "Flip displayed value sign",
+  "energy.editor.battery_secondary_invert_flow": "Reverse flow direction",
+  "energy.editor.battery_secondary_invert_value_sign": "Flip displayed value sign",
+  "energy.editor.core_icon": "Core icon",
+  "energy.editor.core_icon_color": "Core icon color",
+  "energy.editor.flow_color": "Flow line color",
+  "energy.editor.unit": "Unit",
+  "energy.editor.decimals": "Decimals",
+  "energy.editor.auto_scale_units": "Auto unit scaling",
+  "energy.editor.decimals_base_unit": "Decimals (base unit)",
+  "energy.editor.decimals_prefixed_unit": "Decimals (prefixed units)",
+  "energy.editor.entity": "Action entity",
+  "energy.editor.tap_action": "Tap behavior",
+  "energy.editor.hold_action": "Hold behavior (default: 24h overview)",
+  "energy.editor.double_tap_action": "Double tap behavior",
+  "energy.editor.node_actions_enabled": "Enable per-node interactions",
+  "energy.editor.node_tap_action": "Tap behavior (default: zoom view)",
+  "energy.editor.node_hold_action": "Hold behavior (default: node detail)",
+  "energy.editor.node_double_tap_action": "Double tap behavior",
+  // Sub-block field labels
+  "energy.editor.sub_field_enabled": "Enabled",
+  "energy.editor.sub_field_entity": "Entity",
+  "energy.editor.sub_field_label": "Label",
+  "energy.editor.sub_field_icon": "Icon",
+  "energy.editor.sub_field_icon_color": "Color",
+  "energy.editor.sub_field_state_mode": "State mode",
+  "energy.editor.sub_field_tap_action": "Tap behavior",
+  "energy.editor.sub_field_hold_action": "Hold behavior",
+  "energy.editor.sub_field_double_tap_action": "Double tap behavior",
+
   "common.loading": "Loading…",
   "common.saving": "Saving…",
   "common.save": "Save",
@@ -476,6 +675,205 @@ const DE: Dict = {
   "event_schedule.editor.double_tap_action": "Doppeltap-Aktion",
   "energy.download_csv": "Daten als CSV herunterladen",
   "energy.overview_title": "Energie-Übersicht",
+
+  // --- Energy card editor ---
+  "energy.editor.intro":
+    "Flexible Energiefluss-Karte mit konfigurierbaren Haupt-Knoten, Verläufen, Sub-Knoten, Auto-Berechnungen, Export-Hervorhebung und erweiterter Einheiten-Behandlung.",
+  // Section titles
+  "energy.editor.section_identity": "Identität",
+  "energy.editor.section_display_mode": "Anzeige-Modus",
+  "energy.editor.section_interactions": "Interaktionen",
+  "energy.editor.section_center_visuals": "Zentrum-Darstellung",
+  "energy.editor.section_units_trend": "Einheiten- und Verlaufs-Einstellungen",
+  "energy.editor.section_auto_scaling": "Auto-Skalierung",
+  "energy.editor.section_display_format": "Anzeige-Format",
+  "energy.editor.section_trend_source": "Verlaufs-Quelle",
+  "energy.editor.section_solar_node": "Solar-Knoten",
+  "energy.editor.section_grid_node": "Netz-Knoten",
+  "energy.editor.section_grid_2_node": "Netz 2-Knoten",
+  "energy.editor.section_home_node": "Haus-Knoten",
+  "energy.editor.section_battery_node": "Batterie-Knoten",
+  "energy.editor.section_battery_2_node": "Batterie 2-Knoten",
+  "energy.editor.section_calculation": "Berechnung",
+  "energy.editor.section_trend": "Verlauf",
+  "energy.editor.section_export": "Einspeisung",
+  "energy.editor.section_sign_convention": "Vorzeichen-Konvention",
+  "energy.editor.section_alert": "Alarm",
+  "energy.editor.section_tap_behavior": "Tap-Verhalten",
+  "energy.editor.section_solar_sub_blocks": "Solar Sub-Blöcke",
+  "energy.editor.section_grid_1_sub_blocks": "Netz 1 Sub-Blöcke",
+  "energy.editor.section_grid_2_sub_blocks": "Netz 2 Sub-Blöcke",
+  "energy.editor.section_home_sub_blocks": "Haus Sub-Blöcke",
+  "energy.editor.block_n": "Block {n}",
+  // Trend source dropdown
+  "energy.editor.trend_source_auto": "Auto (empfohlen)",
+  "energy.editor.trend_source_statistics": "Statistik (am schnellsten)",
+  "energy.editor.trend_source_history": "Verlauf (Rohdaten)",
+  // Helpers
+  "energy.editor.solar_auto_calc_help":
+    "Wenn aktiviert, zeigt der Solar-Hauptknoten die Summe der aktivierten Solar-Sub-Knoten-Entitäten statt der Solar-Entität. Solar-Sub-Knoten im Status-Modus werden von dieser Summe ausgenommen.",
+  "energy.editor.home_auto_calc_help":
+    "Wenn aktiviert, wird der Haus-Hauptknoten als Solar + Netz + Netz 2 - Batterie - Batterie 2 mit kompatibler Einheiten-Umrechnung berechnet.",
+  "energy.editor.grid_export_highlight_help":
+    "Wenn aktiviert, werden negative Netzwerte (Einspeisung ins Netz) im Verlauf mit der Einspeise-Farbe hervorgehoben.",
+  "energy.editor.grid_export_icon_highlight_help":
+    "Wenn aktiviert, wechselt das Netz-Symbol zur Einspeise-Symbolfarbe, solange der Netzwert negativ ist.",
+  "energy.editor.grid_visible_help":
+    "Wenn aktiviert, wird der Haupt-Netzknoten angezeigt. Wenn deaktiviert, wird der Netz-Knoten ausgeblendet.",
+  "energy.editor.grid_secondary_visible_help":
+    "Wenn aktiviert, wird der zweite Netz-Knoten angezeigt. Wenn deaktiviert, wird der zweite Netz-Knoten ausgeblendet.",
+  "energy.editor.solar_visible_help":
+    "Wenn aktiviert, wird der Haupt-Solarknoten angezeigt. Wenn deaktiviert, wird der Solar-Knoten ausgeblendet.",
+  "energy.editor.solar_flow_direction_help":
+    "Flussrichtung: + Wert animiert von Solar zum Zentrum. 0 oder - Wert zeigt keinen Solar-Fluss.",
+  "energy.editor.home_visible_help":
+    "Wenn aktiviert, wird der Haupt-Hausknoten angezeigt. Wenn deaktiviert, wird der Haus-Knoten ausgeblendet.",
+  "energy.editor.home_flow_direction_help":
+    "Flussrichtung: + Wert animiert vom Zentrum zum Haus. 0 oder - Wert zeigt keinen Haus-Fluss.",
+  "energy.editor.battery_visible_help":
+    "Wenn aktiviert, wird der Haupt-Batterieknoten angezeigt. Wenn deaktiviert, wird der Batterie-Knoten ausgeblendet.",
+  "energy.editor.battery_flow_direction_help":
+    "Flussrichtung: + Wert animiert vom Zentrum zur Batterie (Laden). - Wert animiert von der Batterie zum Zentrum (Entladen).",
+  "energy.editor.battery_secondary_visible_help":
+    "Wenn aktiviert, wird der zweite Batterie-Knoten angezeigt. Wenn deaktiviert, wird der zweite Batterie-Knoten ausgeblendet.",
+  "energy.editor.battery_secondary_flow_direction_help":
+    "Flussrichtung: + Wert animiert vom Zentrum zu Batterie 2 (Laden). - Wert animiert von Batterie 2 zum Zentrum (Entladen).",
+  "energy.editor.battery_low_alert_color_help":
+    "Farbe für die Batterie-Unterspannungs-Warnung (Symbol und unterer Verlaufsbereich).",
+  "energy.editor.battery_invert_flow_help":
+    "Animierte Pfeilrichtung umkehren (Laden / Entladen). Verwende dies, wenn dein Wechselrichter das umgekehrte Vorzeichen für Laden/Entladen meldet als von PowerPilz erwartet.",
+  "energy.editor.battery_invert_value_sign_help":
+    "Vorzeichen des angezeigten kW/W-Werts und des Leistungs-Verlaufsgraphen umkehren. Unabhängig vom Fluss-Schalter. Beeinflusst den SOC % nicht.",
+  "energy.editor.grid_flow_direction_help":
+    "Flussrichtung: + Wert animiert vom Netz zum Zentrum (Bezug). - Wert animiert vom Zentrum zum Netz (Einspeisung).",
+  "energy.editor.grid_secondary_flow_direction_help":
+    "Flussrichtung: + Wert animiert von Netz 2 zum Zentrum (Bezug). - Wert animiert vom Zentrum zu Netz 2 (Einspeisung).",
+  "energy.editor.sub_node_identity_value_render_help":
+    "Im Standard-Modus zeigt dieser Sub-Knoten die Entität als numerischen Wert + Einheit.",
+  "energy.editor.sub_node_state_mode_help":
+    "Wenn aktiviert, zeigt dieser Sub-Knoten den Status-Text der Entität (z.B. AUS/WW/HZ) statt numerischer Wert + Einheit.",
+  "energy.editor.solar_sub_node_state_mode_help":
+    "Wenn aktiviert, zeigt dieser Solar-Sub-Knoten den Status-Text der Entität statt numerischer Wert + Einheit und wird von der Solar-Auto-Berechnung ausgenommen.",
+  "energy.editor.auto_scale_units_help":
+    "Formatiert Werte automatisch mit metrischen Präfixen (z.B. W/kW/MW und Wh/kWh/MWh).",
+  "energy.editor.unit_field_help":
+    "Optionale Einheit (Override/Fallback). Wird verwendet, wenn Entitäten keine Einheit haben, und als bevorzugte Ausgabe-Einheit für auto-berechnete Werte.",
+  "energy.editor.decimals_default_help":
+    "Standard-Nachkommastellen für angezeigte Werte und Fallback, wenn Basis-/Präfix-Nachkommastellen nicht gesetzt sind.",
+  "energy.editor.decimals_base_help":
+    "Nachkommastellen für Basis-Einheiten (W, Wh) wenn Auto-Einheiten-Skalierung aktiv ist.",
+  "energy.editor.decimals_prefixed_help":
+    "Nachkommastellen für skalierte Einheiten (kW, MW, kWh, MWh) wenn Auto-Einheiten-Skalierung aktiv ist.",
+  "energy.editor.trend_source_help":
+    "Steuert, woher die Verlaufsdaten geholt werden. In den meisten Setups Auto (empfohlen) belassen - bevorzugt Statistik und fällt automatisch auf Verlauf zurück.",
+  "energy.editor.node_actions_enabled_help":
+    "Wenn aktiv, hat jeder Knoten eigene Tap/Hold/Doppeltap-Aktionen, konfiguriert im jeweiligen Interaktionen-Abschnitt. Tap öffnet standardmäßig die Zoom-Ansicht, Lange-Tipp das Knoten-Detail-Fenster. Die karten-weiten Tap/Hold/Doppeltap-Felder unten werden dann nicht mehr auf Knoten-Klicks angewendet.",
+  "energy.editor.node_interaction_help":
+    "Wähle, was beim Tap, Lange-Tipp oder Doppeltap auf diesen Knoten passieren soll. Lange-Tipp öffnet standardmäßig das PowerPilz Knoten-Detail-Fenster mit Verlaufsgraph.",
+  "energy.editor.default_entity_help":
+    "Standard-Entität für karten-weite More-Info-Aktionen. Jeder Haupt-Knoten und Sub-Block kann seine eigene Entität über den Interaktionen-Abschnitt überschreiben.",
+  // Field labels
+  "energy.editor.name": "Name",
+  "energy.editor.home_visible": "Haus anzeigen",
+  "energy.editor.solar_visible": "Solar anzeigen",
+  "energy.editor.grid_visible": "Netz anzeigen",
+  "energy.editor.grid_secondary_visible": "Netz 2 anzeigen",
+  "energy.editor.battery_visible": "Batterie anzeigen",
+  "energy.editor.battery_secondary_visible": "Batterie 2 anzeigen",
+  "energy.editor.battery_dual_alignment": "Batterie 2-Ausrichtung",
+  "energy.editor.home_auto_calculate": "Haus auto-berechnen",
+  "energy.editor.solar_auto_calculate": "Solar auto-berechnen",
+  "energy.editor.home_entity": "Haus-Sensor",
+  "energy.editor.solar_entity": "Solar-Sensor",
+  "energy.editor.grid_entity": "Netz-Sensor",
+  "energy.editor.grid_secondary_entity": "Netz 2-Sensor",
+  "energy.editor.battery_entity": "Batterie-Sensor",
+  "energy.editor.battery_percentage_entity": "Batterie SoC-Sensor",
+  "energy.editor.battery_secondary_entity": "Batterie 2-Sensor",
+  "energy.editor.battery_secondary_percentage_entity": "Batterie 2 SoC-Sensor",
+  "energy.editor.solar_sub_enabled": "Solar-Sub aktivieren",
+  "energy.editor.solar_sub_entity": "Solar-Sub Sensor",
+  "energy.editor.solar_sub_label": "Solar-Sub Name",
+  "energy.editor.solar_sub_icon": "Solar-Sub Symbol",
+  "energy.editor.solar_sub_icon_color": "Solar-Sub Farbe",
+  "energy.editor.home_sub_enabled": "Haus-Sub aktivieren",
+  "energy.editor.home_sub_entity": "Haus-Sub Sensor",
+  "energy.editor.home_sub_label": "Haus-Sub Name",
+  "energy.editor.home_sub_icon": "Haus-Sub Symbol",
+  "energy.editor.home_sub_icon_color": "Haus-Sub Farbe",
+  "energy.editor.solar_label": "Solar-Name",
+  "energy.editor.home_label": "Haus-Name",
+  "energy.editor.grid_label": "Netz-Name",
+  "energy.editor.grid_secondary_label": "Netz 2-Name",
+  "energy.editor.battery_label": "Batterie-Name",
+  "energy.editor.battery_secondary_label": "Batterie 2-Name",
+  "energy.editor.solar_icon": "Solar-Symbol",
+  "energy.editor.solar_icon_color": "Solar-Symbolfarbe",
+  "energy.editor.solar_trend": "Solar-Verlauf",
+  "energy.editor.solar_trend_color": "Solar-Verlaufsfarbe",
+  "energy.editor.grid_icon": "Netz-Symbol",
+  "energy.editor.grid_icon_color": "Netz-Symbolfarbe",
+  "energy.editor.grid_secondary_icon": "Netz 2-Symbol",
+  "energy.editor.grid_secondary_icon_color": "Netz 2-Symbolfarbe",
+  "energy.editor.grid_secondary_trend": "Netz 2-Verlauf",
+  "energy.editor.grid_secondary_trend_color": "Netz 2-Verlaufsfarbe",
+  "energy.editor.grid_trend": "Netz-Verlauf",
+  "energy.editor.grid_trend_color": "Netz-Verlaufsfarbe",
+  "energy.editor.grid_export_highlight": "Einspeisung im Verlauf hervorheben",
+  "energy.editor.grid_export_trend_color": "Einspeisung Verlaufsfarbe",
+  "energy.editor.grid_export_icon_highlight": "Einspeise-Symbol hervorheben",
+  "energy.editor.grid_export_icon_color": "Einspeise-Symbolfarbe",
+  "energy.editor.home_icon": "Haus-Symbol",
+  "energy.editor.home_icon_color": "Haus-Symbolfarbe",
+  "energy.editor.home_trend": "Haus-Verlauf",
+  "energy.editor.home_trend_color": "Haus-Verlaufsfarbe",
+  "energy.editor.battery_icon": "Batterie-Symbol",
+  "energy.editor.battery_icon_color": "Batterie-Symbolfarbe",
+  "energy.editor.battery_trend": "Batterie-Verlauf",
+  "energy.editor.battery_trend_color": "Batterie-Verlaufsfarbe",
+  "energy.editor.battery_secondary_icon": "Batterie 2-Symbol",
+  "energy.editor.battery_secondary_icon_color": "Batterie 2-Symbolfarbe",
+  "energy.editor.battery_secondary_trend": "Batterie 2-Verlauf",
+  "energy.editor.battery_secondary_trend_color": "Batterie 2-Verlaufsfarbe",
+  "energy.editor.shared_trend_scale": "Gemeinsame Verlaufs-Skala",
+  "energy.editor.trend_data_source": "Verlaufs-Quelle",
+  "energy.editor.battery_low_alert": "Batterie-Tief-Alarm",
+  "energy.editor.battery_low_threshold": "Batterie tief %",
+  "energy.editor.battery_low_alert_color": "Alarmfarbe",
+  "energy.editor.battery_secondary_low_alert": "Batterie 2-Tief-Alarm",
+  "energy.editor.battery_secondary_low_threshold": "Batterie 2 tief %",
+  "energy.editor.battery_secondary_low_alert_color": "Alarmfarbe",
+  "energy.editor.battery_invert_flow": "Flussrichtung umkehren",
+  "energy.editor.battery_invert_value_sign": "Vorzeichen des Werts umkehren",
+  "energy.editor.battery_secondary_invert_flow": "Flussrichtung umkehren",
+  "energy.editor.battery_secondary_invert_value_sign": "Vorzeichen des Werts umkehren",
+  "energy.editor.core_icon": "Zentrum-Symbol",
+  "energy.editor.core_icon_color": "Zentrum-Symbolfarbe",
+  "energy.editor.flow_color": "Flusslinien-Farbe",
+  "energy.editor.unit": "Einheit",
+  "energy.editor.decimals": "Nachkommastellen",
+  "energy.editor.auto_scale_units": "Auto-Einheiten-Skalierung",
+  "energy.editor.decimals_base_unit": "Nachkommastellen (Basis-Einheit)",
+  "energy.editor.decimals_prefixed_unit": "Nachkommastellen (skalierte Einheit)",
+  "energy.editor.entity": "Aktions-Entität",
+  "energy.editor.tap_action": "Tap-Verhalten",
+  "energy.editor.hold_action": "Hold-Verhalten (Standard: 24h-Übersicht)",
+  "energy.editor.double_tap_action": "Doppeltap-Verhalten",
+  "energy.editor.node_actions_enabled": "Pro-Knoten-Interaktionen aktivieren",
+  "energy.editor.node_tap_action": "Tap-Verhalten (Standard: Zoom-Ansicht)",
+  "energy.editor.node_hold_action": "Hold-Verhalten (Standard: Knoten-Detail)",
+  "energy.editor.node_double_tap_action": "Doppeltap-Verhalten",
+  // Sub-block field labels
+  "energy.editor.sub_field_enabled": "Aktiviert",
+  "energy.editor.sub_field_entity": "Entität",
+  "energy.editor.sub_field_label": "Beschriftung",
+  "energy.editor.sub_field_icon": "Symbol",
+  "energy.editor.sub_field_icon_color": "Farbe",
+  "energy.editor.sub_field_state_mode": "Status-Modus",
+  "energy.editor.sub_field_tap_action": "Tap-Verhalten",
+  "energy.editor.sub_field_hold_action": "Hold-Verhalten",
+  "energy.editor.sub_field_double_tap_action": "Doppeltap-Verhalten",
+
   "common.loading": "Lade…",
   "common.saving": "Speichere…",
   "common.save": "Speichern",
