@@ -71,31 +71,15 @@ const EN: Dict = {
   "timer.editor.section_entities": "Entities",
   "timer.editor.section_identity": "Identity",
   "timer.editor.section_appearance": "Appearance",
-  "timer.editor.use_companion": "Use PowerPilz Companion integration",
-  "timer.editor.use_companion_help":
-    "When enabled (default), configure only one entity — a PowerPilz Smart Timer from the Companion integration — and the card derives the target device, on/off times and active flag from its attributes. When disabled, configure the four entities manually (device / on-time / off-time / active flag).",
   "timer.editor.companion_entity": "PowerPilz Smart Timer entity",
   "timer.editor.companion_help":
-    "A PowerPilz Smart Timer helper (switch.* entity created by the Companion integration). The card automatically reads its `target_entity`, `on_datetime` and `off_datetime` attributes and uses the `powerpilz_companion.set_timer` service to update times.",
+    "A PowerPilz Smart Timer helper (switch.* entity created by the Companion integration). The card reads its `target_entity`, `on_datetime` and `off_datetime` attributes and uses the `powerpilz_companion.set_timer` service to update times.",
   "timer.placeholder_companion": "Pick a PowerPilz Smart Timer entity in the card settings to configure this card.",
-  "timer.placeholder_manual": "Pick the four timer entities in the card settings to configure this card.",
-  "timer.editor.switch_entity": "Device to control",
-  "timer.editor.on_datetime_entity": "Turn-ON datetime helper",
-  "timer.editor.off_datetime_entity": "Turn-OFF datetime helper (optional)",
-  "timer.editor.active_entity": "Timer active flag",
   "timer.editor.name": "Name",
   "timer.editor.subtitle": "Subtitle",
   "timer.editor.icon": "Icon",
   "timer.editor.icon_color": "Icon color",
   "timer.editor.active_color": "Active timer color",
-  "timer.editor.switch_help":
-    "The device to control (switch, light, or input_boolean). This entity will be turned on/off at the scheduled time.",
-  "timer.editor.on_help":
-    "An input_datetime helper (with date AND time enabled) that stores when to turn the device ON. Create in Settings > Helpers > Add > Date and/or time. Enable both 'Date' and 'Time'. Then create an automation: trigger at this entity's time → turn on the device.",
-  "timer.editor.off_help":
-    "Optional: an input_datetime helper for the turn-OFF time. Same setup as the ON helper. If not set, the card only schedules turning on. Create a second automation: trigger at this entity's time → turn off the device.",
-  "timer.editor.active_help":
-    "An input_boolean that indicates whether a timer is currently pending. The card turns this on when scheduling and off when cancelling. Use it as a condition in your automations so they only fire when the timer is active.",
   "timer.editor.active_color_help": "Color used for the active timer badge and highlights.",
 
   // --- Schedule card ---
@@ -398,31 +382,15 @@ const DE: Dict = {
   "timer.editor.section_entities": "Entitäten",
   "timer.editor.section_identity": "Erscheinungsbild",
   "timer.editor.section_appearance": "Farben",
-  "timer.editor.use_companion": "PowerPilz Companion Integration nutzen",
-  "timer.editor.use_companion_help":
-    "Wenn aktiviert (Standard), musst du nur eine einzige Entität angeben — einen PowerPilz Smart Timer aus der Companion Integration — die Karte liest Zielgerät, Ein/Aus-Zeiten und Aktiv-Flag automatisch aus deren Attributen. Wenn deaktiviert, gibst du die vier Entitäten manuell an (Gerät / Einschalt-Zeit / Ausschalt-Zeit / Aktiv-Flag).",
   "timer.editor.companion_entity": "PowerPilz Smart Timer-Entität",
   "timer.editor.companion_help":
     "Ein PowerPilz Smart Timer-Helfer (switch.* Entität, angelegt von der Companion Integration). Die Karte liest automatisch deren `target_entity`-, `on_datetime`- und `off_datetime`-Attribute und nutzt den `powerpilz_companion.set_timer`-Service zum Setzen der Zeiten.",
   "timer.placeholder_companion": "Wähle in den Karten-Einstellungen eine PowerPilz Smart Timer-Entität aus, um diese Karte zu konfigurieren.",
-  "timer.placeholder_manual": "Wähle in den Karten-Einstellungen die vier Timer-Entitäten aus, um diese Karte zu konfigurieren.",
-  "timer.editor.switch_entity": "Zu steuerndes Gerät",
-  "timer.editor.on_datetime_entity": "Einschalt-Zeit Helfer",
-  "timer.editor.off_datetime_entity": "Ausschalt-Zeit Helfer (optional)",
-  "timer.editor.active_entity": "Timer-Aktiv Flag",
   "timer.editor.name": "Name",
   "timer.editor.subtitle": "Untertitel",
   "timer.editor.icon": "Symbol",
   "timer.editor.icon_color": "Symbolfarbe",
   "timer.editor.active_color": "Farbe für aktiven Timer",
-  "timer.editor.switch_help":
-    "Das zu steuernde Gerät (switch, light oder input_boolean). Diese Entität wird zur geplanten Zeit ein- oder ausgeschaltet.",
-  "timer.editor.on_help":
-    "Ein input_datetime Helfer (mit Datum UND Zeit aktiviert), der den Einschaltzeitpunkt speichert. Erstellen unter Einstellungen > Geräte & Dienste > Helfer > Hinzufügen > Datum und/oder Zeit. Beide Optionen 'Datum' und 'Zeit' aktivieren. Dann eine Automation erstellen: Trigger bei Zeit dieser Entität → Gerät einschalten.",
-  "timer.editor.off_help":
-    "Optional: ein input_datetime Helfer für den Ausschaltzeitpunkt. Gleiches Setup wie der Einschalt-Helfer. Wenn nicht gesetzt, plant die Karte nur das Einschalten. Eine zweite Automation erstellen: Trigger bei Zeit dieser Entität → Gerät ausschalten.",
-  "timer.editor.active_help":
-    "Ein input_boolean, das anzeigt, ob ein Timer aktuell geplant ist. Die Karte schaltet ihn beim Planen ein und beim Abbrechen aus. Nutze ihn als Bedingung in den Automationen, damit sie nur feuern wenn der Timer aktiv ist.",
   "timer.editor.active_color_help": "Farbe für das Aktiv-Badge und Hervorhebungen.",
 
   // --- Schedule card ---

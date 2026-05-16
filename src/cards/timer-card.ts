@@ -18,17 +18,11 @@ const PICKER_PORTAL_STYLE_ID = "power-pilz-timer-picker-portal-style";
 
 interface PowerPilzTimerCardConfig extends LovelaceCardConfig {
   type: "custom:power-pilz-timer-card";
-  // Companion mode (default for new cards): a single PowerPilz Smart
-  // Timer `switch.*` entity that bundles target device + on/off times +
-  // active flag. The card derives everything from its attributes and
-  // uses `powerpilz_companion.set_timer` to update times.
-  use_companion?: boolean;
+  /** A single PowerPilz Smart Timer `switch.*` entity that bundles
+   *  target device + on/off times + active flag. The card derives
+   *  everything from its attributes and uses
+   *  `powerpilz_companion.set_timer` to update times. */
   companion_entity?: string;
-  // Manual mode (legacy): configure the four entities individually.
-  switch_entity?: string;
-  on_datetime_entity?: string;
-  off_datetime_entity?: string;
-  active_entity?: string;
   name?: string;
   subtitle?: string;
   icon?: string;
@@ -52,31 +46,18 @@ export class PowerPilzTimerCard extends LitElement implements LovelaceCard {
     const states = hass?.states ?? {};
     const entityIds = Object.keys(states);
 
-    // Prefer a PowerPilz Smart Timer switch (identified by its attributes).
+    // Pre-fill with a PowerPilz Smart Timer switch if one exists,
+    // otherwise leave the entity blank so the editor placeholder
+    // guides the user to create a Companion helper.
     const companion = entityIds.find((id) => {
       if (!id.startsWith("switch.")) return false;
       const attrs = states[id]?.attributes as Record<string, unknown> | undefined;
       return typeof attrs?.target_entity === "string"
         && ("on_datetime" in (attrs ?? {}) || "off_datetime" in (attrs ?? {}));
     });
-    if (companion) {
-      return {
-        type: "custom:power-pilz-timer-card",
-        use_companion: true,
-        companion_entity: companion,
-        name: "Timer"
-      };
-    }
-
-    // Fallback: legacy 4-entity mode.
-    const first = (domain: string): string | undefined =>
-      entityIds.find((id) => id.startsWith(`${domain}.`));
     return {
       type: "custom:power-pilz-timer-card",
-      use_companion: false,
-      switch_entity: first("switch") ?? first("input_boolean") ?? "switch.device",
-      on_datetime_entity: first("input_datetime") ?? "input_datetime.sched_on",
-      active_entity: first("input_boolean") ?? "input_boolean.sched_active",
+      companion_entity: companion ?? "",
       name: "Timer"
     };
   }
@@ -107,38 +88,44 @@ export class PowerPilzTimerCard extends LitElement implements LovelaceCard {
   private _refreshTimer?: number;
 
   public setConfig(config: PowerPilzTimerCardConfig): void {
-    // Default mode resolution (matches schedule-card pattern):
-    //   - Explicit `use_companion` in config → honor it
-    //   - Otherwise: legacy cards with `switch_entity` already filled in
-    //     default to manual mode so they don't break on load. Fresh cards
-    //     default to companion mode.
-    const useCompanion = config.use_companion !== undefined
-      ? config.use_companion !== false
-      : !config.switch_entity;
+    // Drop any leftover manual-mode fields from pre-0.7.2 configs so
+    // they don't sneak back into the saved YAML via the {...config}
+    // spread below. The card stopped supporting these in 0.7.2; the
+    // user has to switch to a Companion helper.
+    const legacy = config as PowerPilzTimerCardConfig & {
+      use_companion?: boolean;
+      switch_entity?: string;
+      on_datetime_entity?: string;
+      off_datetime_entity?: string;
+      active_entity?: string;
+    };
+    const clean = { ...config } as PowerPilzTimerCardConfig & Record<string, unknown>;
+    delete clean.use_companion;
+    delete clean.switch_entity;
+    delete clean.on_datetime_entity;
+    delete clean.off_datetime_entity;
+    delete clean.active_entity;
+    void legacy;
 
     this._config = {
-      ...config,
-      use_companion: useCompanion,
+      ...clean,
       icon: config.icon ?? "mdi:timer-outline",
       name: config.name ?? tr(haLang(this.hass), "timer.default_name")
     };
-    // Intentionally don't throw on missing entities — the card renders a
-    // soft placeholder while the user is still filling in the editor.
+    // Intentionally don't throw on a missing entity — the card renders
+    // a soft placeholder while the user is still filling in the editor.
   }
 
-  // ---------- Mode-aware entity / datetime resolvers ----------
+  // ---------- Companion entity / attribute resolvers ----------
 
   private get _activeEntityId(): string | undefined {
-    if (!this._config) return undefined;
-    return this._config.use_companion === false
-      ? this._config.active_entity
-      : this._config.companion_entity;
+    return this._config?.companion_entity;
   }
 
   private get _switchEntityId(): string | undefined {
-    if (!this._config) return undefined;
-    if (this._config.use_companion === false) return this._config.switch_entity;
-    const companion = this.hass?.states?.[this._config.companion_entity ?? ""];
+    const id = this._config?.companion_entity;
+    if (!id) return undefined;
+    const companion = this.hass?.states?.[id];
     const target = companion?.attributes?.target_entity;
     return typeof target === "string" ? target : undefined;
   }
@@ -150,31 +137,19 @@ export class PowerPilzTimerCard extends LitElement implements LovelaceCard {
   }
 
   private _getOnDatetime(): Date | null {
-    if (this._config?.use_companion !== false) {
-      const raw = this._companionAttr("on_datetime");
-      return typeof raw === "string" ? parseIsoLike(raw) : null;
-    }
-    return this.parseDatetime(this._config?.on_datetime_entity);
+    const raw = this._companionAttr("on_datetime");
+    return typeof raw === "string" ? parseIsoLike(raw) : null;
   }
 
   private _getOffDatetime(): Date | null {
-    if (this._config?.use_companion !== false) {
-      const raw = this._companionAttr("off_datetime");
-      return typeof raw === "string" ? parseIsoLike(raw) : null;
-    }
-    return this.parseDatetime(this._config?.off_datetime_entity);
+    const raw = this._companionAttr("off_datetime");
+    return typeof raw === "string" ? parseIsoLike(raw) : null;
   }
 
   private _direction(): "on_only" | "both" | "off_only" {
-    if (this._config?.use_companion !== false) {
-      const raw = this._companionAttr("direction");
-      if (raw === "on_only" || raw === "off_only") return raw;
-      return "both";
-    }
-    // Manual mode infers direction from the configured entities: if no
-    // off-datetime helper is configured, the card is effectively an
-    // on-only timer. (Manual mode has no off-only variant.)
-    return this._config?.off_datetime_entity ? "both" : "on_only";
+    const raw = this._companionAttr("direction");
+    if (raw === "on_only" || raw === "off_only") return raw;
+    return "both";
   }
 
   private _hasOnSupport(): boolean {
@@ -182,16 +157,11 @@ export class PowerPilzTimerCard extends LitElement implements LovelaceCard {
   }
 
   private _hasOffSupport(): boolean {
-    const dir = this._direction();
-    if (dir === "on_only") return false;
-    if (this._config?.use_companion !== false) {
-      return !!this._config?.companion_entity;
-    }
-    return !!this._config?.off_datetime_entity;
+    if (this._direction() === "on_only") return false;
+    return !!this._config?.companion_entity;
   }
 
   private _companionStateIcon(): string | undefined {
-    if (this._config?.use_companion === false) return undefined;
     const icons = this._companionAttr("state_icons");
     if (!icons || typeof icons !== "object") return undefined;
     const key = this.isActive() ? "active" : "inactive";
@@ -200,7 +170,6 @@ export class PowerPilzTimerCard extends LitElement implements LovelaceCard {
   }
 
   private _companionStateName(): string | undefined {
-    if (this._config?.use_companion === false) return undefined;
     const names = this._companionAttr("state_names");
     if (!names || typeof names !== "object") return undefined;
     const key = this.isActive() ? "active" : "inactive";
@@ -210,16 +179,14 @@ export class PowerPilzTimerCard extends LitElement implements LovelaceCard {
 
   /** For select-target Companion timers, the label the user configured
    *  for the start-boundary option (e.g. "On" or "Boost"). Returns
-   *  undefined for non-select targets or manual-mode cards. */
+   *  undefined for non-select targets. */
   private _onOptionLabel(): string | undefined {
-    if (this._config?.use_companion === false) return undefined;
     const value = this._companionAttr("on_option_label");
     return typeof value === "string" && value ? value : undefined;
   }
 
   /** Label for the end-boundary option. Same caveats as above. */
   private _offOptionLabel(): string | undefined {
-    if (this._config?.use_companion === false) return undefined;
     const value = this._companionAttr("off_option_label");
     return typeof value === "string" && value ? value : undefined;
   }
@@ -227,12 +194,10 @@ export class PowerPilzTimerCard extends LitElement implements LovelaceCard {
   /** Raw stored on/off option values on the companion (logical keys for
    *  Smart-Schedule targets, display names for generic selects). */
   private _storedOnOption(): string {
-    if (this._config?.use_companion === false) return "";
     const value = this._companionAttr("on_option");
     return typeof value === "string" ? value : "";
   }
   private _storedOffOption(): string {
-    if (this._config?.use_companion === false) return "";
     const value = this._companionAttr("off_option");
     return typeof value === "string" ? value : "";
   }
@@ -240,7 +205,6 @@ export class PowerPilzTimerCard extends LitElement implements LovelaceCard {
   /** True if the target is a select/input_select whose options the
    *  user can pick from in the picker. */
   private _targetHasOptions(): boolean {
-    if (this._config?.use_companion === false) return false;
     const targetId = this._switchEntityId;
     if (!targetId) return false;
     const state = this.hass?.states?.[targetId];
@@ -296,53 +260,31 @@ export class PowerPilzTimerCard extends LitElement implements LovelaceCard {
   }
 
   private async _writeOnDatetime(iso: string, option?: string): Promise<void> {
-    if (this._config?.use_companion !== false) {
-      const id = this._config?.companion_entity;
-      if (!id) return;
-      const payload: Record<string, string> = {
-        entity_id: id,
-        on: iso,
-      };
-      if (option !== undefined) payload.on_option = option;
-      await this.hass.callService(COMPANION_DOMAIN, "set_timer", payload);
-      return;
-    }
-    const id = this._config.on_datetime_entity;
+    const id = this._config?.companion_entity;
     if (!id) return;
-    await this.hass.callService(id.split(".")[0], "set_datetime", {
+    const payload: Record<string, string> = {
       entity_id: id,
-      datetime: iso
-    });
+      on: iso,
+    };
+    if (option !== undefined) payload.on_option = option;
+    await this.hass.callService(COMPANION_DOMAIN, "set_timer", payload);
   }
 
   private async _writeOffDatetime(iso: string, option?: string): Promise<void> {
-    if (this._config?.use_companion !== false) {
-      const id = this._config?.companion_entity;
-      if (!id) return;
-      const payload: Record<string, string> = {
-        entity_id: id,
-        off: iso,
-      };
-      if (option !== undefined) payload.off_option = option;
-      await this.hass.callService(COMPANION_DOMAIN, "set_timer", payload);
-      return;
-    }
-    const id = this._config.off_datetime_entity;
+    const id = this._config?.companion_entity;
     if (!id) return;
-    await this.hass.callService(id.split(".")[0], "set_datetime", {
+    const payload: Record<string, string> = {
       entity_id: id,
-      datetime: iso
-    });
+      off: iso,
+    };
+    if (option !== undefined) payload.off_option = option;
+    await this.hass.callService(COMPANION_DOMAIN, "set_timer", payload);
   }
 
   /** Clear the on-boundary so it won't fire on the next activation.
-   *  Companion: passes an empty string to `set_timer` which the
-   *  integration interprets as "clear this field". Manual mode: no-op,
-   *  since `input_datetime.set_datetime` doesn't accept an empty value
-   *  (the user's existing on time stays and their bridging automation
-   *  will still fire on that schedule). */
+   *  Passes an empty string to `set_timer` which the integration
+   *  interprets as "clear this field". */
   private async _clearOnDatetime(): Promise<void> {
-    if (this._config?.use_companion === false) return;
     const id = this._config?.companion_entity;
     if (!id) return;
     await this.hass.callService(COMPANION_DOMAIN, "set_timer", {
@@ -351,10 +293,8 @@ export class PowerPilzTimerCard extends LitElement implements LovelaceCard {
     });
   }
 
-  /** Clear the off-boundary so it won't fire on the next activation.
-   *  See `_clearOnDatetime` for the manual-mode caveat. */
+  /** Clear the off-boundary so it won't fire on the next activation. */
   private async _clearOffDatetime(): Promise<void> {
-    if (this._config?.use_companion === false) return;
     const id = this._config?.companion_entity;
     if (!id) return;
     await this.hass.callService(COMPANION_DOMAIN, "set_timer", {
@@ -751,33 +691,6 @@ export class PowerPilzTimerCard extends LitElement implements LovelaceCard {
     return getEntity(this.hass, this._switchEntityId)?.state === "on";
   }
 
-  private parseDatetime(entityId?: string): Date | null {
-    if (!entityId) return null;
-    const entity = getEntity(this.hass, entityId);
-    if (!entity) return null;
-
-    // Primary: use year/month/day/hour/minute attributes (always present on input_datetime)
-    const attrs = entity.attributes;
-    const year = attrs?.year as number | undefined;
-    const month = attrs?.month as number | undefined;
-    const day = attrs?.day as number | undefined;
-    const hour = attrs?.hour as number | undefined;
-    const minute = attrs?.minute as number | undefined;
-
-    if (typeof year === "number" && typeof month === "number" && typeof day === "number") {
-      const d = new Date(year, month - 1, day, hour ?? 0, minute ?? 0, 0, 0);
-      if (!isNaN(d.getTime())) return d;
-    }
-
-    // Fallback: parse state string (YYYY-MM-DD HH:MM:SS)
-    const s = entity.state;
-    if (typeof s === "string" && s.length > 10 && s !== "unknown" && s !== "unavailable") {
-      const d = new Date(s.replace(" ", "T"));
-      return isNaN(d.getTime()) ? null : d;
-    }
-    return null;
-  }
-
   private formatDatetime(d: Date): string {
     const lang = haLang(this.hass);
     const day = weekdayShort(lang, d.getDay());
@@ -896,9 +809,8 @@ export class PowerPilzTimerCard extends LitElement implements LovelaceCard {
   };
 
   /** Picking-on state: skip the on-boundary entirely and jump to the
-   *  off-picker. In Companion mode this clears the on time so only off
-   *  fires; in manual mode it leaves the existing on_datetime untouched
-   *  (input_datetime helpers can't be "unset" via the standard service). */
+   *  off-picker. Clears the on time on the Companion helper so only
+   *  off fires on the next activation. */
   private handleSkipOn = async (): Promise<void> => {
     if (!this._hasOffSupport()) return;
     await this._clearOnDatetime();
@@ -909,8 +821,7 @@ export class PowerPilzTimerCard extends LitElement implements LovelaceCard {
   };
 
   /** Picking-off state: skip the off-boundary and activate the timer.
-   *  In Companion mode this clears the off time so only on fires;
-   *  in manual mode it leaves the existing off_datetime untouched. */
+   *  Clears the off time on the Companion helper so only on fires. */
   private handleSkipOff = async (): Promise<void> => {
     await this._clearOffDatetime();
     this._skippedOn = false;
@@ -921,9 +832,6 @@ export class PowerPilzTimerCard extends LitElement implements LovelaceCard {
   private async activateTimer(): Promise<void> {
     const id = this._activeEntityId;
     if (!id) return;
-    // In companion mode the active entity is a switch; in manual mode
-    // typically an input_boolean. `turn_on` works for both via their
-    // respective domain.
     await this.hass.callService(id.split(".")[0], "turn_on", {
       entity_id: id
     });
@@ -971,17 +879,15 @@ export class PowerPilzTimerCard extends LitElement implements LovelaceCard {
     if (!this._config) return html`<ha-card>${tr(lang, "common.invalid_config")}</ha-card>`;
     if (!this.hass) return html``;
 
-    // Soft placeholder when neither mode has enough config to resolve an
-    // active entity — typically during editing.
+    // Soft placeholder when no Companion entity is configured yet
+    // (typically during editing or after a legacy manual-mode config
+    // was migrated and stripped clean).
     if (!this._activeEntityId) {
-      const hint = this._config.use_companion !== false
-        ? tr(lang, "timer.placeholder_companion")
-        : tr(lang, "timer.placeholder_manual");
       return html`
         <ha-card>
           <div class="placeholder">
             <ha-icon icon="mdi:timer-outline"></ha-icon>
-            <div class="placeholder-text">${hint}</div>
+            <div class="placeholder-text">${tr(lang, "timer.placeholder_companion")}</div>
           </div>
         </ha-card>
       `;
