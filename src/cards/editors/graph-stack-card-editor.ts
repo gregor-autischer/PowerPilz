@@ -115,7 +115,7 @@ export class PowerPilzGraphStackCardEditor extends LitElement implements Lovelac
     }
 
     const percentEnabled = this._config.normalize_stack_to_percent ?? false;
-    const schema = createGraphSchema(true, percentEnabled);
+    const schema = createGraphSchema(true, percentEnabled, haLang(this.hass));
 
     return html`
       <div style="margin: 0 0 8px; color: var(--secondary-text-color); font-size: 12px;">

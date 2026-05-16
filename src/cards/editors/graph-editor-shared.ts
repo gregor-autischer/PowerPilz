@@ -59,31 +59,6 @@ const DECIMALS_BASE_HELP =
 const DECIMALS_PREFIXED_HELP =
   "Decimal precision for prefixed units (kW, MW, kWh, MWh) when auto unit scaling is enabled.";
 
-// --- Label maps ---
-
-const BASE_LABELS: Record<string, string> = {
-  legend_layout: "Layout",
-  timeframe_hours: "Range",
-  hover_enabled: "Hover",
-  fill_area_enabled: "Area fill",
-  shared_trend_scale: "Shared scale",
-  trend_data_source: "Trend source",
-  clip_graph_to_labels: "Clip below labels",
-  line_thickness: "Line width",
-  unit: "Unit",
-  decimals: "Decimals",
-  auto_scale_units: "Auto unit scaling",
-  decimals_base_unit: "Decimals (base unit)",
-  decimals_prefixed_unit: "Decimals (prefixed units)",
-  normalize_stack_to_percent: "Normalize to 100%",
-  percent_reference_slot: "100% reference entity",
-  percent_reference_auto: "Auto-calculate reference",
-  entity: "Action entity",
-  tap_action: "Tap behavior",
-  hold_action: "Hold behavior",
-  double_tap_action: "Double tap behavior"
-};
-
 // --- Shared config interface ---
 
 interface GraphEditorLikeConfig extends LovelaceCardConfig {
@@ -108,10 +83,10 @@ interface GraphEditorLikeConfig extends LovelaceCardConfig {
 
 // --- Entity schema ---
 
-const entitySchema = (index: number): HaFormSchema => ({
+const entitySchema = (index: number, lang: Lang | string): HaFormSchema => ({
   type: "expandable",
   name: "",
-  title: `Entity ${index}`,
+  title: tr(lang, "graph.editor.entity_slot", { n: index }),
   icon: "mdi:chart-line",
   expanded: index === 1,
   schema: [
@@ -125,7 +100,7 @@ const entitySchema = (index: number): HaFormSchema => ({
     {
       type: "expandable",
       name: "",
-      title: "Identity",
+      title: tr(lang, "graph.editor.section_identity"),
       icon: "mdi:view-list-outline",
       expanded: true,
       schema: [
@@ -143,7 +118,7 @@ const entitySchema = (index: number): HaFormSchema => ({
     {
       type: "expandable",
       name: "",
-      title: "Appearance",
+      title: tr(lang, "graph.editor.section_appearance"),
       icon: "mdi:palette-outline",
       expanded: true,
       schema: [
@@ -179,14 +154,15 @@ const entitySchema = (index: number): HaFormSchema => ({
 
 export const createGraphSchema = (
   includeNormalizeStackToPercent = false,
-  percentEnabled = false
+  percentEnabled = false,
+  lang: Lang | string = "en"
 ): HaFormSchema[] => {
 
   // --- Graph settings section ---
   const graphSettingsSection: HaFormSchema = {
     type: "expandable",
     name: "",
-    title: "Graph settings",
+    title: tr(lang, "graph.editor.section_graph_settings"),
     icon: "mdi:chart-line",
     expanded: false,
     schema: [
@@ -303,7 +279,7 @@ export const createGraphSchema = (
   const displayOptionsSection: HaFormSchema = {
     type: "expandable",
     name: "",
-    title: "Display options",
+    title: tr(lang, "graph.editor.section_display_options"),
     icon: "mdi:tune-variant",
     expanded: false,
     schema: displayOptionsSchema
@@ -365,7 +341,7 @@ export const createGraphSchema = (
     stackedPercentSection.push({
       type: "expandable",
       name: "",
-      title: "Stacked percent",
+      title: tr(lang, "graph.editor.section_stacked_percent"),
       icon: "mdi:percent-outline",
       expanded: false,
       schema: percentSchema
@@ -376,7 +352,7 @@ export const createGraphSchema = (
   const actionsSection: HaFormSchema = {
     type: "expandable",
     name: "",
-    title: "Actions",
+    title: tr(lang, "graph.editor.section_actions"),
     icon: "mdi:gesture-tap",
     expanded: false,
     schema: [
@@ -396,14 +372,14 @@ export const createGraphSchema = (
   const unitsSection: HaFormSchema = {
     type: "expandable",
     name: "",
-    title: "Units and format",
+    title: tr(lang, "graph.editor.section_units_and_format"),
     icon: "mdi:format-list-numbered",
     expanded: false,
     schema: [
       {
         type: "expandable",
         name: "",
-        title: "Display format",
+        title: tr(lang, "graph.editor.section_display_format"),
         icon: "mdi:decimal",
         expanded: true,
         schema: [
@@ -431,7 +407,7 @@ export const createGraphSchema = (
       {
         type: "expandable",
         name: "",
-        title: "Auto scaling",
+        title: tr(lang, "graph.editor.section_auto_scaling"),
         icon: "mdi:scale-balance",
         expanded: true,
         schema: [
@@ -476,7 +452,7 @@ export const createGraphSchema = (
     graphSettingsSection,
     displayOptionsSection,
     ...stackedPercentSection,
-    ...Array.from({ length: GRAPH_SLOT_COUNT }, (_, index) => entitySchema(index + 1)),
+    ...Array.from({ length: GRAPH_SLOT_COUNT }, (_, index) => entitySchema(index + 1, lang)),
     unitsSection,
     actionsSection
   ];
@@ -583,24 +559,25 @@ export const computeGraphEditorLabel = (
   const match = name.match(/^entity_(\d+)_(enabled|name|show_icon|icon|icon_color|trend_color)$/);
   if (match) {
     const [, , field] = match;
-    const fieldLabel: Record<string, string> = {
-      enabled: lang === "de" ? "Aktiviert" : "Enabled",
-      name: lang === "de" ? "Name" : "Name",
-      show_icon: lang === "de" ? "Symbol anzeigen" : "Show icon",
-      icon: lang === "de" ? "Symbol" : "Icon",
-      icon_color: lang === "de" ? "Symbolfarbe" : "Icon color",
-      trend_color: lang === "de" ? "Graph-Farbe" : "Graph color"
+    const fieldKey: Record<string, string> = {
+      enabled: "graph.editor.entity_enabled",
+      name: "graph.editor.entity_name",
+      show_icon: "graph.editor.entity_show_icon",
+      icon: "graph.editor.entity_icon",
+      icon_color: "graph.editor.entity_icon_color",
+      trend_color: "graph.editor.entity_trend_color"
     };
-    return fieldLabel[field] ?? field;
+    const key = fieldKey[field];
+    return key ? tr(lang, key) : field;
   }
 
   const entityMatch = name.match(/^entity_(\d+)$/);
   if (entityMatch) {
-    return lang === "de" ? "Sensor" : "Sensor";
+    return tr(lang, "graph.editor.entity_picker");
   }
 
   if (extraLabels[name]) return extraLabels[name];
   const key = GRAPH_LABEL_KEYS[name];
   if (key) return tr(lang, key);
-  return BASE_LABELS[name] ?? name;
+  return name;
 };

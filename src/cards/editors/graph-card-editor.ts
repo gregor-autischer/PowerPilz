@@ -73,8 +73,6 @@ interface GraphCardConfig extends LovelaceCardConfig {
   entity_4_trend_color?: string | number[];
 }
 
-const SCHEMA = createGraphSchema(false);
-
 @customElement("power-pilz-graph-card-editor")
 export class PowerPilzGraphCardEditor extends LitElement implements LovelaceCardEditor {
   @property({ attribute: false })
@@ -110,6 +108,8 @@ export class PowerPilzGraphCardEditor extends LitElement implements LovelaceCard
       return nothing;
     }
 
+    const schema = createGraphSchema(false, false, haLang(this.hass));
+
     return html`
       <div style="margin: 0 0 8px; color: var(--secondary-text-color); font-size: 12px;">
         PowerPilz v${POWER_PILZ_VERSION}
@@ -117,7 +117,7 @@ export class PowerPilzGraphCardEditor extends LitElement implements LovelaceCard
       <ha-form
         .hass=${this.hass}
         .data=${this._config}
-        .schema=${SCHEMA}
+        .schema=${schema}
         .computeLabel=${this.computeLabel}
         @value-changed=${this.valueChanged}
       ></ha-form>
